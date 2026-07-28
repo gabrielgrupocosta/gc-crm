@@ -49,7 +49,14 @@ const itemVariants = {
 
 // ─── Modal de nova tarefa ─────────────────────────────────────────────────────
 
-const EMPTY_TAREFA_FORM = { lojaId: '', descricao: '', data: '', observacao: '', agendar: true }
+const EMPTY_TAREFA_FORM = { lojaId: '', descricao: '', data: '', observacao: '', agendar: true, prioridade: 'agendada' }
+
+const PRIORIDADE_LABEL = { normal: 'Normal', urgente: 'Urgente', agendada: 'Agendada' }
+const PRIORIDADE_COLOR = {
+  normal:   { color: '#666666', bg: 'rgba(153,153,153,0.1)',  border: 'rgba(153,153,153,0.2)' },
+  urgente:  { color: '#DC2626', bg: 'rgba(220,38,38,0.1)',    border: 'rgba(220,38,38,0.2)' },
+  agendada: { color: '#2563EB', bg: 'rgba(37,99,235,0.1)',    border: 'rgba(37,99,235,0.2)' },
+}
 
 function AgendarSwitch({ id, checked, onChange }) {
   return (
@@ -91,6 +98,16 @@ function NovaTarefaModal({ isOpen, onClose, onSave, lojas, gestorMap }) {
   }, [isOpen])
 
   function set(key, value) { setForm(prev => ({ ...prev, [key]: value })) }
+
+  // Alternar "agendar" reajusta a prioridade padrão (agendada quando tem data,
+  // normal quando não tem) — mas preserva a escolha manual de "urgente".
+  function handleToggleAgendar(v) {
+    setForm(prev => ({
+      ...prev,
+      agendar: v,
+      prioridade: prev.prioridade === 'urgente' ? 'urgente' : (v ? 'agendada' : 'normal'),
+    }))
+  }
 
   const canSave = form.lojaId && form.descricao.trim() && (!form.agendar || form.data)
 
@@ -141,7 +158,7 @@ function NovaTarefaModal({ isOpen, onClose, onSave, lojas, gestorMap }) {
 
         <div className="flex items-center justify-between" style={{ height: '36px' }}>
           <label className="field-label" htmlFor="tf-agendar">Agendar lembrete</label>
-          <AgendarSwitch id="tf-agendar" checked={form.agendar} onChange={v => set('agendar', v)} />
+          <AgendarSwitch id="tf-agendar" checked={form.agendar} onChange={handleToggleAgendar} />
         </div>
 
         {form.agendar && (
@@ -150,6 +167,15 @@ function NovaTarefaModal({ isOpen, onClose, onSave, lojas, gestorMap }) {
             <input id="tf-data" type="date" value={form.data} onChange={e => set('data', e.target.value)} className="input" required />
           </div>
         )}
+
+        <div className="flex flex-col gap-1.5">
+          <label className="field-label" htmlFor="tf-prioridade">Prioridade</label>
+          <select id="tf-prioridade" value={form.prioridade} onChange={e => set('prioridade', e.target.value)} className="select">
+            <option value="normal">Normal</option>
+            <option value="urgente">Urgente</option>
+            <option value="agendada">Agendada</option>
+          </select>
+        </div>
 
         <div className="flex flex-col gap-1.5">
           <label className="field-label" htmlFor="tf-obs">Observação</label>
@@ -209,6 +235,19 @@ function TarefaRow({ tarefa: t, isLast, lojaMap, isAdmin, concluindoId, excluind
               }}
             >
               {concluida ? 'Concluída' : 'Pendente'}
+            </span>
+          )}
+          {!isRegistro && t.prioridade && (
+            <span
+              className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
+              style={{
+                padding: '1px 6px', borderRadius: '4px',
+                color: PRIORIDADE_COLOR[t.prioridade]?.color ?? '#666666',
+                backgroundColor: PRIORIDADE_COLOR[t.prioridade]?.bg ?? 'rgba(153,153,153,0.1)',
+                border: `1px solid ${PRIORIDADE_COLOR[t.prioridade]?.border ?? 'rgba(153,153,153,0.2)'}`,
+              }}
+            >
+              {PRIORIDADE_LABEL[t.prioridade] ?? t.prioridade}
             </span>
           )}
         </div>
@@ -315,8 +354,10 @@ export default function Atividades() {
   const lojaMap   = useMemo(() => Object.fromEntries(lojas.map(l => [l.id, l])), [lojas])
   const gestorMap = useMemo(() => Object.fromEntries(gestores.map(g => [g.id, g])), [gestores])
 
-  const tarefasAgendadas = useMemo(() => tarefas.filter(t => t.tipo !== 'registro'), [tarefas])
-  const registros        = useMemo(() => tarefas.filter(t => t.tipo === 'registro'), [tarefas])
+  // Tarefas tab: só o que ainda está pendente (registros e tarefas concluídas
+  // vivem no Histórico agora — ver historicoFiltrado abaixo).
+  const tarefasPendentes    = useMemo(() => tarefas.filter(t => t.tipo !== 'registro' && t.status !== 'concluida'), [tarefas])
+  const tarefasParaHistorico = useMemo(() => tarefas.filter(t => t.tipo === 'registro' || t.status === 'concluida'), [tarefas])
 
   const lojasVisiveisAcoes = useMemo(() => {
     if (!isAdmin || !filtroGestorAcoes) return lojas
@@ -360,10 +401,23 @@ export default function Atividades() {
     loadHistorico()
   }, [user, isAdmin, isSuperAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Histórico é o feed unificado de tudo que já "aconteceu": ações registradas,
+  // registros rápidos (tipo 'registro') e tarefas já concluídas — assim que uma
+  // tarefa é marcada como concluída, ela some da aba Tarefas e passa a aparecer
+  // aqui, junto com o resto da linha do tempo.
   const historicoFiltrado = useMemo(() => {
-    if (!filtroLojaHistorico) return historicoAcoes
-    return historicoAcoes.filter(a => a.lojaId === filtroLojaHistorico)
-  }, [historicoAcoes, filtroLojaHistorico])
+    const acoesFiltradas = filtroLojaHistorico ? historicoAcoes.filter(a => a.lojaId === filtroLojaHistorico) : historicoAcoes
+    const tarefasFiltradas = filtroLojaHistorico ? tarefasParaHistorico.filter(t => t.lojaId === filtroLojaHistorico) : tarefasParaHistorico
+
+    const itensAcoes = acoesFiltradas.map(a => ({ ...a, _tipoItem: 'acao', _data: a.timestamp }))
+    const itensTarefas = tarefasFiltradas.map(t => ({
+      ...t,
+      _tipoItem: t.tipo === 'registro' ? 'registro' : 'tarefa_concluida',
+      _data: t.concluidoEm ?? t.criadoEm,
+    }))
+
+    return [...itensAcoes, ...itensTarefas].sort((a, b) => tsMillis(b._data) - tsMillis(a._data))
+  }, [historicoAcoes, tarefasParaHistorico, filtroLojaHistorico]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Ações: registro livre de atividades ───────────────────────────────────
 
@@ -492,6 +546,7 @@ export default function Atividades() {
       observacao:   form.observacao.trim() || null,
       status:       'pendente',
       tipo:         form.agendar ? 'tarefa' : 'registro',
+      prioridade:   form.prioridade || (form.agendar ? 'agendada' : 'normal'),
       criadoEm:     serverTimestamp(),
     })
     toast(form.agendar ? 'Tarefa criada.' : 'Registro criado.', 'success')
@@ -688,7 +743,7 @@ export default function Atividades() {
 
       {/* ── Aba Histórico ─────────────────────────────────────────────────── */}
       {activeTab === 'historico' && (
-        loadingBase ? (
+        loadingBase || loadingTarefas ? (
           <Skeleton.Table rows={5} cols={2} />
         ) : (
           <div className="flex flex-col gap-5">
@@ -712,41 +767,54 @@ export default function Atividades() {
                 </p>
               ) : (
                 <motion.div variants={listVariants} initial="initial" animate="animate">
-                  {historicoFiltrado.map((a, idx) => (
-                    <motion.div
-                      key={a.id}
-                      variants={itemVariants}
-                      style={{
-                        display: 'flex', flexDirection: 'column', gap: '4px',
-                        padding: '12px 16px',
-                        borderBottom: idx < historicoFiltrado.length - 1 ? '1px solid #F3F3F3' : 'none',
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[11px] text-text-subtle whitespace-nowrap">{formatDateTime(a.timestamp)}</span>
-                        {a.origem === 'relatorio_semanal' && (
-                          <span
-                            className="text-[10px] font-medium shrink-0"
-                            style={{ padding: '1px 6px', borderRadius: '10px', color: '#666666', backgroundColor: '#F3F3F3' }}
-                          >
-                            Relatório Semanal
+                  {historicoFiltrado.map((a, idx) => {
+                    const tipoBadge = a._tipoItem === 'tarefa_concluida'
+                      ? { label: 'Tarefa concluída', color: '#16A34A', bg: 'rgba(22,163,74,0.1)' }
+                      : a._tipoItem === 'registro'
+                        ? { label: 'Registro', color: '#666666', bg: '#F3F3F3' }
+                        : a.origem === 'relatorio_semanal'
+                          ? { label: 'Relatório Semanal', color: '#666666', bg: '#F3F3F3' }
+                          : null
+
+                    return (
+                      <motion.div
+                        key={a.id}
+                        variants={itemVariants}
+                        style={{
+                          display: 'flex', flexDirection: 'column', gap: '4px',
+                          padding: '12px 16px',
+                          borderBottom: idx < historicoFiltrado.length - 1 ? '1px solid #F3F3F3' : 'none',
+                        }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] text-text-subtle whitespace-nowrap">{formatDateTime(a._data)}</span>
+                          {tipoBadge && (
+                            <span
+                              className="text-[10px] font-medium shrink-0"
+                              style={{ padding: '1px 6px', borderRadius: '10px', color: tipoBadge.color, backgroundColor: tipoBadge.bg }}
+                            >
+                              {tipoBadge.label}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] text-text-primary font-semibold">
+                            {lojaMap[a.lojaId]?.nome ?? a.lojaName ?? a.lojaNome ?? 'Loja removida'}
                           </span>
+                          <span className="text-[12px] text-text-subtle">· {a.gestorNome || '—'}</span>
+                        </div>
+                        <p className="text-[13px] text-text-muted leading-relaxed">{a.descricao}</p>
+                        {a.observacao && (
+                          <p className="text-[13px] text-text-subtle leading-relaxed">{a.observacao}</p>
                         )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[13px] text-text-primary font-semibold">
-                          {lojaMap[a.lojaId]?.nome ?? a.lojaName ?? 'Loja removida'}
-                        </span>
-                        <span className="text-[12px] text-text-subtle">· {a.gestorNome || '—'}</span>
-                      </div>
-                      <p className="text-[13px] text-text-muted leading-relaxed">{a.descricao}</p>
-                      {(a.semana || a.plataforma) && (
-                        <p className="text-[11px]" style={{ color: '#999999' }}>
-                          {[a.semana, a.plataforma].filter(Boolean).join(' · ')}
-                        </p>
-                      )}
-                    </motion.div>
-                  ))}
+                        {(a.semana || a.plataforma) && (
+                          <p className="text-[11px]" style={{ color: '#999999' }}>
+                            {[a.semana, a.plataforma].filter(Boolean).join(' · ')}
+                          </p>
+                        )}
+                      </motion.div>
+                    )
+                  })}
                 </motion.div>
               )}
             </div>
@@ -779,17 +847,17 @@ export default function Atividades() {
           <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
             {loadingBase || loadingTarefas ? (
               <Skeleton.Table rows={5} cols={4} />
-            ) : tarefasAgendadas.length === 0 ? (
+            ) : tarefasPendentes.length === 0 ? (
               <p className="text-[13px] text-text-subtle text-center py-10">
-                Nenhuma tarefa agendada.
+                Nenhuma tarefa pendente.
               </p>
             ) : (
               <motion.div variants={listVariants} initial="initial" animate="animate">
-                {tarefasAgendadas.map((t, idx) => (
+                {tarefasPendentes.map((t, idx) => (
                   <TarefaRow
                     key={t.id}
                     tarefa={t}
-                    isLast={idx === tarefasAgendadas.length - 1}
+                    isLast={idx === tarefasPendentes.length - 1}
                     lojaMap={lojaMap}
                     isAdmin={isAdmin}
                     concluindoId={concluindoId}
@@ -801,29 +869,6 @@ export default function Atividades() {
               </motion.div>
             )}
           </div>
-
-          {!loadingBase && !loadingTarefas && registros.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <p className="section-label">Registros</p>
-              <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
-                <motion.div variants={listVariants} initial="initial" animate="animate">
-                  {registros.map((t, idx) => (
-                    <TarefaRow
-                      key={t.id}
-                      tarefa={t}
-                      isLast={idx === registros.length - 1}
-                      lojaMap={lojaMap}
-                      isAdmin={isAdmin}
-                      concluindoId={concluindoId}
-                      excluindoId={excluindoId}
-                      onConcluir={handleConcluirTarefa}
-                      onExcluir={handleExcluirTarefa}
-                    />
-                  ))}
-                </motion.div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 

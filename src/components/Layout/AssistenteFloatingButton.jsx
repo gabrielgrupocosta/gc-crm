@@ -1,8 +1,9 @@
 import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Bot, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { useAssistenteChat } from '../../contexts/AssistenteChatContext'
 import AssistenteChatPanel from '../UI/AssistenteChatPanel'
+import assistenteBotIcon from '../../assets/assistente-bot.webp'
 
 const panelVariants = {
   initial: { opacity: 0, scale: 0.96, y: 8 },
@@ -34,7 +35,9 @@ export default function AssistenteFloatingButton() {
         onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
         onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
       >
-        {popupAberto ? <X size={22} strokeWidth={2} /> : <Bot size={22} strokeWidth={2} />}
+        {popupAberto
+          ? <X size={22} strokeWidth={2} />
+          : <img src={assistenteBotIcon} alt="" style={{ width: '44px', height: '44px', borderRadius: '50%', objectFit: 'cover' }} />}
       </button>
 
       <AnimatePresence>
@@ -55,12 +58,12 @@ export default function AssistenteFloatingButton() {
           >
             {/* Header */}
             <div className="flex items-center gap-2.5 shrink-0" style={{ padding: '12px 14px', borderBottom: '1px solid #E8E8E8' }}>
-              <div
-                className="flex items-center justify-center shrink-0"
-                style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#FFF1ED', color: '#FF4B2E' }}
-              >
-                <Bot size={16} strokeWidth={2} />
-              </div>
+              <img
+                src={assistenteBotIcon}
+                alt=""
+                className="shrink-0"
+                style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+              />
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] font-medium text-text-primary truncate">Assistente Delivery</p>
                 <p className="text-[11px] text-text-subtle flex items-center gap-1">

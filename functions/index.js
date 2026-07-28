@@ -680,6 +680,8 @@ REGRA CRÍTICA — não invente detalhes financeiros: responda SOMENTE com base 
 
 Você não tem acesso ao painel do restaurante do usuário nem consegue fazer alterações na conta. Nunca invente números ou percentuais que não estejam na base abaixo. Ao final de respostas complexas, pergunte se a dúvida foi resolvida.
 
+CRIAÇÃO DE TAREFAS: se o gestor pedir explicitamente para lembrar, agendar ou criar uma tarefa sobre uma loja (ex: "desligar anúncio dia 30/07 da loja North Burguer", "lembrar de ligar pro cliente amanhã"), use a ferramenta criar_tarefa. Extraia o nome da loja exatamente como o gestor escreveu, uma descrição curta da ação e, se houver, a data (resolva datas relativas ou parciais como "dia 30/07" ou "amanhã" usando a data de hoje informada abaixo). Não use essa ferramenta para perguntas de diagnóstico ou dúvidas gerais — só quando a intenção for claramente criar uma tarefa/lembrete. Depois que a ferramenta responder, confirme para o gestor em português natural o que foi criado (ou explique o problema, se a loja não foi encontrada).
+
 ---
 
 BASE DE CONHECIMENTO (única fonte de fatos sobre o iFood — use isso, não conhecimento geral):
@@ -687,6 +689,100 @@ BASE DE CONHECIMENTO (única fonte de fatos sobre o iFood — use isso, não con
 `
 
 const SYSTEM_PROMPT_ASSISTENTE = PERSONA_E_COMPORTAMENTO + BASE_CONHECIMENTO_IFOOD
+
+const TOOLS_ASSISTENTE = [
+  {
+    name: 'criar_tarefa',
+    description: 'Cria uma tarefa na aba Atividades do sistema, associada a uma loja do gestor. Use somente quando o gestor pedir explicitamente para criar/agendar uma tarefa ou lembrete.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        loja: { type: 'string', description: 'Nome da loja mencionada pelo gestor, como ele escreveu (ex: "North Burguer").' },
+        descricao: { type: 'string', description: 'Descrição curta e clara da tarefa (ex: "Desligar anúncio").' },
+        data: { type: 'string', description: 'Data da tarefa no formato AAAA-MM-DD, se o gestor mencionou uma data (resolva datas relativas/parciais usando a data de hoje). Omita se nenhuma data foi mencionada.' },
+        prioridade: { type: 'string', enum: ['normal', 'urgente', 'agendada'], description: 'Só informe "urgente" se o gestor usar palavras como urgente/crítico/prioridade máxima. Caso contrário, omita este campo — o sistema decide automaticamente.' },
+      },
+      required: ['loja', 'descricao'],
+    },
+  },
+]
+
+// Remove acentos/caixa pra comparar nomes de loja de forma tolerante ao jeito
+// que o gestor escreveu no chat (ex: "north burguer" vs "North Burguer").
+function normalizarTexto(s) {
+  return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
+}
+
+// Busca a loja pelo nome dentro do que o chamador pode acessar (gestor só as
+// suas, admin/master toda a org) — evita que o assistente crie uma tarefa
+// numa loja que o gestor não gerencia.
+async function buscarLojaPorNome(nomeBuscado, { role, organizacaoId, uid }) {
+  let q = db.collection('lojas')
+  if (role !== 'master') q = q.where('organizacaoId', '==', organizacaoId ?? null)
+  if (role === 'gestor') q = q.where('gestorId', '==', uid)
+  const snap = await q.get()
+
+  const alvo = normalizarTexto(nomeBuscado)
+  let melhor = null
+  for (const docSnap of snap.docs) {
+    const loja = docSnap.data()
+    const nomeNorm = normalizarTexto(loja.nome)
+    if (nomeNorm === alvo) return { id: docSnap.id, ...loja }
+    if (!melhor && (nomeNorm.includes(alvo) || alvo.includes(nomeNorm))) melhor = { id: docSnap.id, ...loja }
+  }
+  return melhor
+}
+
+async function executarCriarTarefa(input, request) {
+  const { role, organizacaoId, uid } = request.auth.token
+
+  const loja = await buscarLojaPorNome(input.loja, { role, organizacaoId, uid })
+  if (!loja) {
+    return { erro: true, mensagem: `Não encontrei nenhuma loja chamada "${input.loja}" entre as lojas que você tem acesso.` }
+  }
+
+  let dataLembrete = null
+  if (input.data) {
+    const [ano, mes, dia] = String(input.data).split('-').map(Number)
+    // A Cloud Function roda em UTC (não no fuso do usuário), então construir a
+    // data com o offset de Brasília fixo (-03:00, sem horário de verão desde
+    // 2019) evita o bug de "dia 30" virar 29 quando o cliente exibe em local time.
+    if (ano && mes && dia) {
+      const dataStr = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}T00:00:00-03:00`
+      dataLembrete = Timestamp.fromDate(new Date(dataStr))
+    }
+  }
+
+  const prioridade = input.prioridade || (dataLembrete ? 'agendada' : 'normal')
+
+  const gestorDoc = await db.collection('users').doc(uid).get()
+  const gestorNome = gestorDoc.exists ? (gestorDoc.data().nome ?? '') : ''
+
+  const docRef = await db.collection('tarefas').add({
+    lojaId: loja.id,
+    lojaNome: loja.nome ?? '',
+    gestorId: uid,
+    gestorNome,
+    organizacaoId: loja.organizacaoId ?? organizacaoId ?? null,
+    descricao: String(input.descricao || '').trim(),
+    dataLembrete,
+    observacao: null,
+    status: 'pendente',
+    tipo: 'tarefa',
+    prioridade,
+    criadoEm: FieldValue.serverTimestamp(),
+    origem: 'assistente_chat',
+  })
+
+  return {
+    erro: false,
+    tarefaId: docRef.id,
+    loja: loja.nome,
+    descricao: String(input.descricao || '').trim(),
+    data: input.data || null,
+    prioridade,
+  }
+}
 
 // O modelo às vezes ignora a instrução de "não usar Markdown" (comportamento
 // de LLM não é 100% confiável só por prompt) — essa limpeza garante que
@@ -733,19 +829,63 @@ exports.assistenteChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 30
     }
   }
 
+  const hojeStr = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'full', timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const contextoData = `\n\n---\n\nHoje é ${hojeStr}. Use essa data como referência para resolver datas relativas ou parciais mencionadas pelo gestor (ex: "amanhã", "dia 30/07").`
+
   const anthropic = new Anthropic({ apiKey: anthropicApiKey.value() })
+  const historico = messages.map(m => ({ role: m.role, content: String(m.content ?? '') }))
 
   let response
   try {
     response = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 1024,
-      system: SYSTEM_PROMPT_ASSISTENTE + contextoLoja,
-      messages: messages.map(m => ({ role: m.role, content: String(m.content ?? '') })),
+      system: SYSTEM_PROMPT_ASSISTENTE + contextoData + contextoLoja,
+      messages: historico,
+      tools: TOOLS_ASSISTENTE,
     })
   } catch (err) {
     console.error('[assistenteChat] erro na API da Anthropic:', err)
     throw new HttpsError('internal', 'Erro ao consultar o assistente. Tente novamente.')
+  }
+
+  // Loop de tool-use: só ocorre quando o modelo pede pra criar uma tarefa —
+  // executamos a ferramenta no servidor e devolvemos o resultado pro modelo
+  // formular a confirmação final em linguagem natural.
+  while (response.stop_reason === 'tool_use') {
+    const toolUseBlock = response.content.find(b => b.type === 'tool_use')
+    if (!toolUseBlock) break
+
+    let resultadoFerramenta
+    if (toolUseBlock.name === 'criar_tarefa') {
+      try {
+        resultadoFerramenta = await executarCriarTarefa(toolUseBlock.input || {}, request)
+      } catch (err) {
+        console.error('[assistenteChat] erro ao executar criar_tarefa:', err)
+        resultadoFerramenta = { erro: true, mensagem: 'Erro interno ao tentar criar a tarefa.' }
+      }
+    } else {
+      resultadoFerramenta = { erro: true, mensagem: 'Ferramenta desconhecida.' }
+    }
+
+    historico.push({ role: 'assistant', content: response.content })
+    historico.push({
+      role: 'user',
+      content: [{ type: 'tool_result', tool_use_id: toolUseBlock.id, content: JSON.stringify(resultadoFerramenta) }],
+    })
+
+    try {
+      response = await anthropic.messages.create({
+        model: 'claude-haiku-4-5',
+        max_tokens: 1024,
+        system: SYSTEM_PROMPT_ASSISTENTE + contextoData + contextoLoja,
+        messages: historico,
+        tools: TOOLS_ASSISTENTE,
+      })
+    } catch (err) {
+      console.error('[assistenteChat] erro na API da Anthropic (pós tool-use):', err)
+      throw new HttpsError('internal', 'Erro ao consultar o assistente. Tente novamente.')
+    }
   }
 
   const textBlock = response.content.find(b => b.type === 'text')
