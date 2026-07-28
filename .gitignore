@@ -1,0 +1,39 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Credenciais do Admin SDK — nunca versionar
+serviceAccountKey.json
+
+# Cache local de deploy do Firebase CLI
+.firebase
+
+# Exports de dados reais de clientes usados em scripts de migração pontual —
+# não deve ir pro histórico do repositório (dado de negócio/PII)
+scripts/data
+
+# Config local do Claude Code — settings.local.json guarda histórico de
+# comandos permitidos que já incluiu senhas em texto puro usadas em scripts
+# pontuais; nunca deve ir pro repositório
+.claude/settings.local.json
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

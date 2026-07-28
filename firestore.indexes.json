@@ -1,0 +1,56 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "resultados",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "lojaId", "order": "ASCENDING" },
+        { "fieldPath": "semana", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "resultados",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "semana", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "lojas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "dataCadastro", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "relatorios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "lojaId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "acoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "acoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "gestorId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

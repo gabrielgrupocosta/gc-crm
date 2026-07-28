@@ -1,0 +1,158 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function role() {
+      return request.auth.token.role;
+    }
+
+    function organizacaoId() {
+      return request.auth.token.organizacaoId;
+    }
+
+    function isSuperAdmin() {
+      return autenticado() && role() == 'master';
+    }
+
+    function isAdminOrg() {
+      return autenticado() && role() == 'admin_org';
+    }
+
+    function isGestor() {
+      return autenticado() && role() == 'gestor';
+    }
+
+    function mesmaOrg(dados) {
+      return autenticado() && organizacaoId() == dados.organizacaoId;
+    }
+
+    // master: acesso total à plataforma. admin_org só pode ler a
+    // própria organização (ex: exibir nome dela no formulário de loja) —
+    // nunca listar ou ler outras, e nunca escrever.
+    match /organizacoes/{orgId} {
+      allow read: if isSuperAdmin() || (isAdminOrg() && orgId == organizacaoId());
+      allow write: if isSuperAdmin();
+    }
+
+    match /faturas/{faturaId} {
+      allow read, write: if isSuperAdmin();
+    }
+
+    match /configuracoes/{docId} {
+      allow read: if autenticado();
+      allow write: if isSuperAdmin();
+    }
+
+    // Coleções escopadas por organização — admin_org e gestor só acessam
+    // documentos da própria organizacaoId; master acessa tudo.
+    match /users/{userId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    match /clientes/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    // Contratos: dado financeiro/contratual do cliente — só master e admin_org
+    // da própria organização (gestor não acessa, mesma exclusividade de Clientes).
+    match /contratos/{docId} {
+      allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    // Cobranças (Financeiro/recebíveis): mesma exclusividade de Contratos —
+    // dado financeiro do cliente, só master e admin_org da própria organização.
+    match /cobrancas/{docId} {
+      allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    match /lojas/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(resource.data))
+        || (isGestor() && mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    match /resultados/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data))
+        || (isGestor() && mesmaOrg(request.resource.data) && request.resource.data.gestorId == request.auth.uid);
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(resource.data))
+        || (isGestor() && mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    match /relatorios/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (autenticado() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (autenticado() && mesmaOrg(resource.data));
+    }
+
+    match /relatorios_semanais/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (autenticado() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (autenticado() && mesmaOrg(resource.data));
+    }
+
+    match /feedbacks/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if autenticado() && mesmaOrg(request.resource.data);
+      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    match /tarefas/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (autenticado() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(resource.data))
+        || (isGestor() && mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+    }
+
+    match /acoes/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin() || (autenticado() && mesmaOrg(request.resource.data));
+      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    // CRM de prospecção: admin_org vê/gerencia todos os leads da própria
+    // organização; gestor só os leads onde é o responsável.
+    match /crm_leads/{leadId} {
+      allow read: if isSuperAdmin()
+        || (mesmaOrg(resource.data) && (isAdminOrg() || resource.data.responsavelId == request.auth.uid));
+      allow create: if isSuperAdmin()
+        || (mesmaOrg(request.resource.data) && (isAdminOrg() || request.resource.data.responsavelId == request.auth.uid));
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(resource.data))
+        || (isGestor() && mesmaOrg(resource.data) && resource.data.responsavelId == request.auth.uid);
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+
+      // Histórico de interações — visibilidade herda do lead pai (mesma
+      // organização + mesmo dono do negócio), mas só admin_org/master
+      // corrigem ou apagam um registro já lançado (mantém trilha de auditoria).
+      match /interacoes/{interacaoId} {
+        function leadPai() { return get(/databases/$(database)/documents/crm_leads/$(leadId)).data; }
+        allow read: if isSuperAdmin()
+          || (autenticado() && organizacaoId() == leadPai().organizacaoId && (isAdminOrg() || leadPai().responsavelId == request.auth.uid));
+        allow create: if isSuperAdmin()
+          || (autenticado() && organizacaoId() == leadPai().organizacaoId && (isAdminOrg() || leadPai().responsavelId == request.auth.uid));
+        allow update, delete: if isSuperAdmin() || (isAdminOrg() && organizacaoId() == leadPai().organizacaoId);
+      }
+    }
+  }
+}
