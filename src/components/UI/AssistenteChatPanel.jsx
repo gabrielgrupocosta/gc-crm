@@ -37,7 +37,7 @@ function DigitandoBubble() {
 // Painel de chat reutilizado tanto na aba dedicada (/assistente) quanto no
 // popup flutuante — mesma conversa nos dois lugares (estado vem do Context).
 export default function AssistenteChatPanel({ compact = false }) {
-  const { mensagens, enviando, enviarMensagem } = useAssistenteChat()
+  const { mensagens, enviando, enviarMensagem, confirmarLoja } = useAssistenteChat()
   const [input, setInput] = useState('')
   const bottomRef = useRef(null)
 
@@ -85,6 +85,34 @@ export default function AssistenteChatPanel({ compact = false }) {
               >
                 {m.content}
               </div>
+
+              {m.opcoesLoja?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-1.5 max-w-full">
+                  {m.opcoesLoja.map(opcao => (
+                    <button
+                      key={opcao.id}
+                      type="button"
+                      disabled={enviando}
+                      onClick={() => confirmarLoja(opcao)}
+                      className="text-[12px] font-medium transition-colors duration-150"
+                      style={{
+                        padding: '6px 12px',
+                        borderRadius: '999px',
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E8E8E8',
+                        color: '#111111',
+                        cursor: enviando ? 'default' : 'pointer',
+                        opacity: enviando ? 0.5 : 1,
+                      }}
+                      onMouseEnter={e => { if (!enviando) e.currentTarget.style.borderColor = '#FF4B2E' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8' }}
+                    >
+                      {opcao.nome}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <span className="text-[10px] text-text-faint mt-0.5 px-1">{formatHora(m.ts)}</span>
             </div>
           )

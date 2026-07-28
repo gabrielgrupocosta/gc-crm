@@ -744,51 +744,74 @@ async function buscarLojaPorNome(nomeBuscado, { role, organizacaoId, uid }) {
 // digita ao se referir à loja no chat.
 const STOPWORDS_NOME_LOJA = new Set(['loja', 'de', 'da', 'do', 'e'])
 
+function palavrasSignificativas(nomeNorm) {
+  return nomeNorm.split(/[\s—–-]+/).filter(p => p.length > 1 && !STOPWORDS_NOME_LOJA.has(p))
+}
+
 // Tenta identificar de qual loja o gestor está falando a partir do texto livre
 // da mensagem (ex: "como está o desempenho da Pizzaria Dona Rita?") — sem isso,
 // o assistente só teria dados reais quando o gestor selecionasse a loja no
 // dropdown acima do chat, e cairia no fallback genérico de "Portal do Parceiro"
 // mesmo tendo os dados no próprio sistema.
-// Duas estratégias, da mais específica pra mais tolerante:
-// 1) Todas as palavras significativas do nome aparecem na mensagem, em
-//    qualquer ordem — cobre o nome completo (ex: "Pizzaria Dona Rita" casa
-//    com "Pizzaria Dona Rita — Loja" no cadastro, sem exigir "Loja" também).
-// 2) Um prefixo contíguo do nome aparece na mensagem — cobre nome truncado
-//    (ex: "Empório Sabor" casa com "Empório Sabor Caseiro — Loja", mesmo sem
-//    mencionar "Caseiro"). Exige pelo menos 2 palavras nesse prefixo pra não
-//    disparar com uma palavra solta genérica demais.
-async function detectarLojaMencionada(texto, { role, organizacaoId, uid }) {
+//
+// Três níveis de confiança, do mais certeiro pro mais frouxo — só desce de
+// nível se o nível anterior não achou NENHUMA loja, pra um match forte de uma
+// loja nunca perder pra um match fraco de outra:
+//   A. todas as palavras significativas do nome aparecem na mensagem, em
+//      qualquer ordem (ex: "Pizzaria Dona Rita" casa com "Pizzaria Dona
+//      Rita — Loja" no cadastro, sem exigir a palavra genérica "Loja").
+//   B. um prefixo contíguo de 2+ palavras do nome aparece na mensagem (ex:
+//      "Empório Sabor" casa com "Empório Sabor Caseiro — Loja", mesmo sem
+//      mencionar "Caseiro").
+//   C. pelo menos uma palavra significativa (4+ letras) do nome aparece na
+//      mensagem — confiança baixa, usado só pra sugerir, nunca pra decidir
+//      sozinho qual loja é.
+// Retorna a lista de candidatos do melhor nível encontrado, ordenada da mais
+// específica pra menos — quem chama decide se usa direto (candidato único e
+// inequívoco) ou pede confirmação ao gestor (nível C, ou empate no topo).
+async function candidatosLojaMencionada(texto, { role, organizacaoId, uid }) {
   const textoNorm = normalizarTexto(texto)
-  if (!textoNorm) return null
+  if (!textoNorm) return { nivel: null, candidatos: [] }
 
   const snap = await queryLojasAcessiveis({ role, organizacaoId, uid })
 
-  let melhor = null
+  const nivelA = []
+  const nivelB = []
+  const nivelC = []
+
   for (const docSnap of snap.docs) {
     const loja = docSnap.data()
     const nomeNorm = normalizarTexto(loja.nome)
-    const palavras = nomeNorm.split(/[\s—–-]+/).filter(p => p.length > 1 && !STOPWORDS_NOME_LOJA.has(p))
+    const palavras = palavrasSignificativas(nomeNorm)
     if (palavras.length === 0) continue
 
-    let especificidade = 0
     if (palavras.every(p => textoNorm.includes(p))) {
-      especificidade = palavras.join('').length
-    } else {
-      const minPalavras = Math.min(2, palavras.length)
-      for (let n = palavras.length - 1; n >= minPalavras; n--) {
-        const prefixo = palavras.slice(0, n).join(' ')
-        if (textoNorm.includes(prefixo)) {
-          especificidade = prefixo.length
-          break
-        }
-      }
+      nivelA.push({ id: docSnap.id, nome: loja.nome, pontuacao: palavras.join('').length })
+      continue
     }
 
-    if (especificidade && (!melhor || especificidade > melhor.especificidade)) {
-      melhor = { id: docSnap.id, ...loja, especificidade }
+    const minPalavras = Math.min(2, palavras.length)
+    let prefixoAchado = null
+    for (let n = palavras.length - 1; n >= minPalavras; n--) {
+      const prefixo = palavras.slice(0, n).join(' ')
+      if (textoNorm.includes(prefixo)) { prefixoAchado = prefixo; break }
+    }
+    if (prefixoAchado) {
+      nivelB.push({ id: docSnap.id, nome: loja.nome, pontuacao: prefixoAchado.length })
+      continue
+    }
+
+    const palavrasEncontradas = palavras.filter(p => p.length >= 4 && textoNorm.includes(p))
+    if (palavrasEncontradas.length > 0) {
+      nivelC.push({ id: docSnap.id, nome: loja.nome, pontuacao: palavrasEncontradas.join('').length })
     }
   }
-  return melhor
+
+  const porPontuacao = (a, b) => b.pontuacao - a.pontuacao
+  if (nivelA.length) return { nivel: 'A', candidatos: nivelA.sort(porPontuacao) }
+  if (nivelB.length) return { nivel: 'B', candidatos: nivelB.sort(porPontuacao) }
+  if (nivelC.length) return { nivel: 'C', candidatos: nivelC.sort(porPontuacao) }
+  return { nivel: null, candidatos: [] }
 }
 
 async function executarCriarTarefa(input, request) {
@@ -869,13 +892,35 @@ exports.assistenteChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 30
   // Se o gestor não selecionou uma loja no dropdown, tenta identificar pelo
   // nome mencionado na última mensagem — sem isso, o assistente cairia no
   // fallback de "não tenho dados em tempo real" mesmo quando o sistema já
-  // tem os resultados da loja lançados.
+  // tem os resultados da loja lançados. Quando o match não é inequívoco
+  // (nomes parecidos empatados, ou só um match fraco/nível C), devolve
+  // opções pro gestor confirmar em vez de arriscar a loja errada.
   let lojaIdEfetivo = lojaId || null
+  let opcoesLoja = null
   if (!lojaIdEfetivo) {
     const ultimaMsgUsuario = [...messages].reverse().find(m => m.role === 'user')
     if (ultimaMsgUsuario) {
-      const lojaDetectada = await detectarLojaMencionada(ultimaMsgUsuario.content, { role, organizacaoId, uid })
-      if (lojaDetectada) lojaIdEfetivo = lojaDetectada.id
+      const { nivel, candidatos } = await candidatosLojaMencionada(ultimaMsgUsuario.content, { role, organizacaoId, uid })
+      if (candidatos.length) {
+        const topPontuacao = candidatos[0].pontuacao
+        const empatados = candidatos.filter(c => c.pontuacao === topPontuacao)
+        if (nivel !== 'C' && empatados.length === 1) {
+          lojaIdEfetivo = empatados[0].id
+        } else {
+          opcoesLoja = (nivel === 'C' ? candidatos : empatados)
+            .slice(0, 5)
+            .map(c => ({ id: c.id, nome: c.nome }))
+        }
+      }
+    }
+  }
+
+  if (opcoesLoja) {
+    return {
+      reply: opcoesLoja.length > 1
+        ? 'Encontrei mais de uma loja parecida com isso — qual delas você quer dizer?'
+        : `Não achei o nome exato — você quis dizer "${opcoesLoja[0].nome}"?`,
+      opcoesLoja,
     }
   }
 
