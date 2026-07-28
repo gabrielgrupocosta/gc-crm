@@ -425,7 +425,8 @@ export default function Organizacoes() {
             <p className="text-[13px] text-text-subtle">Nenhuma organização cadastrada.</p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]">
             <thead>
               <tr className="bg-[#F9F9F9] border-b border-border">
                 {['Nome', 'Admin', 'Status', 'Lojas', 'Valor por loja', ''].map(h => (
@@ -480,6 +481,7 @@ export default function Organizacoes() {
               })}
             </motion.tbody>
           </table>
+          </div>
         )}
 
         {!loading && organizacoes.length > 0 && (

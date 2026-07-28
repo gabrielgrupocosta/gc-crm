@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, AlertTriangle, X } from 'lucide-react'
@@ -242,10 +242,22 @@ function LojasSemGestorAlerta() {
 
 function MainContent() {
   const { collapsed } = useSidebar()
+  const { pathname } = useLocation()
+  const mainRef = useRef(null)
+
+  // <main> é o mesmo nó do DOM entre navegações (só o <Outlet/> troca) — sem
+  // isso, o scroll de uma página ficava "grudado" na próxima: ao navegar de
+  // uma tela rolada pra outra, a nova já carregava com o topo scrollado pra
+  // fora, escondendo o título atrás do botão de menu fixo no mobile.
+  useEffect(() => {
+    mainRef.current?.scrollTo(0, 0)
+  }, [pathname])
+
   // Sem margem no mobile — lá a sidebar é um drawer sobreposto, não ocupa
   // espaço no layout. A partir de md volta a ser a sidebar fixa de sempre.
   return (
     <main
+      ref={mainRef}
       className={`h-screen overflow-y-auto ml-0 pt-14 md:pt-0 transition-[margin-left] duration-200 ease-out ${collapsed ? 'md:ml-[52px]' : 'md:ml-[220px]'}`}
     >
       <Outlet />

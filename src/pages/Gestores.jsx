@@ -1012,7 +1012,8 @@ export default function Gestores() {
             </p>
           </div>
         ) : (
-          <table className="w-full">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px]">
             <thead>
               <tr className="bg-[#F9F9F9] border-b border-border">
                 {[...(isSuperAdmin ? ['Nome', 'E-mail', 'Organização', 'Status', 'Lojas', ''] : ['Nome', 'E-mail', 'Status', 'Lojas', ''])].map(h => (
@@ -1089,6 +1090,7 @@ export default function Gestores() {
               })}
             </motion.tbody>
           </table>
+          </div>
         )}
 
         {/* Footer */}

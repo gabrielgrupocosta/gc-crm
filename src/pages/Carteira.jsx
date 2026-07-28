@@ -119,7 +119,7 @@ function SortHeader({ col, label, current, dir, onSort, align = 'left' }) {
 
 function PeriodToggle({ value, onChange }) {
   return (
-    <div style={{ display: 'flex', gap: '4px' }}>
+    <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
       {PERIODO_MODES.map(m => {
         const active = value === m.key
         return (
@@ -636,7 +636,7 @@ export default function Carteira() {
 
       {loading ? (
         <div className="flex flex-col gap-6">
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Skeleton.KPI /><Skeleton.KPI /><Skeleton.KPI /><Skeleton.KPI />
           </div>
           <Skeleton.Table rows={5} cols={4} />
@@ -647,7 +647,7 @@ export default function Carteira() {
           {/* ── Visão Geral ─────────────────────────────────────────────── */}
           <section>
             <p className="section-label mb-3">Visão Geral</p>
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="card-kpi">
                 <p className="section-label mb-3">Clientes ativos</p>
                 <p className="kpi-value">{kpis.clientesAtivos}</p>
@@ -703,7 +703,7 @@ export default function Carteira() {
 
           {/* ── Métricas de Clientes ────────────────────────────────────── */}
           <section>
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
               <p className="section-label">Métricas de Clientes</p>
               <div className="flex items-center gap-2">
                 <span className="section-label">Período</span>
@@ -719,7 +719,7 @@ export default function Carteira() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
               <div className="card-kpi">
                 <p className="section-label mb-3">Tempo médio de contrato</p>
                 <p className="kpi-value">
@@ -758,34 +758,36 @@ export default function Carteira() {
                     Nenhum dado disponível.
                   </p>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-[1fr_80px_80px_100px_120px] gap-3 items-center px-4 h-10 bg-[#F9F9F9] border-b border-border">
-                      <SortHeader col="nome"       label="Gestor"        current={sortCol} dir={sortDir} onSort={handleSort} />
-                      <SortHeader col="ativos"     label="Ativos"        current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
-                      <SortHeader col="cancelados" label="Cancelados"    current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
-                      <SortHeader col="taxa"       label="Cancelamento%" current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
-                      <SortHeader col="tempoMedio" label="Tempo médio"   current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[600px]">
+                      <div className="grid grid-cols-[1fr_80px_80px_100px_120px] gap-3 items-center px-4 h-10 bg-[#F9F9F9] border-b border-border">
+                        <SortHeader col="nome"       label="Gestor"        current={sortCol} dir={sortDir} onSort={handleSort} />
+                        <SortHeader col="ativos"     label="Ativos"        current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
+                        <SortHeader col="cancelados" label="Cancelados"    current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
+                        <SortHeader col="taxa"       label="Cancelamento%" current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
+                        <SortHeader col="tempoMedio" label="Tempo médio"   current={sortCol} dir={sortDir} onSort={handleSort} align="right" />
+                      </div>
+                      <motion.div variants={listVariants} initial="initial" animate="animate">
+                        {breakdownClientes.map(g => (
+                          <motion.div
+                            key={g.id}
+                            variants={itemVariants}
+                            className="grid grid-cols-[1fr_80px_80px_100px_120px] gap-3 items-center px-4 h-12 border-b border-border last:border-0 hover:bg-black/[0.02] transition-colors duration-150"
+                          >
+                            <span className="text-[14px] text-text-primary font-medium truncate pr-4">{g.nome}</span>
+                            <span className="font-mono text-[13px] text-positive text-right">{g.ativos}</span>
+                            <span className="font-mono text-[13px] text-text-muted text-right">{g.cancelados}</span>
+                            <span className={`font-mono text-[13px] text-right ${g.taxa != null && g.taxa > 0 ? 'text-negative' : 'text-text-muted'}`}>
+                              {g.taxa != null ? `${g.taxa.toFixed(1)}%` : '—'}
+                            </span>
+                            <span className="font-mono text-[13px] text-text-muted text-right">
+                              {g.tempoMedio != null ? `${g.tempoMedio}m` : '—'}
+                            </span>
+                          </motion.div>
+                        ))}
+                      </motion.div>
                     </div>
-                    <motion.div variants={listVariants} initial="initial" animate="animate">
-                      {breakdownClientes.map(g => (
-                        <motion.div
-                          key={g.id}
-                          variants={itemVariants}
-                          className="grid grid-cols-[1fr_80px_80px_100px_120px] gap-3 items-center px-4 h-12 border-b border-border last:border-0 hover:bg-black/[0.02] transition-colors duration-150"
-                        >
-                          <span className="text-[14px] text-text-primary font-medium truncate pr-4">{g.nome}</span>
-                          <span className="font-mono text-[13px] text-positive text-right">{g.ativos}</span>
-                          <span className="font-mono text-[13px] text-text-muted text-right">{g.cancelados}</span>
-                          <span className={`font-mono text-[13px] text-right ${g.taxa != null && g.taxa > 0 ? 'text-negative' : 'text-text-muted'}`}>
-                            {g.taxa != null ? `${g.taxa.toFixed(1)}%` : '—'}
-                          </span>
-                          <span className="font-mono text-[13px] text-text-muted text-right">
-                            {g.tempoMedio != null ? `${g.tempoMedio}m` : '—'}
-                          </span>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  </>
+                  </div>
                 )}
               </div>
             )}
@@ -839,7 +841,7 @@ export default function Carteira() {
 
               {/* Coluna direita — Crescimento da Carteira */}
               <div className="card p-5">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-4">
                   <p className="section-title" style={{ marginBottom: 0 }}>Crescimento da Carteira</p>
                   <PeriodToggle value={periodMode} onChange={setPeriodMode} />
                 </div>
@@ -889,34 +891,36 @@ export default function Carteira() {
                     Nenhum dado disponível.
                   </p>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-[1fr_90px_90px_90px_110px] gap-3 items-center px-4 h-10 bg-[#F9F9F9] border-b border-border">
-                      <SortHeader col="nome"       label="Gestor"         current={sortColGP} dir={sortDirGP} onSort={handleSortGP} />
-                      <SortHeader col="iFood"      label="iFood"         current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
-                      <SortHeader col="99Food"     label="99Food"        current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
-                      <SortHeader col="Keeta"      label="Keeta"         current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
-                      <SortHeader col="totalLojas" label="Total de lojas" current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[600px]">
+                      <div className="grid grid-cols-[1fr_90px_90px_90px_110px] gap-3 items-center px-4 h-10 bg-[#F9F9F9] border-b border-border">
+                        <SortHeader col="nome"       label="Gestor"         current={sortColGP} dir={sortDirGP} onSort={handleSortGP} />
+                        <SortHeader col="iFood"      label="iFood"         current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
+                        <SortHeader col="99Food"     label="99Food"        current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
+                        <SortHeader col="Keeta"      label="Keeta"         current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
+                        <SortHeader col="totalLojas" label="Total de lojas" current={sortColGP} dir={sortDirGP} onSort={handleSortGP} align="right" />
+                      </div>
+                      <motion.div variants={listVariants} initial="initial" animate="animate">
+                        {gestorPlataformaRowsOrdenadas.map(g => (
+                          <motion.div
+                            key={g.id}
+                            variants={itemVariants}
+                            className="grid grid-cols-[1fr_90px_90px_90px_110px] gap-3 items-center px-4 h-12 border-b border-border last:border-0 hover:bg-black/[0.02] transition-colors duration-150"
+                          >
+                            <span className="text-[14px] text-text-primary font-medium truncate pr-4">{g.nome}</span>
+                            {PLATAFORMAS.map(p => (
+                              <div key={p} className="flex justify-end">
+                                {g[p].temDados ? <VarBadge value={g[p].variacao} /> : (
+                                  <span className="text-[12px] text-text-subtle">—</span>
+                                )}
+                              </div>
+                            ))}
+                            <span className="font-mono text-[13px] text-text-muted text-right">{g.totalLojas}</span>
+                          </motion.div>
+                        ))}
+                      </motion.div>
                     </div>
-                    <motion.div variants={listVariants} initial="initial" animate="animate">
-                      {gestorPlataformaRowsOrdenadas.map(g => (
-                        <motion.div
-                          key={g.id}
-                          variants={itemVariants}
-                          className="grid grid-cols-[1fr_90px_90px_90px_110px] gap-3 items-center px-4 h-12 border-b border-border last:border-0 hover:bg-black/[0.02] transition-colors duration-150"
-                        >
-                          <span className="text-[14px] text-text-primary font-medium truncate pr-4">{g.nome}</span>
-                          {PLATAFORMAS.map(p => (
-                            <div key={p} className="flex justify-end">
-                              {g[p].temDados ? <VarBadge value={g[p].variacao} /> : (
-                                <span className="text-[12px] text-text-subtle">—</span>
-                              )}
-                            </div>
-                          ))}
-                          <span className="font-mono text-[13px] text-text-muted text-right">{g.totalLojas}</span>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  </>
+                  </div>
                 )}
               </div>
             )}
@@ -932,28 +936,30 @@ export default function Carteira() {
                     Nenhuma loja ativa.
                   </p>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-[1fr_110px_180px_1fr] gap-3 items-center px-4 h-10 bg-[#F9F9F9] border-b border-border">
-                      <span className="section-label">Gestor</span>
-                      <span className="section-label text-right">Lojas ativas</span>
-                      <span className="section-label">Plataformas</span>
-                      <span className="section-label">Dias de relatório</span>
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[560px]">
+                      <div className="grid grid-cols-[1fr_110px_180px_1fr] gap-3 items-center px-4 h-10 bg-[#F9F9F9] border-b border-border">
+                        <span className="section-label">Gestor</span>
+                        <span className="section-label text-right">Lojas ativas</span>
+                        <span className="section-label">Plataformas</span>
+                        <span className="section-label">Dias de relatório</span>
+                      </div>
+                      <motion.div variants={listVariants} initial="initial" animate="animate">
+                        {distribuicaoGestores.map(g => (
+                          <motion.div
+                            key={g.id}
+                            variants={itemVariants}
+                            className="grid grid-cols-[1fr_110px_180px_1fr] gap-3 items-center px-4 h-12 border-b border-border last:border-0 hover:bg-black/[0.02] transition-colors duration-150"
+                          >
+                            <span className="text-[14px] text-text-primary font-medium truncate">{g.nome}</span>
+                            <span className="font-mono text-[13px] text-text-muted text-right">{g.lojasAtivas}</span>
+                            <span className="text-[12px] text-text-muted truncate">{g.plataformas}</span>
+                            <span className="text-[12px] text-text-muted truncate">{g.diasResumo}</span>
+                          </motion.div>
+                        ))}
+                      </motion.div>
                     </div>
-                    <motion.div variants={listVariants} initial="initial" animate="animate">
-                      {distribuicaoGestores.map(g => (
-                        <motion.div
-                          key={g.id}
-                          variants={itemVariants}
-                          className="grid grid-cols-[1fr_110px_180px_1fr] gap-3 items-center px-4 h-12 border-b border-border last:border-0 hover:bg-black/[0.02] transition-colors duration-150"
-                        >
-                          <span className="text-[14px] text-text-primary font-medium truncate">{g.nome}</span>
-                          <span className="font-mono text-[13px] text-text-muted text-right">{g.lojasAtivas}</span>
-                          <span className="text-[12px] text-text-muted truncate">{g.plataformas}</span>
-                          <span className="text-[12px] text-text-muted truncate">{g.diasResumo}</span>
-                        </motion.div>
-                      ))}
-                    </motion.div>
-                  </>
+                  </div>
                 )}
               </div>
             </section>
