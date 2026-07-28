@@ -713,14 +713,20 @@ function normalizarTexto(s) {
   return (s || '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
 }
 
-// Busca a loja pelo nome dentro do que o chamador pode acessar (gestor só as
-// suas, admin/master toda a org) — evita que o assistente crie uma tarefa
-// numa loja que o gestor não gerencia.
-async function buscarLojaPorNome(nomeBuscado, { role, organizacaoId, uid }) {
+// Lojas que o chamador pode acessar (gestor só as suas, admin/master toda a
+// org) — base compartilhada pela busca por nome (criar_tarefa) e pela
+// detecção automática de loja mencionada no chat.
+async function queryLojasAcessiveis({ role, organizacaoId, uid }) {
   let q = db.collection('lojas')
   if (role !== 'master') q = q.where('organizacaoId', '==', organizacaoId ?? null)
   if (role === 'gestor') q = q.where('gestorId', '==', uid)
-  const snap = await q.get()
+  return q.get()
+}
+
+// Busca a loja pelo nome dentro do que o chamador pode acessar — evita que o
+// assistente crie uma tarefa numa loja que o gestor não gerencia.
+async function buscarLojaPorNome(nomeBuscado, { role, organizacaoId, uid }) {
+  const snap = await queryLojasAcessiveis({ role, organizacaoId, uid })
 
   const alvo = normalizarTexto(nomeBuscado)
   let melhor = null
@@ -729,6 +735,42 @@ async function buscarLojaPorNome(nomeBuscado, { role, organizacaoId, uid }) {
     const nomeNorm = normalizarTexto(loja.nome)
     if (nomeNorm === alvo) return { id: docSnap.id, ...loja }
     if (!melhor && (nomeNorm.includes(alvo) || alvo.includes(nomeNorm))) melhor = { id: docSnap.id, ...loja }
+  }
+  return melhor
+}
+
+// Palavras que não contam pra identificar uma loja pelo nome — muitos nomes no
+// cadastro têm sufixo "— Loja" (ex: "Pizzaria Dona Rita — Loja"), que ninguém
+// digita ao se referir à loja no chat.
+const STOPWORDS_NOME_LOJA = new Set(['loja', 'de', 'da', 'do', 'e'])
+
+// Tenta identificar de qual loja o gestor está falando a partir do texto livre
+// da mensagem (ex: "como está o desempenho da Pizzaria Dona Rita?") — sem isso,
+// o assistente só teria dados reais quando o gestor selecionasse a loja no
+// dropdown acima do chat, e cairia no fallback genérico de "Portal do Parceiro"
+// mesmo tendo os dados no próprio sistema.
+// Compara por palavras (não pelo nome inteiro): exige que TODAS as palavras
+// significativas do nome apareçam na mensagem, em qualquer ordem — assim
+// "Pizzaria Dona Rita" no chat ainda casa com "Pizzaria Dona Rita — Loja" no
+// cadastro, sem exigir que o sufixo genérico também seja digitado.
+async function detectarLojaMencionada(texto, { role, organizacaoId, uid }) {
+  const textoNorm = normalizarTexto(texto)
+  if (!textoNorm) return null
+
+  const snap = await queryLojasAcessiveis({ role, organizacaoId, uid })
+
+  let melhor = null
+  for (const docSnap of snap.docs) {
+    const loja = docSnap.data()
+    const nomeNorm = normalizarTexto(loja.nome)
+    const palavras = nomeNorm.split(/[\s—–-]+/).filter(p => p.length > 1 && !STOPWORDS_NOME_LOJA.has(p))
+    if (palavras.length === 0) continue
+    if (!palavras.every(p => textoNorm.includes(p))) continue
+
+    const especificidade = palavras.join('').length
+    if (!melhor || especificidade > melhor.especificidade) {
+      melhor = { id: docSnap.id, ...loja, especificidade }
+    }
   }
   return melhor
 }
@@ -806,22 +848,36 @@ exports.assistenteChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 30
     throw new HttpsError('invalid-argument', 'messages é obrigatório')
   }
 
+  const { role, organizacaoId, uid } = request.auth.token
+
+  // Se o gestor não selecionou uma loja no dropdown, tenta identificar pelo
+  // nome mencionado na última mensagem — sem isso, o assistente cairia no
+  // fallback de "não tenho dados em tempo real" mesmo quando o sistema já
+  // tem os resultados da loja lançados.
+  let lojaIdEfetivo = lojaId || null
+  if (!lojaIdEfetivo) {
+    const ultimaMsgUsuario = [...messages].reverse().find(m => m.role === 'user')
+    if (ultimaMsgUsuario) {
+      const lojaDetectada = await detectarLojaMencionada(ultimaMsgUsuario.content, { role, organizacaoId, uid })
+      if (lojaDetectada) lojaIdEfetivo = lojaDetectada.id
+    }
+  }
+
   let contextoLoja = ''
-  if (lojaId) {
-    const lojaDoc = await db.collection('lojas').doc(lojaId).get()
+  if (lojaIdEfetivo) {
+    const lojaDoc = await db.collection('lojas').doc(lojaIdEfetivo).get()
     if (lojaDoc.exists) {
       const loja = lojaDoc.data()
-      const { role, organizacaoId } = request.auth.token
       const podeAcessar = role === 'master' || loja.organizacaoId === organizacaoId
       if (podeAcessar) {
         const resultadosSnap = await db.collection('resultados')
           .where('organizacaoId', '==', loja.organizacaoId ?? null)
-          .where('lojaId', '==', lojaId)
+          .where('lojaId', '==', lojaIdEfetivo)
           .orderBy('semana', 'desc')
           .limit(8)
           .get()
         const resultados = resultadosSnap.docs.map(d => d.data())
-        contextoLoja = `\n\n---\n\nDADOS REAIS DA LOJA SELECIONADA (use pra personalizar o diagnóstico em vez de só perguntar):\nNome: ${loja.nome}\nSegmento: ${loja.segmento || 'não informado'}\nPlataformas: ${(loja.plataformas ?? [loja.plataforma]).filter(Boolean).join(', ') || 'não informado'}\nStatus: ${loja.status}\n\nÚltimos resultados semanais (mais recente primeiro):\n` +
+        contextoLoja = `\n\n---\n\nDADOS REAIS DA LOJA (use pra personalizar o diagnóstico em vez de só perguntar):\nNome: ${loja.nome}\nSegmento: ${loja.segmento || 'não informado'}\nPlataformas: ${(loja.plataformas ?? [loja.plataforma]).filter(Boolean).join(', ') || 'não informado'}\nStatus: ${loja.status}\n\nÚltimos resultados semanais (mais recente primeiro):\n` +
           (resultados.length
             ? resultados.map(r => `- Semana ${r.semana}: faturamento R$${r.faturamento ?? '—'}, variação ${r.variacao ?? '—'}%, cancelamento ${r.cancelamento ?? '—'}%, chamados ${r.chamados ?? '—'}%`).join('\n')
             : '(nenhum resultado lançado ainda)')
