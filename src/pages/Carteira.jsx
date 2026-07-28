@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUp, ArrowDown } from 'lucide-react'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
 import {
   db, COLLECTIONS,
@@ -14,21 +15,12 @@ import VarBadge from '../components/UI/VarBadge'
 
 const PLATAFORMAS = ['iFood', '99Food', 'Keeta']
 
-// Header colorido por plataforma (mesmo padrão do Onboard.jsx)
-const PLATAFORMA_HEADER_BG = {
+// Cor de identidade por plataforma — usada no gráfico de distribuição e nos
+// indicadores de "Crescimento da Carteira" (mesmo padrão do Onboard.jsx).
+const PLATAFORMA_COLOR = {
   'iFood':  '#EA1D2C',
   '99Food': '#FFD700',
   'Keeta':  '#00B14F',
-}
-const PLATAFORMA_HEADER_TEXT = {
-  'iFood':  '#FFFFFF',
-  '99Food': '#111111',
-  'Keeta':  '#FFFFFF',
-}
-const PLATAFORMA_BORDER = {
-  'iFood':  'rgba(234,29,44,0.3)',
-  '99Food': 'rgba(255,215,0,0.3)',
-  'Keeta':  'rgba(0,177,79,0.3)',
 }
 
 const DIAS_ORDEM = [
@@ -152,29 +144,15 @@ function PeriodToggle({ value, onChange }) {
   )
 }
 
-// ─── Item de lista por plataforma (header colorido + corpo) ───────────────────
-// Mesma estrutura visual usada em "Distribuição por Plataforma" e "Crescimento
-// da Carteira" — o conteúdo do corpo é passado via children pra cada seção
-// mostrar a métrica que faz sentido (contagem de lojas vs valor de vendas).
+// ─── Tooltip do gráfico de distribuição por plataforma ────────────────────────
 
-function PlataformaListItem({ plataforma, children }) {
+function DistribuicaoTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
   return (
-    <div style={{ border: `1px solid ${PLATAFORMA_BORDER[plataforma]}`, borderRadius: '6px', overflow: 'hidden' }}>
-      <div style={{
-        height: '24px', backgroundColor: PLATAFORMA_HEADER_BG[plataforma],
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        borderRadius: '6px 6px 0 0',
-      }}>
-        <span style={{
-          fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em',
-          color: PLATAFORMA_HEADER_TEXT[plataforma],
-        }}>
-          {plataforma}
-        </span>
-      </div>
-      <div style={{ backgroundColor: '#FFFFFF', padding: '12px 14px' }}>
-        {children}
-      </div>
+    <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '6px', padding: '7px 11px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+      <p style={{ fontSize: '11px', fontWeight: 600, color: '#111111', marginBottom: '2px' }}>{p.plataforma}</p>
+      <p className="font-mono" style={{ fontSize: '12px', color: '#666666' }}>{p.count} loja{p.count === 1 ? '' : 's'} · {p.pct.toFixed(1)}%</p>
     </div>
   )
 }
@@ -326,7 +304,13 @@ export default function Carteira() {
       .filter(Boolean)
   }, [resultados24, lojaMap])
 
-  const { atualWeeks, anteriorWeeks } = useMemo(() => {
+  // getPeriodoComparativo devolve { atual, anterior } — renomeado aqui pro
+  // resto do arquivo usar atualWeeks/anteriorWeeks (nomes mais claros no
+  // contexto de semanas). Bug real corrigido: antes a desestruturação pedia
+  // atualWeeks/anteriorWeeks direto, que não existiam no objeto retornado —
+  // ambos ficavam undefined e nenhum resultado nunca batia no filtro de
+  // semana, fazendo "Crescimento da Carteira" nunca mostrar dados.
+  const { atual: atualWeeks, anterior: anteriorWeeks } = useMemo(() => {
     const modo = PERIODO_MODES.find(m => m.key === periodMode) ?? PERIODO_MODES[0]
     return getPeriodoComparativo(semanaRef, modo.n)
   }, [periodMode, semanaRef])
@@ -809,36 +793,54 @@ export default function Carteira() {
 
           {/* ── Distribuição por Plataforma + Crescimento da Carteira ───────── */}
           <section>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
               {/* Coluna esquerda — Distribuição por Plataforma */}
-              <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '10px', padding: '20px' }}>
-                <p style={{ fontSize: '16px', fontWeight: 700, color: '#111111', marginBottom: '14px' }}>
-                  Distribuição por Plataforma
-                </p>
-                <div className="flex flex-col gap-2">
-                  {distribuicaoPlataformas.map(p => (
-                    <PlataformaListItem key={p.plataforma} plataforma={p.plataforma}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p style={{ fontSize: '20px', fontWeight: 700, color: '#111111', margin: 0, lineHeight: 1 }}>{p.count}</p>
-                          <p style={{ fontSize: '11px', color: '#999999', margin: '3px 0 0' }}>lojas ativas</p>
-                        </div>
-                        <span style={{ fontSize: '11px', fontWeight: 600, color: '#666666', backgroundColor: '#F5F5F5', border: '1px solid #E8E8E8', borderRadius: '4px', padding: '2px 7px' }}>
-                          {p.pct.toFixed(1)}%
-                        </span>
+              <div className="card p-5">
+                <p className="section-title">Distribuição por Plataforma</p>
+                <div className="flex items-center gap-5">
+                  <div style={{ width: '132px', height: '132px', position: 'relative', flexShrink: 0 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={distribuicaoPlataformas.filter(p => p.count > 0)}
+                          dataKey="count"
+                          nameKey="plataforma"
+                          cx="50%" cy="50%"
+                          innerRadius={42} outerRadius={62}
+                          paddingAngle={distribuicaoPlataformas.filter(p => p.count > 0).length > 1 ? 3 : 0}
+                          stroke="none"
+                        >
+                          {distribuicaoPlataformas.filter(p => p.count > 0).map(p => (
+                            <Cell key={p.plataforma} fill={PLATAFORMA_COLOR[p.plataforma]} />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<DistribuicaoTooltip />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                      <span className="font-mono" style={{ fontSize: '22px', fontWeight: 800, color: '#111111', lineHeight: 1 }}>{lojasAtivas.length}</span>
+                      <span style={{ fontSize: '9.5px', color: '#999999', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '3px' }}>lojas</span>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+                    {distribuicaoPlataformas.map(p => (
+                      <div key={p.plataforma} className="flex items-center gap-2">
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: PLATAFORMA_COLOR[p.plataforma], flexShrink: 0 }} />
+                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111', flex: 1, minWidth: 0 }} className="truncate">{p.plataforma}</span>
+                        <span className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>{p.count}</span>
+                        <span style={{ fontSize: '11px', color: '#999999', width: '38px', textAlign: 'right' }}>{p.pct.toFixed(1)}%</span>
                       </div>
-                    </PlataformaListItem>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
 
               {/* Coluna direita — Crescimento da Carteira */}
-              <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '10px', padding: '20px' }}>
-                <div className="flex items-center justify-between mb-3.5">
-                  <p style={{ fontSize: '16px', fontWeight: 700, color: '#111111', margin: 0 }}>
-                    Crescimento da Carteira
-                  </p>
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="section-title" style={{ marginBottom: 0 }}>Crescimento da Carteira</p>
                   <PeriodToggle value={periodMode} onChange={setPeriodMode} />
                 </div>
 
@@ -847,18 +849,26 @@ export default function Carteira() {
                     <Skeleton.KPI /><Skeleton.KPI /><Skeleton.KPI />
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {crescimentoPorPlataforma.map(p => (
-                      <PlataformaListItem key={p.plataforma} plataforma={p.plataforma}>
-                        <div className="flex items-center justify-between">
-                          <p style={{ fontSize: '18px', fontWeight: 700, color: '#111111', margin: 0 }}>
+                  <div className="flex flex-col">
+                    {crescimentoPorPlataforma.map((p, i) => (
+                      <div
+                        key={p.plataforma}
+                        className="flex items-center justify-between"
+                        style={{ padding: '11px 0', borderTop: i > 0 ? '1px solid #F3F3F3' : 'none' }}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: PLATAFORMA_COLOR[p.plataforma], flexShrink: 0 }} />
+                          <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111' }}>{p.plataforma}</span>
+                        </div>
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: '#111111' }}>
                             {p.temDados ? formatBRL(p.somaAtual) : '—'}
-                          </p>
+                          </span>
                           {p.temDados ? <VarBadge value={p.variacao} /> : (
-                            <span className="text-[12px] text-text-subtle">—</span>
+                            <span className="text-[12px] text-text-faint">—</span>
                           )}
                         </div>
-                      </PlataformaListItem>
+                      </div>
                     ))}
                   </div>
                 )}

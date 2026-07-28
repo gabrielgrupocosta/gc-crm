@@ -103,15 +103,21 @@ export function getPrevMonthStr(monthStr) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+// Constrói a segunda-feira em horário LOCAL (não UTC) — getISOWeekStr também
+// lê o dia/mês em horário local, então misturar UTC aqui fazia a meia-noite UTC
+// de segunda cair no domingo anterior pra fusos atrás de UTC (ex: Brasília,
+// UTC-3), e o resultado saía uma semana adiantada — bug real: getPrevWeekStr
+// pulava 2 semanas em vez de 1, fazendo "Crescimento da Carteira" nunca achar
+// dados reais (as semanas buscadas nunca batiam com as semanas lançadas).
 export function getPrevWeekStr(weekStr) {
   const [yearStr, wStr] = weekStr.split('-W')
   const year = parseInt(yearStr), week = parseInt(wStr)
-  const jan4    = new Date(Date.UTC(year, 0, 4))
-  const jan4Day = (jan4.getUTCDay() + 6) % 7
+  const jan4    = new Date(year, 0, 4)
+  const jan4Day = (jan4.getDay() + 6) % 7
   const week1Mon = new Date(jan4)
-  week1Mon.setUTCDate(jan4.getUTCDate() - jan4Day)
+  week1Mon.setDate(jan4.getDate() - jan4Day)
   const monday = new Date(week1Mon)
-  monday.setUTCDate(week1Mon.getUTCDate() + (week - 1) * 7 - 7)
+  monday.setDate(week1Mon.getDate() + (week - 1) * 7 - 7)
   return getISOWeekStr(monday)
 }
 
