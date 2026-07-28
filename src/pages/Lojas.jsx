@@ -1761,6 +1761,7 @@ export default function Lojas() {
           clienteId,
           clienteNome: clienteMap[clienteId]?.nome ?? '—',
           lojas: [...lojasDoCliente].sort((a, b) => (a.nome ?? '').localeCompare(b.nome ?? '', 'pt-BR')),
+          totalLojas: lojasDoCliente.length,
         }
       } else {
         semAgrupamento.push(...lojasDoCliente)
@@ -1779,8 +1780,8 @@ export default function Lojas() {
     const linhas = []
     blocos.forEach(b => {
       if (b.tipo === 'grupo') {
-        linhas.push({ tipo: 'grupo', clienteId: b.grupo.clienteId, clienteNome: b.grupo.clienteNome })
-        b.grupo.lojas.forEach(loja => linhas.push({ tipo: 'loja', loja, emGrupo: true }))
+        linhas.push({ tipo: 'grupo', clienteId: b.grupo.clienteId, clienteNome: b.grupo.clienteNome, totalLojas: b.grupo.totalLojas })
+        b.grupo.lojas.forEach((loja, idx) => linhas.push({ tipo: 'loja', loja, emGrupo: true, ultimaDoGrupo: idx === b.grupo.lojas.length - 1 }))
       } else {
         linhas.push({ tipo: 'loja', loja: b.loja, emGrupo: false })
       }
@@ -2076,12 +2077,26 @@ export default function Lojas() {
                       <tr key={`cliente-${item.clienteId}`}>
                         <td colSpan={8} style={{ padding: 0 }}>
                           <div style={{
-                            display: 'flex', alignItems: 'center', gap: '6px',
-                            backgroundColor: '#F9F9F9', padding: '8px 12px',
-                            borderRadius: '6px', marginBottom: '4px', marginTop: '4px',
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            backgroundColor: '#F5F5F5', padding: '8px 12px',
+                            borderRadius: '8px 8px 0 0', marginTop: '12px',
+                            borderLeft: '3px solid #D8D8D8',
                           }}>
-                            <Layers size={14} strokeWidth={1.75} style={{ color: '#666666', flexShrink: 0 }} />
-                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#111111' }}>{item.clienteNome}</span>
+                            <div style={{
+                              width: '20px', height: '20px', borderRadius: '6px',
+                              backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                            }}>
+                              <Layers size={11} strokeWidth={2} style={{ color: '#888888' }} />
+                            </div>
+                            <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#111111' }}>{item.clienteNome}</span>
+                            <span style={{
+                              fontSize: '10.5px', fontWeight: 500, color: '#999999',
+                              backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
+                              borderRadius: '999px', padding: '1px 8px',
+                            }}>
+                              {item.totalLojas} lojas
+                            </span>
                           </div>
                         </td>
                       </tr>
@@ -2094,13 +2109,14 @@ export default function Lojas() {
                     <motion.tr
                       variants={itemVariants}
                       className="table-row-base"
+                      style={{ backgroundColor: item.emGrupo ? 'rgba(0,0,0,0.014)' : undefined }}
                     >
                       <td
                         className="px-4"
                         style={{
                           height: '36px', fontSize: '13px', color: '#111111', fontWeight: 500,
                           paddingLeft: item.emGrupo ? '24px' : undefined,
-                          borderLeft: item.emGrupo ? '2px solid #E8E8E8' : undefined,
+                          borderLeft: item.emGrupo ? '3px solid #D8D8D8' : undefined,
                         }}
                       >
                         <EditableNomeCell loja={loja} onSave={v => handleInlineUpdate(loja, 'nome', v)} />
@@ -2190,9 +2206,26 @@ export default function Lojas() {
             {linhasExibicao.map(item => {
               if (item.tipo === 'grupo') {
                 return (
-                  <div key={`cliente-${item.clienteId}`} className="flex items-center gap-1.5 px-4 py-2 bg-[#F9F9F9]">
-                    <Layers size={14} strokeWidth={1.75} style={{ color: '#666666', flexShrink: 0 }} />
-                    <span className="text-[12px] font-semibold text-text-primary">{item.clienteNome}</span>
+                  <div
+                    key={`cliente-${item.clienteId}`}
+                    className="flex items-center gap-2 px-4 py-2.5"
+                    style={{ backgroundColor: '#F5F5F5', marginTop: '8px', borderLeft: '3px solid #D8D8D8' }}
+                  >
+                    <div style={{
+                      width: '20px', height: '20px', borderRadius: '6px',
+                      backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <Layers size={11} strokeWidth={2} style={{ color: '#888888' }} />
+                    </div>
+                    <span className="text-[12.5px] font-semibold text-text-primary">{item.clienteNome}</span>
+                    <span style={{
+                      fontSize: '10.5px', fontWeight: 500, color: '#999999',
+                      backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
+                      borderRadius: '999px', padding: '1px 8px',
+                    }}>
+                      {item.totalLojas} lojas
+                    </span>
                   </div>
                 )
               }
@@ -2206,7 +2239,11 @@ export default function Lojas() {
                   key={loja.id}
                   variants={itemVariants}
                   className="p-4 border-b border-border-subtle last:border-0 flex flex-col gap-2"
-                  style={{ paddingLeft: item.emGrupo ? '28px' : undefined, borderLeft: item.emGrupo ? '2px solid #E8E8E8' : undefined }}
+                  style={{
+                    paddingLeft: item.emGrupo ? '28px' : undefined,
+                    borderLeft: item.emGrupo ? '3px solid #D8D8D8' : undefined,
+                    backgroundColor: item.emGrupo ? 'rgba(0,0,0,0.014)' : undefined,
+                  }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[14px] text-text-primary font-medium truncate">{loja.nome}</span>

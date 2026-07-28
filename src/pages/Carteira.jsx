@@ -211,11 +211,17 @@ export default function Carteira() {
       const orgId   = user?.organizacaoId ?? null
       const escopo  = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
+      // Contas novas (multi-tenant) usam o campo `role`, não o `perfil` legado —
+      // mesmo padrão de Clientes.jsx/Lojas.jsx/Contratos.jsx.
+      const gestoresQuery = isSuperAdmin
+        ? query(collection(db, COLLECTIONS.USERS), where('perfil', '==', 'gestor'))
+        : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
+
       const [lojasSnap, gestoresSnap] = await Promise.all([
         isAdmin
           ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopo))
-          : getDocs(query(collection(db, COLLECTIONS.LOJAS), where('gestorId', '==', user.uid))),
-        getDocs(query(collection(db, COLLECTIONS.USERS), where('perfil', '==', 'gestor'))),
+          : getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopo, where('gestorId', '==', user.uid))),
+        getDocs(gestoresQuery),
       ])
 
       const lojasData = lojasSnap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -433,12 +439,13 @@ export default function Carteira() {
 
   const lojaIdsCarteira = useMemo(() => new Set(lojas.map(l => l.id)), [lojas])
 
-  const { valorTotalContratos, faturamentoMensalEstimado } = useMemo(() => {
+  const { valorTotalContratos, faturamentoMensalEstimado, clientesComContrato } = useMemo(() => {
     const refMonthStart = monthStart ?? new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     const refMonthEnd   = monthEnd   ?? new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59, 999)
 
     let valorTotal = 0
     let faturamentoMensal = 0
+    const clientesSet = new Set()
 
     contratos.forEach(c => {
       const inicio = tsDate(c.dataInicio)
@@ -451,6 +458,7 @@ export default function Carteira() {
         if (!lojaIdsCarteira.has(item.lojaId)) return
         const valor = item.valor ?? 0
         valorTotal += valor
+        clientesSet.add(c.clienteId)
         if (c.tipoPagamento === 'semanal') {
           const ocorrencias = contarOcorrenciasSemanais(inicio, fim, refMonthStart, refMonthEnd)
           faturamentoMensal += valor * ocorrencias
@@ -460,7 +468,7 @@ export default function Carteira() {
       })
     })
 
-    return { valorTotalContratos: valorTotal, faturamentoMensalEstimado: faturamentoMensal }
+    return { valorTotalContratos: valorTotal, faturamentoMensalEstimado: faturamentoMensal, clientesComContrato: clientesSet.size }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratos, lojaIdsCarteira, monthStart, monthEnd])
 
@@ -492,6 +500,13 @@ export default function Carteira() {
     })
     return count > 0 ? Math.round(total / count) : null
   }, [filteredClientes, refDate])
+
+  // Ticket médio: faturamento mensal estimado dividido pelos clientes que têm
+  // contrato contando pra essa estimativa. LTV: ticket médio × tempo médio de
+  // contrato (em meses) — estimativa clássica de receita total por cliente
+  // ao longo do relacionamento.
+  const ticketMedio = clientesComContrato > 0 ? faturamentoMensalEstimado / clientesComContrato : null
+  const ltv = ticketMedio != null && tempoMedioContrato != null ? ticketMedio * tempoMedioContrato : null
 
   const { taxa, canceladosMesAtual, canceladosMesAnterior } = useMemo(() => {
     const total    = filteredClientes.length
@@ -677,7 +692,7 @@ export default function Carteira() {
                   Referente a {MONTH_OPTIONS.find(o => o.value === selectedMonth)?.label ?? 'este mês'}
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="card-kpi">
                   <p className="section-label mb-3">Valor total em contratos</p>
                   <p className="kpi-value">{formatBRL(valorTotalContratos)}</p>
@@ -687,6 +702,16 @@ export default function Carteira() {
                   <p className="section-label mb-3">Faturamento mensal estimado</p>
                   <p className="kpi-value">{formatBRL(faturamentoMensalEstimado)}</p>
                   <p className="text-[12px] text-text-subtle mt-1.5">Contratos semanais contam pelas cobranças previstas no mês</p>
+                </div>
+                <div className="card-kpi">
+                  <p className="section-label mb-3">Ticket médio</p>
+                  <p className="kpi-value">{ticketMedio != null ? formatBRL(ticketMedio) : '—'}</p>
+                  <p className="text-[12px] text-text-subtle mt-1.5">Faturamento mensal estimado ÷ clientes com contrato no período</p>
+                </div>
+                <div className="card-kpi">
+                  <p className="section-label mb-3">LTV estimado</p>
+                  <p className="kpi-value">{ltv != null ? formatBRL(ltv) : '—'}</p>
+                  <p className="text-[12px] text-text-subtle mt-1.5">Ticket médio × tempo médio de contrato</p>
                 </div>
               </div>
             </section>

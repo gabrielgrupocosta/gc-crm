@@ -27,6 +27,9 @@ scripts/data
 # pontuais; nunca deve ir pro repositório
 .claude/settings.local.json
 
+# Lock de sessão do Claude Code — estado transitório local, não é config do projeto
+.claude/scheduled_tasks.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

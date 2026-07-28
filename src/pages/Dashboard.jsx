@@ -828,6 +828,7 @@ function ModalRelatorio({ loja, semana, periodoLabel, lojaStatus, onClose, onSav
         if (err.code === 'not-found') {
           await setDoc(docRef, {
             gestorId,
+            organizacaoId: user.organizacaoId ?? null,
             semana,
             lojas: { [loja.id]: { enviado, dataEnvio: now } },
           })

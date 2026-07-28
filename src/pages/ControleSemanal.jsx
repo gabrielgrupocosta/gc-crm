@@ -2035,7 +2035,12 @@ export default function ControleSemanal() {
         await updateDoc(docRef, { [`lojas.${loja.id}.enviado`]: true, [`lojas.${loja.id}.dataEnvio`]: now })
       } catch (err) {
         if (err.code === 'not-found') {
-          await setDoc(docRef, { gestorId: loja.gestorId, semana, lojas: { [loja.id]: { enviado: true, dataEnvio: now } } })
+          await setDoc(docRef, {
+            gestorId: loja.gestorId,
+            organizacaoId: loja.organizacaoId ?? user.organizacaoId ?? null,
+            semana,
+            lojas: { [loja.id]: { enviado: true, dataEnvio: now } },
+          })
         } else throw err
       }
     } catch (err) {

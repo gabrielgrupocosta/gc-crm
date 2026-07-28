@@ -9,6 +9,7 @@ const TITULOS_POR_ROTA = {
   '/ranking':      'Ranking',
   '/comparativo':  'Comparativo',
   '/controle':     'Relatório Semanal',
+  '/assistente':   'Assistente Delivery',
   '/atividades':   'Atividades',
   '/clientes':     'Clientes',
   '/lojas':        'Lojas',

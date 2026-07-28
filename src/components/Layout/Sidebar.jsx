@@ -17,6 +17,7 @@ import {
   Briefcase,
   FileText,
   Wallet,
+  Bot,
   MessageSquare,
   AlertTriangle,
   ChevronDown,
@@ -59,9 +60,10 @@ const NAV_CARTEIRA_TODOS = [
 
 // Visível para admin e gestor
 const NAV_GESTAO = [
-  { to: '/controle',   label: 'Relatório Semanal', icon: CheckSquare   },
-  { to: '/onboard',    label: 'Onboard',           icon: UserPlus      },
-  { to: '/atividades', label: 'Atividades',        icon: ClipboardList },
+  { to: '/controle',    label: 'Relatório Semanal',  icon: CheckSquare   },
+  { to: '/assistente',  label: 'Assistente Delivery', icon: Bot          },
+  { to: '/onboard',     label: 'Onboard',            icon: UserPlus      },
+  { to: '/atividades',  label: 'Atividades',         icon: ClipboardList },
 ]
 
 const NAV_PERFIL = [
@@ -352,6 +354,16 @@ export default function Sidebar() {
   // No drawer mobile nunca tem modo ícone — sempre mostra os rótulos,
   // independente do `collapsed` que o usuário deixou salvo no desktop.
   const effectiveCollapsed = isMobile ? false : collapsed
+
+  // Trava o scroll do body enquanto o drawer mobile está aberto — sem isso,
+  // arrastar o dedo sobre a sidebar rola o conteúdo por trás dela (o touch
+  // "vaza" pro body, que continua scrollável atrás do drawer fixed).
+  useEffect(() => {
+    if (!mobileOpen) return
+    const original = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = original }
+  }, [mobileOpen])
 
   const [onboardPendentes, setOnboardPendentes] = useState(0)
   const [lojasSemGestor,   setLojasSemGestor]   = useState(0)

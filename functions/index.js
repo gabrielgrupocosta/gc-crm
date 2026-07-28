@@ -3,6 +3,9 @@ const { onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { defineSecret } = require('firebase-functions/params')
 const { GoogleGenAI } = require('@google/genai')
+const Anthropic = require('@anthropic-ai/sdk')
+const fs = require('fs')
+const path = require('path')
 const { initializeApp } = require('firebase-admin/app')
 const { getAuth } = require('firebase-admin/auth')
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore')
@@ -144,6 +147,9 @@ exports.sincronizarClaimsUsuario = onDocumentWritten('users/{userId}', async (ev
 
 // Definido via `firebase functions:secrets:set GEMINI_API_KEY` — nunca em texto plano no código.
 const geminiApiKey = defineSecret('GEMINI_API_KEY')
+
+// Definido via `firebase functions:secrets:set ANTHROPIC_API_KEY` — nunca em texto plano no código.
+const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY')
 
 // gemini-2.0-flash foi desligado em 01/06/2026 e gemini-2.5-flash não está mais
 // disponível para chaves de API novas (ambos retornam 404) — gemini-3.5-flash é
@@ -648,4 +654,100 @@ exports.limparCobrancasAntigasNaoPagas = onCall(async (request) => {
     }
   }
   return { removidas }
+})
+
+// ─── Assistente Delivery — chat de conhecimento operacional sobre iFood ────────
+// O conhecimento de plataforma (taxas, promoções, métricas, diagnóstico) vive
+// em base-conhecimento-ifood.md, carregado como fonte única da verdade — NUNCA
+// reescrever esse conteúdo à mão aqui dentro (foi exatamente isso que causou
+// um bug real: ao condensar manualmente a seção do HITS, a frase "a loja
+// oferece... em troca" virou ambígua e o modelo inferiu errado quem pagava o
+// cupom). Editar o .md editando o conhecimento; este arquivo só define
+// persona/comportamento/formatação, que são preocupações separadas.
+const BASE_CONHECIMENTO_IFOOD = fs.readFileSync(path.join(__dirname, 'base-conhecimento-ifood.md'), 'utf8')
+
+const PERSONA_E_COMPORTAMENTO = `Você é o Assistente Delivery, especializado em gestão de lojas no iFood.
+
+Seu papel é ajudar gestores da consultoria a diagnosticar problemas operacionais, entender métricas e orientar os clientes (donos de loja) a melhorar seus resultados no iFood.
+
+Responda sempre em português brasileiro, de forma direta e prática. Identifique pelo jeito que a pessoa escreve se ela é leiga ou tem conhecimento técnico — se for leiga, evite jargão e explique termos técnicos entre parênteses na primeira vez que usar (ex: "sacola — quando o cliente adiciona itens mas ainda não finalizou o pedido"). Quando a pergunta for vaga ou de diagnóstico, faça no máximo 3 perguntas por vez antes de responder.
+
+FORMATAÇÃO — MUITO IMPORTANTE: suas respostas aparecem dentro de um balão de chat que só exibe texto puro, sem renderizar Markdown. Nunca use sintaxe de Markdown: nada de "#", "##", "**negrito**", "_itálico_" ou "---". Para destacar algo, use CAIXA ALTA pontual ou reformule a frase — nunca asteriscos. Para listas de passos, use "1)", "2)", "3)" direto no texto (sem colchetes nem markdown). Para itens sem ordem, use um traço "-" no início da linha. Separe seções com uma linha em branco e um título curto seguido de dois-pontos (ex: "Faixas de desconto:"), nunca com "#" ou "##". Escreva como uma mensagem de WhatsApp bem escrita — direta, sem formatação de documento.
+
+Este assistente é especializado exclusivamente em iFood — para 99Food ou Keeta, diga que não tem essa base de conhecimento ainda.
+
+REGRA CRÍTICA — não invente detalhes financeiros: responda SOMENTE com base nas informações explícitas na base de conhecimento abaixo, principalmente sobre quem paga o quê (loja vs. iFood) em cada promoção. Nunca complete uma lacuna usando conhecimento geral que você possa ter sobre o iFood de outras fontes — se a base não deixar claro quem banca um valor específico, diga literalmente "não tenho certeza desse detalhe específico, recomendo confirmar no Portal do Parceiro ou com o gestor" em vez de supor. Isso vale especialmente para valores de cupom, percentuais e quem investe em cada campanha.
+
+Você não tem acesso ao painel do restaurante do usuário nem consegue fazer alterações na conta. Nunca invente números ou percentuais que não estejam na base abaixo. Ao final de respostas complexas, pergunte se a dúvida foi resolvida.
+
+---
+
+BASE DE CONHECIMENTO (única fonte de fatos sobre o iFood — use isso, não conhecimento geral):
+
+`
+
+const SYSTEM_PROMPT_ASSISTENTE = PERSONA_E_COMPORTAMENTO + BASE_CONHECIMENTO_IFOOD
+
+// O modelo às vezes ignora a instrução de "não usar Markdown" (comportamento
+// de LLM não é 100% confiável só por prompt) — essa limpeza garante que
+// símbolos de Markdown nunca cheguem no balão de chat, que só exibe texto puro.
+function limparMarkdown(texto) {
+  return texto
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^[-_*]{3,}\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+exports.assistenteChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 30, memory: '256MiB' }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário')
+
+  const { messages, lojaId } = request.data || {}
+  if (!Array.isArray(messages) || messages.length === 0) {
+    throw new HttpsError('invalid-argument', 'messages é obrigatório')
+  }
+
+  let contextoLoja = ''
+  if (lojaId) {
+    const lojaDoc = await db.collection('lojas').doc(lojaId).get()
+    if (lojaDoc.exists) {
+      const loja = lojaDoc.data()
+      const { role, organizacaoId } = request.auth.token
+      const podeAcessar = role === 'master' || loja.organizacaoId === organizacaoId
+      if (podeAcessar) {
+        const resultadosSnap = await db.collection('resultados')
+          .where('organizacaoId', '==', loja.organizacaoId ?? null)
+          .where('lojaId', '==', lojaId)
+          .orderBy('semana', 'desc')
+          .limit(8)
+          .get()
+        const resultados = resultadosSnap.docs.map(d => d.data())
+        contextoLoja = `\n\n---\n\nDADOS REAIS DA LOJA SELECIONADA (use pra personalizar o diagnóstico em vez de só perguntar):\nNome: ${loja.nome}\nSegmento: ${loja.segmento || 'não informado'}\nPlataformas: ${(loja.plataformas ?? [loja.plataforma]).filter(Boolean).join(', ') || 'não informado'}\nStatus: ${loja.status}\n\nÚltimos resultados semanais (mais recente primeiro):\n` +
+          (resultados.length
+            ? resultados.map(r => `- Semana ${r.semana}: faturamento R$${r.faturamento ?? '—'}, variação ${r.variacao ?? '—'}%, cancelamento ${r.cancelamento ?? '—'}%, chamados ${r.chamados ?? '—'}%`).join('\n')
+            : '(nenhum resultado lançado ainda)')
+      }
+    }
+  }
+
+  const anthropic = new Anthropic({ apiKey: anthropicApiKey.value() })
+
+  let response
+  try {
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: SYSTEM_PROMPT_ASSISTENTE + contextoLoja,
+      messages: messages.map(m => ({ role: m.role, content: String(m.content ?? '') })),
+    })
+  } catch (err) {
+    console.error('[assistenteChat] erro na API da Anthropic:', err)
+    throw new HttpsError('internal', 'Erro ao consultar o assistente. Tente novamente.')
+  }
+
+  const textBlock = response.content.find(b => b.type === 'text')
+  return { reply: limparMarkdown(textBlock?.text ?? '') }
 })

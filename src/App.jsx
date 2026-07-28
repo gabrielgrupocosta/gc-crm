@@ -4,17 +4,20 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, AlertTriangle, X } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { SidebarProvider, useSidebar } from './contexts/SidebarContext'
+import { AssistenteChatProvider } from './contexts/AssistenteChatContext'
 import { ToastProvider } from './components/UI/Toast'
 import { useLembretes } from './hooks/useLembretes'
 import { useLojasSemGestor } from './hooks/useLojasSemGestor'
 import usePageTitle from './hooks/usePageTitle'
 import Sidebar from './components/Layout/Sidebar'
+import AssistenteFloatingButton from './components/Layout/AssistenteFloatingButton'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Lojas from './pages/Lojas'
 import Clientes from './pages/Clientes'
 import Contratos from './pages/Contratos'
 import Financeiro from './pages/Financeiro'
+import AssistenteDelivery from './pages/AssistenteDelivery'
 import Gestores from './pages/Gestores'
 import Organizacoes from './pages/Organizacoes'
 import CRM from './pages/CRM'
@@ -253,10 +256,13 @@ function MainContent() {
 function AppLayout() {
   return (
     <SidebarProvider>
-      <div className="bg-bg">
-        <Sidebar />
-        <MainContent />
-      </div>
+      <AssistenteChatProvider>
+        <div className="bg-bg">
+          <Sidebar />
+          <MainContent />
+          <AssistenteFloatingButton />
+        </div>
+      </AssistenteChatProvider>
     </SidebarProvider>
   )
 }
@@ -275,6 +281,7 @@ function AppRoutes() {
           <Route path="/dashboard"    element={<Dashboard />} />
           <Route path="/ranking"     element={<Ranking />} />
           <Route path="/controle"    element={<ControleSemanal />} />
+          <Route path="/assistente"  element={<AssistenteDelivery />} />
           <Route path="/comparativo" element={<Comparativo />} />
           <Route path="/crm"         element={<CRM />} />
           <Route path="/carteira"    element={<Carteira />} />
