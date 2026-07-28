@@ -749,10 +749,14 @@ const STOPWORDS_NOME_LOJA = new Set(['loja', 'de', 'da', 'do', 'e'])
 // o assistente só teria dados reais quando o gestor selecionasse a loja no
 // dropdown acima do chat, e cairia no fallback genérico de "Portal do Parceiro"
 // mesmo tendo os dados no próprio sistema.
-// Compara por palavras (não pelo nome inteiro): exige que TODAS as palavras
-// significativas do nome apareçam na mensagem, em qualquer ordem — assim
-// "Pizzaria Dona Rita" no chat ainda casa com "Pizzaria Dona Rita — Loja" no
-// cadastro, sem exigir que o sufixo genérico também seja digitado.
+// Duas estratégias, da mais específica pra mais tolerante:
+// 1) Todas as palavras significativas do nome aparecem na mensagem, em
+//    qualquer ordem — cobre o nome completo (ex: "Pizzaria Dona Rita" casa
+//    com "Pizzaria Dona Rita — Loja" no cadastro, sem exigir "Loja" também).
+// 2) Um prefixo contíguo do nome aparece na mensagem — cobre nome truncado
+//    (ex: "Empório Sabor" casa com "Empório Sabor Caseiro — Loja", mesmo sem
+//    mencionar "Caseiro"). Exige pelo menos 2 palavras nesse prefixo pra não
+//    disparar com uma palavra solta genérica demais.
 async function detectarLojaMencionada(texto, { role, organizacaoId, uid }) {
   const textoNorm = normalizarTexto(texto)
   if (!textoNorm) return null
@@ -765,10 +769,22 @@ async function detectarLojaMencionada(texto, { role, organizacaoId, uid }) {
     const nomeNorm = normalizarTexto(loja.nome)
     const palavras = nomeNorm.split(/[\s—–-]+/).filter(p => p.length > 1 && !STOPWORDS_NOME_LOJA.has(p))
     if (palavras.length === 0) continue
-    if (!palavras.every(p => textoNorm.includes(p))) continue
 
-    const especificidade = palavras.join('').length
-    if (!melhor || especificidade > melhor.especificidade) {
+    let especificidade = 0
+    if (palavras.every(p => textoNorm.includes(p))) {
+      especificidade = palavras.join('').length
+    } else {
+      const minPalavras = Math.min(2, palavras.length)
+      for (let n = palavras.length - 1; n >= minPalavras; n--) {
+        const prefixo = palavras.slice(0, n).join(' ')
+        if (textoNorm.includes(prefixo)) {
+          especificidade = prefixo.length
+          break
+        }
+      }
+    }
+
+    if (especificidade && (!melhor || especificidade > melhor.especificidade)) {
       melhor = { id: docSnap.id, ...loja, especificidade }
     }
   }
