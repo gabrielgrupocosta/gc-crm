@@ -12,11 +12,18 @@ const panelVariants = {
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.1 } },
 }
 
+const panelVariantsMobile = {
+  initial: { opacity: 0, y: 24 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.18, ease: 'easeOut' } },
+  exit: { opacity: 0, y: 24, transition: { duration: 0.12 } },
+}
+
 const BOTAO_TAMANHO = 88
 const MARGEM_TELA = 12
 const PANEL_LARGURA = 360
 const PANEL_ALTURA = 540
 const LIMIAR_ARRASTO = 5 // px de movimento para considerar arrasto em vez de clique
+const LARGURA_MOBILE = 640 // abaixo disso o chat abre em tela cheia — o popup flutuante fica pequeno demais pra digitar no celular
 
 function posicaoInicial() {
   return {
@@ -39,6 +46,7 @@ export default function AssistenteFloatingButton() {
   const { lojas, lojaId, setLojaId, popupAberto, setPopupAberto, limparConversa, mensagens } = useAssistenteChat()
 
   const [pos, setPos] = useState(posicaoInicial)
+  const [mobile, setMobile] = useState(() => window.innerWidth < LARGURA_MOBILE)
   const arrastandoRef = useRef(false)
   const moveuRef = useRef(false)
   const inicioPointerRef = useRef({ x: 0, y: 0 })
@@ -47,6 +55,7 @@ export default function AssistenteFloatingButton() {
   useEffect(() => {
     function aoRedimensionar() {
       setPos(p => limitarNaTela(p))
+      setMobile(window.innerWidth < LARGURA_MOBILE)
     }
     window.addEventListener('resize', aoRedimensionar)
     return () => window.removeEventListener('resize', aoRedimensionar)
@@ -98,37 +107,49 @@ export default function AssistenteFloatingButton() {
   const painelLeftPreferido = pos.x + BOTAO_TAMANHO - painelLargura
   const painelLeft = Math.min(Math.max(painelLeftPreferido, 8), window.innerWidth - painelLargura - 8)
 
+  // No celular, com o chat em tela cheia, o próprio X do cabeçalho do painel
+  // já serve pra minimizar — o botão flutuante some pra não duplicar o controle
+  // nem atrapalhar o toque dentro do chat.
+  const escondeBotaoFlutuante = mobile && popupAberto
+
   return (
     <>
-      <button
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onClick={handleClick}
-        aria-label="Abrir Assistente Delivery"
-        className="fixed flex items-center justify-center"
-        style={{
-          left: `${pos.x}px`, top: `${pos.y}px`, zIndex: 45,
-          width: `${BOTAO_TAMANHO}px`, height: `${BOTAO_TAMANHO}px`, borderRadius: '50%',
-          backgroundColor: '#FF4B2E', color: '#FFFFFF', border: 'none',
-          boxShadow: '0 4px 14px rgba(255,75,46,0.35)',
-          cursor: 'grab', touchAction: 'none',
-        }}
-      >
-        {popupAberto
-          ? <X size={37} strokeWidth={2} />
-          : <img src={assistenteBotIcon} alt="" draggable={false} style={{ width: '84px', height: '84px', borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }} />}
-      </button>
+      {!escondeBotaoFlutuante && (
+        <button
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onClick={handleClick}
+          aria-label={popupAberto ? 'Minimizar Assistente Delivery' : 'Abrir Assistente Delivery'}
+          className="fixed flex items-center justify-center"
+          style={{
+            left: `${pos.x}px`, top: `${pos.y}px`, zIndex: 45,
+            width: `${BOTAO_TAMANHO}px`, height: `${BOTAO_TAMANHO}px`, borderRadius: '50%',
+            backgroundColor: '#FF4B2E', color: '#FFFFFF', border: 'none',
+            boxShadow: '0 4px 14px rgba(255,75,46,0.35)',
+            cursor: 'grab', touchAction: 'none',
+          }}
+        >
+          {popupAberto
+            ? <X size={37} strokeWidth={2} />
+            : <img src={assistenteBotIcon} alt="" draggable={false} style={{ width: '84px', height: '84px', borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }} />}
+        </button>
+      )}
 
       <AnimatePresence>
         {popupAberto && (
           <motion.div
-            variants={panelVariants}
+            variants={mobile ? panelVariantsMobile : panelVariants}
             initial="initial"
             animate="animate"
             exit="exit"
             className="fixed flex flex-col"
-            style={{
+            style={mobile ? {
+              top: 0, left: 0, right: 0, bottom: 0, zIndex: 44,
+              width: '100%', height: '100dvh',
+              backgroundColor: '#FFFFFF', border: 'none', borderRadius: 0,
+              boxShadow: 'none', overflow: 'hidden',
+            } : {
               top: `${painelTop}px`, left: `${painelLeft}px`, zIndex: 44,
               width: `${painelLargura}px`,
               height: `${painelAltura}px`,
