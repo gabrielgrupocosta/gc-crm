@@ -1532,85 +1532,81 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Alerta de relatórios atrasados — maior urgência, aparece primeiro */}
+      {/* Pendências — relatórios atrasados e lojas sem resultado, em um único card */}
       <AnimatePresence>
-        {lojasAtrasadas.length > 0 && (
+        {(lojasAtrasadas.length > 0 || (isAdmin && lojasSemRelatorio.length > 0)) && (
           <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
+            variants={listVariants}
+            initial="initial"
+            animate="animate"
+            exit={{ opacity: 0 }}
             style={{
-              display: 'flex', alignItems: 'flex-start', gap: '10px',
-              padding: '10px 14px',
-              backgroundColor: '#FFF5F5',
-              border: '1px solid #FECACA',
-              borderLeft: '3px solid #E5322D',
-              borderRadius: '0 5px 5px 0',
-              marginBottom: '10px',
-            }}
-          >
-            <motion.span
-              animate={{ opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              style={{ flexShrink: 0, marginTop: '1px' }}
-            >
-              <AlertTriangle size={16} color="#DC2626" strokeWidth={1.75} />
-            </motion.span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p className="font-sans" style={{ fontSize: '13px', fontWeight: 600, color: '#111111', lineHeight: 1.35 }}>
-                <span className="font-mono" style={{ fontWeight: 700, fontSize: '13.5px', fontVariantNumeric: 'tabular-nums' }}>{lojasAtrasadas.length}</span>
-                {' '}{lojasAtrasadas.length === 1 ? 'relatório atrasado' : 'relatórios atrasados'}
-              </p>
-              <p className="font-sans" style={{ fontSize: '11.5px', fontWeight: 400, color: '#666666', lineHeight: 1.4, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {lojasAtrasadas.map(l => l.nome).join(', ')}
-              </p>
-            </div>
-            <button
-              onClick={() => navigate('/controle')}
-              className="font-sans"
-              style={{ fontSize: '11px', fontWeight: 600, color: '#DC2626', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '2px 0', transition: 'opacity 150ms' }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              Ver detalhes
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Alerta de lojas sem resultado */}
-      <AnimatePresence>
-        {isAdmin && lojasSemRelatorio.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '10px',
-              padding: '10px 14px',
-              backgroundColor: '#FFFBEB',
-              border: '1px solid #FDE68A',
-              borderLeft: '3px solid #CA8A04',
-              borderRadius: '0 5px 5px 0',
+              backgroundColor: '#FFFFFF',
+              border: '1px solid #E8E8E8',
+              borderRadius: '10px',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
               marginBottom: '16px',
+              overflow: 'hidden',
             }}
           >
-            <AlertCircle size={16} color="#CA8A04" strokeWidth={1.75} style={{ flexShrink: 0 }} />
-            <p className="font-sans" style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: '#92400E', lineHeight: 1.35 }}>
-              <span className="font-mono" style={{ fontWeight: 700, fontSize: '13.5px', fontVariantNumeric: 'tabular-nums' }}>{lojasSemRelatorio.length}</span>
-              {' '}{lojasSemRelatorio.length === 1 ? 'loja sem resultado' : 'lojas sem resultado'} na semana anterior
-            </p>
-            <button
-              onClick={() => navigate('/controle')}
-              className="font-sans"
-              style={{ fontSize: '11px', fontWeight: 600, color: '#CA8A04', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, padding: '2px 0', transition: 'opacity 150ms' }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              Ver detalhes
-            </button>
+            {lojasAtrasadas.length > 0 && (
+              <motion.div
+                variants={itemVariants}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '12px',
+                  padding: '13px 18px',
+                  borderBottom: isAdmin && lojasSemRelatorio.length > 0 ? '1px solid #F3F3F3' : 'none',
+                }}
+              >
+                <div style={{ flexShrink: 0, width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(220,38,38,0.08)' }}>
+                  <AlertTriangle size={14} color="#DC2626" strokeWidth={2} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="font-sans" style={{ fontSize: '13px', fontWeight: 500, color: '#111111', lineHeight: 1.35 }}>
+                    <span className="font-mono" style={{ fontWeight: 700, color: '#DC2626' }}>{lojasAtrasadas.length}</span>
+                    {' '}{lojasAtrasadas.length === 1 ? 'relatório atrasado' : 'relatórios atrasados'}
+                  </p>
+                  <p className="font-sans" style={{ fontSize: '11.5px', fontWeight: 400, color: '#999999', lineHeight: 1.4, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {lojasAtrasadas.map(l => l.nome).join(', ')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/controle')}
+                  className="font-sans"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 500, color: '#999999', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'color 150ms' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#DC2626'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#999999'}
+                >
+                  Ver detalhes
+                  <ArrowRight size={12} strokeWidth={2} />
+                </button>
+              </motion.div>
+            )}
+
+            {isAdmin && lojasSemRelatorio.length > 0 && (
+              <motion.div
+                variants={itemVariants}
+                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 18px' }}
+              >
+                <div style={{ flexShrink: 0, width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(202,138,4,0.08)' }}>
+                  <AlertCircle size={14} color="#CA8A04" strokeWidth={2} />
+                </div>
+                <p className="font-sans" style={{ flex: 1, fontSize: '13px', fontWeight: 500, color: '#111111', lineHeight: 1.35 }}>
+                  <span className="font-mono" style={{ fontWeight: 700, color: '#CA8A04' }}>{lojasSemRelatorio.length}</span>
+                  {' '}{lojasSemRelatorio.length === 1 ? 'loja sem resultado' : 'lojas sem resultado'} na semana anterior
+                </p>
+                <button
+                  onClick={() => navigate('/controle')}
+                  className="font-sans"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 500, color: '#999999', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'color 150ms' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#CA8A04'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#999999'}
+                >
+                  Ver detalhes
+                  <ArrowRight size={12} strokeWidth={2} />
+                </button>
+              </motion.div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

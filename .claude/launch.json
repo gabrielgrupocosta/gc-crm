@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "ihubfood-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "/Users/luizhenrique/ihubfood-sistema/.claude/dev-server.sh",
+      "runtimeArgs": [],
       "port": 5173
     }
   ]
