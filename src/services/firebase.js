@@ -155,6 +155,7 @@ export const COLLECTIONS = {
   ATIVIDADES:    'atividades',
   TAREFAS:       'tarefas',
   ACOES:         'acoes',
+  ACAO_MODELOS:  'acao_modelos',
   ORGANIZACOES:  'organizacoes',
   CRM_LEADS:     'crm_leads',
   CONTRATOS:     'contratos',

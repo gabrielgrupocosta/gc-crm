@@ -58,6 +58,12 @@ const PRIORIDADE_COLOR = {
   agendada: { color: '#2563EB', bg: 'rgba(37,99,235,0.1)',    border: 'rgba(37,99,235,0.2)' },
 }
 
+const PLATAFORMA_BADGE = {
+  iFood:    { color: '#E5322D', backgroundColor: '#FFF0F0', border: '1px solid #FECACA' },
+  '99Food': { color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' },
+  Keeta:    { color: '#1D4ED8', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' },
+}
+
 function AgendarSwitch({ id, checked, onChange }) {
   return (
     <button
@@ -316,9 +322,17 @@ export default function Atividades() {
   const [selectedLojaIdAcoes, setSelectedLojaIdAcoes] = useState('')
   const [acoes,               setAcoes]               = useState([])
   const [loadingAcoes,        setLoadingAcoes]        = useState(false)
-  const [novaAcaoTexto,       setNovaAcaoTexto]       = useState('')
-  const [salvandoNovaAcao,    setSalvandoNovaAcao]    = useState(false)
   const [excluindoAcaoId,     setExcluindoAcaoId]     = useState(null)
+  const [concluindoAcaoId,    setConcluindoAcaoId]    = useState(null)
+
+  // ─ Modelos de ação (catálogo pessoal do gestor)
+  const [modelos,             setModelos]             = useState([])
+  const [loadingModelos,      setLoadingModelos]      = useState(false)
+  const [novoModeloTexto,     setNovoModeloTexto]     = useState('')
+  const [novoModeloPlataforma, setNovoModeloPlataforma] = useState('iFood')
+  const [salvandoModelo,      setSalvandoModelo]      = useState(false)
+  const [excluindoModeloId,   setExcluindoModeloId]   = useState(null)
+  const [lancandoModeloId,    setLancandoModeloId]    = useState(null)
 
   // ─── Load lojas + gestores ──────────────────────────────────────────────────
 
@@ -437,12 +451,14 @@ export default function Atividades() {
         ? ['lojaId', selectedLojaIdAcoes]
         : ['gestorId', isAdmin ? filtroGestorAcoes : user.uid]
 
-      const snap = await getDocs(query(
-        collection(db, COLLECTIONS.ACOES),
-        where(baseField, '==', baseValue),
-        orderBy('timestamp', 'desc'),
-        limit(100),
-      ))
+      // O filtro de organizacaoId precisa estar explícito na query (não só
+      // implícito nas regras do Firestore) — senão o Firestore não consegue
+      // provar que a lista inteira respeita a regra e nega tudo.
+      const constraints = [where(baseField, '==', baseValue)]
+      if (!isSuperAdmin) constraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
+      constraints.push(orderBy('timestamp', 'desc'), limit(100))
+
+      const snap = await getDocs(query(collection(db, COLLECTIONS.ACOES), ...constraints))
       let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
 
       // Gestor + loja selecionados ao mesmo tempo: a query já filtrou por
@@ -464,26 +480,108 @@ export default function Atividades() {
     loadAcoes()
   }, [user, isAdmin, filtroGestorAcoes, selectedLojaIdAcoes]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleRegistrarNovaAcao() {
-    if (!selectedLojaIdAcoes || !novaAcaoTexto.trim()) return
-    setSalvandoNovaAcao(true)
+  // ─── Modelos de ação: catálogo pessoal de ações que o gestor pode lançar ───
+
+  async function loadModelos() {
+    if (!user) return
+    setLoadingModelos(true)
+    try {
+      const constraints = [where('gestorId', '==', user.uid)]
+      if (!isSuperAdmin) constraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
+      const snap = await getDocs(query(collection(db, COLLECTIONS.ACAO_MODELOS), ...constraints))
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      docs.sort((a, b) => tsMillis(b.criadoEm) - tsMillis(a.criadoEm))
+      setModelos(docs)
+    } catch (err) {
+      console.error('[Atividades] erro ao carregar modelos de ação:', err?.code, err?.message)
+    } finally {
+      setLoadingModelos(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!user) return
+    loadModelos()
+  }, [user, isSuperAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleAdicionarModelo() {
+    if (!novoModeloTexto.trim()) return
+    setSalvandoModelo(true)
+    try {
+      await addDoc(collection(db, COLLECTIONS.ACAO_MODELOS), {
+        gestorId:      user.uid,
+        organizacaoId: user.organizacaoId ?? null,
+        descricao:     novoModeloTexto.trim(),
+        plataforma:    novoModeloPlataforma,
+        criadoEm:      serverTimestamp(),
+      })
+      setNovoModeloTexto('')
+      toast('Modelo de ação criado.', 'success')
+      loadModelos()
+    } catch (err) {
+      console.error('[Atividades] erro ao criar modelo de ação:', err?.code, err?.message)
+      toast('Erro ao criar modelo. Tente novamente.', 'error')
+    } finally {
+      setSalvandoModelo(false)
+    }
+  }
+
+  async function handleExcluirModelo(modelo) {
+    setExcluindoModeloId(modelo.id)
+    try {
+      await deleteDoc(doc(db, COLLECTIONS.ACAO_MODELOS, modelo.id))
+      setModelos(prev => prev.filter(m => m.id !== modelo.id))
+      toast('Modelo excluído.', 'success')
+    } catch (err) {
+      console.error('[Atividades] erro ao excluir modelo:', err?.code, err?.message)
+      toast('Erro ao excluir modelo.', 'error')
+    } finally {
+      setExcluindoModeloId(null)
+    }
+  }
+
+  // Lançar um modelo pra loja selecionada gera um item de checklist novo —
+  // data de criação automática, e a data de conclusão só é gravada quando o
+  // gestor der o check.
+  async function handleLancarAcao(modelo) {
+    if (!selectedLojaIdAcoes) return
+    setLancandoModeloId(modelo.id)
     try {
       await addDoc(collection(db, COLLECTIONS.ACOES), {
         lojaId:        selectedLojaIdAcoes,
         gestorId:      user.uid,
         gestorNome:    user.nome ?? '',
         organizacaoId: user.organizacaoId ?? null,
-        descricao:     novaAcaoTexto.trim(),
+        descricao:     modelo.descricao,
+        plataforma:    modelo.plataforma,
+        status:        'pendente',
+        concluidoEm:   null,
         timestamp:     serverTimestamp(),
       })
-      setNovaAcaoTexto('')
-      toast('Ação registrada.', 'success')
+      toast('Ação lançada no checklist.', 'success')
       loadAcoes()
     } catch (err) {
-      console.error('[Atividades] erro ao registrar ação:', err?.code, err?.message)
-      toast('Erro ao registrar ação. Tente novamente.', 'error')
+      console.error('[Atividades] erro ao lançar ação:', err?.code, err?.message)
+      toast('Erro ao lançar ação. Tente novamente.', 'error')
     } finally {
-      setSalvandoNovaAcao(false)
+      setLancandoModeloId(null)
+    }
+  }
+
+  async function handleConcluirAcao(acao) {
+    setConcluindoAcaoId(acao.id)
+    try {
+      await updateDoc(doc(db, COLLECTIONS.ACOES, acao.id), {
+        status:      'concluida',
+        concluidoEm: serverTimestamp(),
+      })
+      setAcoes(prev => prev.map(a => a.id === acao.id ? { ...a, status: 'concluida', concluidoEm: Timestamp.now() } : a))
+      toast('Ação concluída.', 'success')
+    } catch (err) {
+      console.error('[Atividades] erro ao concluir ação:', err?.code, err?.message)
+      toast('Erro ao concluir ação.', 'error')
+    } finally {
+      setConcluindoAcaoId(null)
     }
   }
 
@@ -647,30 +745,82 @@ export default function Atividades() {
               </div>
             ) : (
               <>
-                {/* Registrar ação — só quando uma loja específica está selecionada */}
-                {selectedLojaIdAcoes && (
-                  <div className="bg-surface border border-border rounded-lg shadow-card" style={{ padding: '16px' }}>
-                    <p className="field-label mb-2">O que foi feito?</p>
-                    <textarea
-                      value={novaAcaoTexto}
-                      onChange={e => setNovaAcaoTexto(e.target.value)}
-                      placeholder="Ex: Ajustei o hits, ativei campanha de desconto, atualizei fotos do cardápio…"
-                      rows={3}
-                      className="textarea"
-                    />
-                    <div className="flex items-center justify-end mt-3">
-                      <button
-                        onClick={handleRegistrarNovaAcao}
-                        disabled={salvandoNovaAcao || !novaAcaoTexto.trim()}
-                        className="btn-primary"
-                      >
-                        {salvandoNovaAcao ? 'Salvando…' : 'Registrar Ação'}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                {/* Modelos de ação — catálogo pessoal que o gestor lança pra virar checklist */}
+                <div className="bg-surface border border-border rounded-lg shadow-card" style={{ padding: '16px' }}>
+                  <p className="field-label mb-1">Modelos de ação</p>
+                  <p className="text-[12px] text-text-subtle mb-3">
+                    Cadastre as ações que você costuma tomar ao longo da gestão. Depois é só lançar pra loja selecionada — vira um item de checklist com data de criação automática.
+                  </p>
 
-                {/* Lista */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={novoModeloTexto}
+                      onChange={e => setNovoModeloTexto(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleAdicionarModelo() }}
+                      placeholder="Ex: Ajustar hits da semana"
+                      className="input flex-1"
+                    />
+                    <select
+                      value={novoModeloPlataforma}
+                      onChange={e => setNovoModeloPlataforma(e.target.value)}
+                      className="select w-32 shrink-0"
+                    >
+                      <option value="iFood">iFood</option>
+                      <option value="99Food">99Food</option>
+                      <option value="Keeta">Keeta</option>
+                    </select>
+                    <button
+                      onClick={handleAdicionarModelo}
+                      disabled={salvandoModelo || !novoModeloTexto.trim()}
+                      className="btn-primary shrink-0"
+                    >
+                      {salvandoModelo ? 'Salvando…' : 'Adicionar'}
+                    </button>
+                  </div>
+
+                  {loadingModelos ? (
+                    <Skeleton.Table rows={2} cols={1} />
+                  ) : modelos.length === 0 ? (
+                    <p className="text-[12px] text-text-faint py-2">Nenhum modelo cadastrado ainda.</p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {modelos.map(m => (
+                        <div
+                          key={m.id}
+                          className="flex items-center gap-2"
+                          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #E8E8E8', backgroundColor: '#FAFAFA' }}
+                        >
+                          <span
+                            className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
+                            style={{ padding: '2px 8px', borderRadius: '4px', ...PLATAFORMA_BADGE[m.plataforma] }}
+                          >
+                            {m.plataforma}
+                          </span>
+                          <span className="text-[13px] text-text-primary flex-1 min-w-0 truncate">{m.descricao}</span>
+                          <button
+                            onClick={() => handleLancarAcao(m)}
+                            disabled={!selectedLojaIdAcoes || lancandoModeloId === m.id}
+                            className="btn-secondary shrink-0"
+                            style={{ height: '28px', padding: '0 10px', fontSize: '11px' }}
+                            title={!selectedLojaIdAcoes ? 'Selecione uma loja para lançar' : undefined}
+                          >
+                            {lancandoModeloId === m.id ? 'Lançando…' : 'Lançar'}
+                          </button>
+                          <button
+                            onClick={() => handleExcluirModelo(m)}
+                            disabled={excluindoModeloId === m.id}
+                            className="inline-flex items-center text-negative hover:opacity-75 transition-opacity duration-150 p-1 rounded shrink-0"
+                          >
+                            <Trash2 size={13} strokeWidth={1.5} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Checklist de ações lançadas */}
                 <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
                   {loadingAcoes ? (
                     <Skeleton.Table rows={5} cols={2} />
@@ -682,19 +832,49 @@ export default function Atividades() {
                     <motion.div variants={listVariants} initial="initial" animate="animate">
                       {acoes.map((a, idx) => {
                         const podeExcluir = isAdmin || a.gestorId === user.uid
+                        const isChecklist = a.status != null
+                        const concluida = a.status === 'concluida'
                         return (
                           <motion.div
                             key={a.id}
                             variants={itemVariants}
                             style={{
-                              display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px',
-                              padding: '12px 16px',
+                              display: 'flex', alignItems: 'flex-start', gap: '12px',
+                              padding: '12px 16px', opacity: concluida ? 0.6 : 1,
                               borderBottom: idx < acoes.length - 1 ? '1px solid #F3F3F3' : 'none',
                             }}
                           >
+                            {isChecklist && (
+                              <button
+                                onClick={() => !concluida && handleConcluirAcao(a)}
+                                disabled={concluida || concluindoAcaoId === a.id}
+                                style={{
+                                  width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0, marginTop: '2px',
+                                  border: `1px solid ${concluida ? '#16A34A' : '#DDDDDD'}`,
+                                  backgroundColor: concluida ? '#16A34A' : '#FFFFFF',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  cursor: concluida ? 'default' : 'pointer',
+                                }}
+                              >
+                                {concluida && <Check size={12} strokeWidth={3} color="#FFFFFF" />}
+                              </button>
+                            )}
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <div className="flex items-center gap-2">
-                                <span className="font-mono text-[11px] text-text-subtle whitespace-nowrap">{formatDateTime(a.timestamp)}</span>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-[13px] text-text-primary font-semibold"
+                                  style={{ textDecoration: concluida ? 'line-through' : 'none' }}
+                                >
+                                  {lojaMap[a.lojaId]?.nome ?? a.lojaName ?? 'Loja removida'}
+                                </span>
+                                {a.plataforma && (
+                                  <span
+                                    className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
+                                    style={{ padding: '1px 6px', borderRadius: '4px', ...PLATAFORMA_BADGE[a.plataforma] }}
+                                  >
+                                    {a.plataforma}
+                                  </span>
+                                )}
                                 {a.origem === 'relatorio_semanal' && (
                                   <span
                                     className="text-[10px] font-medium shrink-0"
@@ -706,19 +886,14 @@ export default function Atividades() {
                                     Relatório Semanal
                                   </span>
                                 )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[13px] text-text-primary font-semibold">
-                                  {lojaMap[a.lojaId]?.nome ?? a.lojaName ?? 'Loja removida'}
-                                </span>
                                 <span className="text-[12px] text-text-subtle">· {a.gestorNome || '—'}</span>
                               </div>
                               <p className="text-[13px] text-text-muted leading-relaxed mt-1">{a.descricao}</p>
-                              {(a.semana || a.plataforma) && (
-                                <p className="text-[11px] mt-0.5" style={{ color: '#999999' }}>
-                                  {[a.semana, a.plataforma].filter(Boolean).join(' · ')}
-                                </p>
-                              )}
+                              <p className="text-[11px] mt-0.5" style={{ color: '#999999' }}>
+                                Criada em {formatDateTime(a.timestamp)}
+                                {concluida && a.concluidoEm ? ` · Concluída em ${formatDateTime(a.concluidoEm)}` : ''}
+                                {a.semana ? ` · ${a.semana}` : ''}
+                              </p>
                             </div>
                             {podeExcluir && (
                               <button

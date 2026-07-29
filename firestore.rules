@@ -127,7 +127,17 @@ service cloud.firestore {
     match /acoes/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin() || (autenticado() && mesmaOrg(request.resource.data));
-      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow update, delete: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(resource.data))
+        || (isGestor() && mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+    }
+
+    // Modelos de ação: catálogo pessoal de cada gestor (ou admin_org) —
+    // só o dono lê/gerencia os próprios modelos.
+    match /acao_modelos/{docId} {
+      allow read: if isSuperAdmin() || (mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+      allow create: if isSuperAdmin() || (autenticado() && mesmaOrg(request.resource.data) && request.resource.data.gestorId == request.auth.uid);
+      allow update, delete: if isSuperAdmin() || (mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
     }
 
     // CRM de prospecção: admin_org vê/gerencia todos os leads da própria
