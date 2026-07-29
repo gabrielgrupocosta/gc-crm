@@ -802,8 +802,13 @@ export default function Sidebar() {
         />
       )}
 
+      {/* h-dvh depois de h-screen: no mobile, 100vh conta o espaço atrás da
+          barra de endereço do navegador — quando ela está visível, o rodapé
+          (Alterar senha / Sair) ficava empurrado pra fora da área visível.
+          100dvh acompanha a altura real da viewport; navegadores sem suporte
+          simplesmente ignoram a declaração e mantêm o h-screen. */}
       <aside
-        className={`fixed top-0 left-0 h-screen flex flex-col bg-brand-dark border-r border-brand-dark-hover z-50 w-[260px] transition-transform duration-200 ease-out md:translate-x-0 md:transition-[width] md:duration-200 md:ease-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'md:w-[52px]' : 'md:w-[220px]'}`}
+        className={`fixed top-0 left-0 h-screen h-dvh flex flex-col bg-brand-dark border-r border-brand-dark-hover z-50 w-[260px] transition-transform duration-200 ease-out md:translate-x-0 md:transition-[width] md:duration-200 md:ease-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${collapsed ? 'md:w-[52px]' : 'md:w-[220px]'}`}
       >
         {sidebarInner}
       </aside>
