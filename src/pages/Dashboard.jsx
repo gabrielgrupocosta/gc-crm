@@ -1002,7 +1002,7 @@ export default function Dashboard() {
           })
           .catch(err => console.error('[Dashboard] historico:', err?.code, err?.message))
 
-        getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('perfil', '==', 'gestor')))
+        getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor')))
           .then(snap => {
             if (!cancelled) {
               const all = snap.docs.map(d => ({ id: d.id, ...d.data() }))

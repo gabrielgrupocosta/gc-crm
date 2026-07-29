@@ -471,10 +471,11 @@ export default function Contratos() {
       const orgId  = user?.organizacaoId ?? null
       const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
-      // Contas novas (multi-tenant) usam o campo `role`, não o `perfil` legado —
-      // mesmo padrão de Clientes.jsx/Lojas.jsx.
+      // Contas usam o campo `role` — nenhuma conta atual tem o `perfil` legado
+      // (mesmo padrão de Clientes.jsx/Lojas.jsx). Antes, o branch de master
+      // buscava por `perfil` e nunca achava ninguém.
       const gestoresQuery = isSuperAdmin
-        ? query(collection(db, COLLECTIONS.USERS), where('perfil', '==', 'gestor'))
+        ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
         : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
 
       const [contratosSnap, clientesSnap, gestoresSnap] = await Promise.all([

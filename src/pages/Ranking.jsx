@@ -222,7 +222,7 @@ export default function Ranking() {
 
         const [lojasSnap, gestoresSnap] = await Promise.all([
           getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg)),
-          getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('perfil', '==', 'gestor'))),
+          getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor'))),
         ])
 
         if (cancelled) return

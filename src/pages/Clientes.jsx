@@ -653,11 +653,10 @@ export default function Clientes() {
       const orgId = user?.organizacaoId ?? null
       const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
-      // Contas novas (multi-tenant) usam o campo `role`, não o `perfil` legado —
-      // por isso a busca de gestores por organização não pode reusar o filtro
-      // de perfil: um admin_org só tem gestores criados no modelo novo.
+      // Contas usam o campo `role` — nenhuma conta atual tem o `perfil` legado.
+      // Antes, o branch de master buscava por `perfil` e nunca achava ninguém.
       const gestoresQuery = isSuperAdmin
-        ? query(collection(db, COLLECTIONS.USERS), where('perfil', '==', 'gestor'))
+        ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
         : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
 
       const [clientesSnap, lojasSnap, gestoresSnap, contratosSnap] = await Promise.all([

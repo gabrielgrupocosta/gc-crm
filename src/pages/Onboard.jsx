@@ -617,7 +617,7 @@ export default function Onboard() {
           ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))
           : getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', user.uid))),
         isAdmin
-          ? getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('perfil', '==', 'gestor')))
+          ? getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor')))
           : Promise.resolve(null),
       ])
       const lojasData = lojasSnap.docs.map(d => ({ id: d.id, ...d.data() }))

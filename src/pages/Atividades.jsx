@@ -336,7 +336,7 @@ export default function Atividades() {
             ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))
             : getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', user.uid))),
           isAdmin
-            ? getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('perfil', '==', 'gestor')))
+            ? getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor')))
             : Promise.resolve(null),
         ])
         if (cancelled) return
