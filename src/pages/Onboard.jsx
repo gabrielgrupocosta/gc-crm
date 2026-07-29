@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Layers } from 'lucide-react'
+import { Layers, ListChecks } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
   collection, doc, getDoc, query, where, getDocs, updateDoc, serverTimestamp,
@@ -44,6 +44,48 @@ const EMPTY_PRE_GESTAO_FORM = {
 }
 
 const EMPTY_AGENDAR_FORM = { data: '', horario: '', observacoes: '' }
+
+// ─── Checklist de início de gestão ─────────────────────────────────────────────
+
+const CHECKLIST_ITENS = [
+  { key: 'categoria5Mais',      label: 'Criar uma categoria com os 5 itens mais vendidos nos últimos 90 dias' },
+  { key: 'palavrasChave',       label: 'Adicionar palavras-chave nos itens' },
+  { key: 'nomeNicho',           label: 'Nome da loja está claro o nicho' },
+  { key: 'categoriaCorreta',    label: 'A loja está na categoria correta?' },
+  { key: 'pedidoMinimo',        label: 'O pedido mínimo está bom para o nicho?' },
+  { key: 'taxaGratis',          label: 'Taxa grátis até 2 ou 3 km' },
+  { key: 'tempoEntrega',        label: 'Tempo de entrega abaixo de 35 minutos até 3km' },
+  { key: 'combos',              label: 'Combos com os itens mais vendidos' },
+  { key: 'reduzirComplementos', label: 'Reduzir complementos obrigatórios' },
+  { key: 'upsell',              label: 'Upsell com os itens mais vendidos' },
+]
+
+const CUPONS_TIPOS = [
+  { key: 'campanhaInteligente', label: 'Campanha inteligente' },
+  { key: 'hits',                label: 'HITS' },
+  { key: 'cupomClube',          label: 'Cupom do clube' },
+  { key: 'descontoItens',       label: 'Desconto em itens' },
+  { key: 'cupomFreteGratis',    label: 'Cupom de frete grátis' },
+  { key: 'cupom12',             label: 'Cupom de R$12' },
+  { key: 'cupom10',             label: 'Cupom de R$10' },
+]
+
+const EMPTY_CHECKLIST = {
+  ...Object.fromEntries(CHECKLIST_ITENS.map(i => [i.key, false])),
+  anunciosLigados: null,
+  cuponsLigados: null,
+  cupons: Object.fromEntries(CUPONS_TIPOS.map(t => [t.key, false])),
+}
+
+// Progresso do checklist pra badge no card — itens da lista + as 2 perguntas
+// sim/não contam como "1 respondida" cada (independente da resposta ser sim
+// ou não), já que o objetivo é acompanhar preenchimento, não taxa de "sim".
+function checklistProgress(loja) {
+  const c = loja.onboardChecklist ?? EMPTY_CHECKLIST
+  const feitos  = CHECKLIST_ITENS.filter(i => c[i.key]).length
+  const respondidas = (c.anunciosLigados != null ? 1 : 0) + (c.cuponsLigados != null ? 1 : 0)
+  return { feitos: feitos + respondidas, total: CHECKLIST_ITENS.length + 2 }
+}
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -359,6 +401,146 @@ function AgendarModal({ loja, advanceStatus, onClose, onSave }) {
   )
 }
 
+// ─── Campo sim/não (Anúncios ligados / Cupons ligados) ────────────────────────
+
+function YesNoField({ label, value, onChange }) {
+  return (
+    <div className="flex items-center justify-between" style={{ padding: '9px 12px', borderRadius: '6px', backgroundColor: '#FAFAFA', border: '1px solid #E8E8E8' }}>
+      <span style={{ fontSize: '13px', color: '#111111' }}>{label}</span>
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => onChange(true)}
+          style={{
+            padding: '4px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
+            border: `1px solid ${value === true ? '#16A34A' : '#E8E8E8'}`,
+            backgroundColor: value === true ? '#16A34A' : '#FFFFFF',
+            color: value === true ? '#FFFFFF' : '#666666', cursor: 'pointer',
+          }}
+        >
+          Sim
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(false)}
+          style={{
+            padding: '4px 14px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
+            border: `1px solid ${value === false ? '#DC2626' : '#E8E8E8'}`,
+            backgroundColor: value === false ? '#DC2626' : '#FFFFFF',
+            color: value === false ? '#FFFFFF' : '#666666', cursor: 'pointer',
+          }}
+        >
+          Não
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal: checklist de início de gestão ──────────────────────────────────────
+
+function ChecklistModal({ loja, onClose, onSave }) {
+  const [checklist,       setChecklist]       = useState({})
+  const [anunciosLigados, setAnunciosLigados] = useState(null)
+  const [cuponsLigados,   setCuponsLigados]   = useState(null)
+  const [cupons,          setCupons]          = useState({})
+  const [saving,          setSaving]          = useState(false)
+
+  useEffect(() => {
+    if (!loja) return
+    const c = loja.onboardChecklist ?? EMPTY_CHECKLIST
+    setChecklist(Object.fromEntries(CHECKLIST_ITENS.map(i => [i.key, !!c[i.key]])))
+    setAnunciosLigados(c.anunciosLigados ?? null)
+    setCuponsLigados(c.cuponsLigados ?? null)
+    setCupons(Object.fromEntries(CUPONS_TIPOS.map(t => [t.key, !!c.cupons?.[t.key]])))
+  }, [loja])
+
+  function toggleItem(key)  { setChecklist(prev => ({ ...prev, [key]: !prev[key] })) }
+  function toggleCupom(key) { setCupons(prev => ({ ...prev, [key]: !prev[key] })) }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (saving) return
+    setSaving(true)
+    try {
+      await onSave(loja, { ...checklist, anunciosLigados, cuponsLigados, cupons })
+      onClose()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal
+      isOpen={!!loja}
+      onClose={onClose}
+      title={`Checklist inicial — ${loja?.nome ?? ''}`}
+      width="max-w-xl"
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+          <button form="checklist-form" type="submit" disabled={saving} className="btn-primary">
+            {saving ? 'Salvando…' : 'Salvar checklist'}
+          </button>
+        </>
+      }
+    >
+      <form id="checklist-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
+        <div>
+          <p className="field-label mb-2">Itens a executar</p>
+          <div className="flex flex-col gap-2">
+            {CHECKLIST_ITENS.map(item => (
+              <label
+                key={item.key}
+                className="flex items-start gap-2.5"
+                style={{
+                  padding: '9px 10px', borderRadius: '6px', cursor: 'pointer',
+                  backgroundColor: checklist[item.key] ? '#F0FDF4' : '#FAFAFA',
+                  border: `1px solid ${checklist[item.key] ? '#BBF7D0' : '#E8E8E8'}`,
+                  transition: 'background-color 150ms, border-color 150ms',
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!checklist[item.key]}
+                  onChange={() => toggleItem(item.key)}
+                  style={{ marginTop: '2px', flexShrink: 0, accentColor: '#16A34A' }}
+                />
+                <span style={{ fontSize: '13px', color: '#111111', lineHeight: 1.4 }}>{item.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <p className="field-label">Configurações</p>
+          <YesNoField label="Anúncios ligados" value={anunciosLigados} onChange={setAnunciosLigados} />
+          <YesNoField label="Cupons ligados?" value={cuponsLigados} onChange={setCuponsLigados} />
+
+          {cuponsLigados === true && (
+            <div style={{ marginLeft: '2px', paddingLeft: '14px', borderLeft: '2px solid #E8E8E8' }} className="flex flex-col gap-1.5 mt-1">
+              <p style={{ fontSize: '11px', color: '#999999', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                Quais cupons
+              </p>
+              {CUPONS_TIPOS.map(t => (
+                <label key={t.key} className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!cupons[t.key]}
+                    onChange={() => toggleCupom(t.key)}
+                    style={{ accentColor: '#16A34A' }}
+                  />
+                  <span style={{ fontSize: '13px', color: '#111111' }}>{t.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
 // ─── Modal: confirmar início de gestão ─────────────────────────────────────────
 
 function ConfirmIniciarModal({ loja, onClose, onConfirm }) {
@@ -415,7 +597,7 @@ function PlataformasRow({ plataformas }) {
   )
 }
 
-function OnboardCard({ loja, gestorNome, lineTop, lineBottom, children }) {
+function OnboardCard({ loja, gestorNome, lineTop, lineBottom, extraRow, children }) {
   const [hover, setHover] = useState(false)
 
   return (
@@ -445,6 +627,11 @@ function OnboardCard({ loja, gestorNome, lineTop, lineBottom, children }) {
       <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
         {children}
       </div>
+      {extraRow && (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+          {extraRow}
+        </div>
+      )}
     </motion.div>
   )
 }
@@ -454,7 +641,7 @@ function OnboardCard({ loja, gestorNome, lineTop, lineBottom, children }) {
 // desalinhada atrás do card é o efeito visual que sinaliza o agrupamento,
 // e cada loja/plataforma vira uma sub-linha com suas próprias ações (os
 // dados de pré-gestão/agendamento são independentes por loja).
-function OnboardCardGroup({ clienteNome, gestorNome, lojas, renderMeta, renderActions }) {
+function OnboardCardGroup({ clienteNome, gestorNome, lojas, renderMeta, renderActions, renderExtra }) {
   const [hover, setHover] = useState(false)
 
   return (
@@ -498,6 +685,11 @@ function OnboardCardGroup({ clienteNome, gestorNome, lojas, renderMeta, renderAc
               <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
                 {renderActions(loja)}
               </div>
+              {renderExtra && (
+                <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                  {renderExtra(loja)}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -514,6 +706,36 @@ function CardButton({ primary, onClick, children }) {
       style={{ height: '28px', padding: '0 10px', fontSize: '11px', flex: primary ? 1 : undefined }}
     >
       {children}
+    </button>
+  )
+}
+
+function ChecklistButton({ loja, onClick }) {
+  const [hover, setHover] = useState(false)
+  const { feitos, total } = checklistProgress(loja)
+  const completo = feitos === total
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+        height: '28px', padding: '0 10px', fontSize: '11px', fontWeight: 500, flex: 1,
+        borderRadius: '6px', border: `1px solid ${hover ? '#DDDDDD' : '#E8E8E8'}`,
+        backgroundColor: completo ? '#F0FDF4' : (hover ? '#F9F9F9' : '#FFFFFF'),
+        color: completo ? '#16A34A' : '#666666',
+        transition: 'background-color 150ms, border-color 150ms',
+      }}
+    >
+      <ListChecks size={12} strokeWidth={2} />
+      Checklist
+      <span style={{
+        fontSize: '10px', fontWeight: 700, fontFamily: "'Geist Mono', monospace",
+        color: completo ? '#16A34A' : '#999999',
+      }}>
+        {feitos}/{total}
+      </span>
     </button>
   )
 }
@@ -590,6 +812,7 @@ export default function Onboard() {
   const [preGestaoModal, setPreGestaoModal] = useState(null) // { loja, advanceStatus }
   const [agendarModal,   setAgendarModal]   = useState(null) // { loja, advanceStatus }
   const [confirmModal,   setConfirmModal]   = useState(null) // loja
+  const [checklistModal, setChecklistModal] = useState(null) // loja
 
   // Mobile: as 3 colunas viram carrossel com swipe — activeCol acompanha
   // qual coluna está visível pra destacar o indicador (dots) embaixo.
@@ -732,6 +955,12 @@ export default function Onboard() {
     await loadAll()
   }
 
+  async function handleSaveChecklist(loja, checklistData) {
+    await updateDoc(doc(db, COLLECTIONS.LOJAS, loja.id), { onboardChecklist: checklistData })
+    toast('Checklist salvo.', 'success')
+    await loadAll()
+  }
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -861,6 +1090,9 @@ export default function Onboard() {
                     </CardButton>
                   </>
                 )}
+                renderExtra={loja => (
+                  <ChecklistButton loja={loja} onClick={() => setChecklistModal(loja)} />
+                )}
               />
             ) : (
               <OnboardCard
@@ -868,6 +1100,7 @@ export default function Onboard() {
                 loja={item.loja}
                 gestorNome={gestorMap[item.loja.gestorId]?.nome}
                 lineBottom={formatDataHorario(item.loja.onboardData, item.loja.onboardHorario)}
+                extraRow={<ChecklistButton loja={item.loja} onClick={() => setChecklistModal(item.loja)} />}
               >
                 <CardButton primary onClick={() => setConfirmModal(item.loja)}>
                   Iniciar Gestão
@@ -918,6 +1151,12 @@ export default function Onboard() {
         loja={confirmModal}
         onClose={() => setConfirmModal(null)}
         onConfirm={handleIniciarGestao}
+      />
+
+      <ChecklistModal
+        loja={checklistModal}
+        onClose={() => setChecklistModal(null)}
+        onSave={handleSaveChecklist}
       />
     </motion.div>
   )
