@@ -23,6 +23,16 @@ const PLATAFORMA_COLOR = {
   'Keeta':  '#00B14F',
 }
 
+// Variante escura pra texto sobre fundo branco — o amarelo do 99Food (#FFD700)
+// tem contraste ruim em texto, então usamos esse tom mais escuro só quando a
+// cor da plataforma aparece como texto (percentual em destaque), mantendo a
+// cor viva original na bolinha/barra.
+const PLATAFORMA_TEXT_COLOR = {
+  'iFood':  '#EA1D2C',
+  '99Food': '#B45309',
+  'Keeta':  '#00B14F',
+}
+
 const DIAS_ORDEM = [
   { key: 'segunda', label: 'Seg' },
   { key: 'terca',   label: 'Ter' },
@@ -615,10 +625,12 @@ export default function Carteira() {
 
   const distribuicaoPlataformas = useMemo(() => {
     const total = lojasAtivas.length
-    return PLATAFORMAS.map(p => {
-      const count = lojasAtivas.filter(l => l.plataforma === p).length
-      return { plataforma: p, count, pct: total > 0 ? (count / total) * 100 : 0 }
-    })
+    return PLATAFORMAS
+      .map(p => {
+        const count = lojasAtivas.filter(l => l.plataforma === p).length
+        return { plataforma: p, count, pct: total > 0 ? (count / total) * 100 : 0 }
+      })
+      .sort((a, b) => b.count - a.count)
   }, [lojasAtivas])
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -826,13 +838,22 @@ export default function Carteira() {
                     </div>
                   </div>
 
-                  <div className="flex-1 flex flex-col gap-2.5 min-w-0">
+                  <div className="flex-1 flex flex-col gap-3 min-w-0">
                     {distribuicaoPlataformas.map(p => (
-                      <div key={p.plataforma} className="flex items-center gap-2">
-                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: PLATAFORMA_COLOR[p.plataforma], flexShrink: 0 }} />
-                        <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111', flex: 1, minWidth: 0 }} className="truncate">{p.plataforma}</span>
-                        <span className="font-mono" style={{ fontSize: '13px', fontWeight: 700, color: '#111111' }}>{p.count}</span>
-                        <span style={{ fontSize: '11px', color: '#999999', width: '38px', textAlign: 'right' }}>{p.pct.toFixed(1)}%</span>
+                      <div key={p.plataforma} className="flex flex-col gap-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: PLATAFORMA_COLOR[p.plataforma], flexShrink: 0 }} />
+                            <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111' }} className="truncate">{p.plataforma}</span>
+                            <span className="font-mono" style={{ fontSize: '11px', color: '#999999' }}>({p.count})</span>
+                          </div>
+                          <span className="font-mono" style={{ fontSize: '15px', fontWeight: 800, color: PLATAFORMA_TEXT_COLOR[p.plataforma], flexShrink: 0 }}>
+                            {p.pct.toFixed(0)}%
+                          </span>
+                        </div>
+                        <div style={{ height: '5px', borderRadius: '3px', backgroundColor: '#F0F0F0', overflow: 'hidden' }}>
+                          <div style={{ height: '100%', width: `${p.pct}%`, borderRadius: '3px', backgroundColor: PLATAFORMA_COLOR[p.plataforma], transition: 'width 300ms ease-out' }} />
+                        </div>
                       </div>
                     ))}
                   </div>

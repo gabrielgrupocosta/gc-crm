@@ -266,13 +266,19 @@ function RankingRow({ item, index, isLast }) {
         borderRadius: isFirst ? '8px' : 0,
         backgroundColor: isFirst ? '#FFFBEB' : 'transparent',
         border: isFirst ? '1px solid #F6D77A' : 'none',
-        borderBottom: isFirst ? '1px solid #F6D77A' : (isLast ? 'none' : '1px solid #EEF1F5'),
+        borderBottom: isFirst ? 'none' : (isLast ? 'none' : '1px solid #EEF1F5'),
       }}
     >
-      <div style={{ width: '44px', height: '44px', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {isFirst && (
-          <Trophy size={14} style={{ position: 'absolute', top: '-2px', left: '1px', color: '#D88A00' }} />
-        )}
+      <div style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {isFirst ? (
+          <span style={{
+            width: '32px', height: '32px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            backgroundColor: '#F6B93B', boxShadow: '0 2px 5px rgba(217,140,0,0.35)',
+          }}>
+            <Trophy size={15} strokeWidth={2.25} color="#FFFFFF" />
+          </span>
+        ) : (
         <span className="font-mono" style={{
           width: '32px', height: '32px', borderRadius: '50%',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -281,6 +287,7 @@ function RankingRow({ item, index, isLast }) {
         }}>
           {String(index + 1).padStart(2, '0')}
         </span>
+        )}
       </div>
 
       <span
@@ -1235,18 +1242,6 @@ export default function Dashboard() {
       .slice(0, 10)
   }, [lojas, lojasAtivas, resultadosSemanaSelecionada, isAdmin, filtroGestor, rankingSort, gestoresMap])
 
-  const lineData = useMemo(() => {
-    const visiveisIds = new Set(lojasVisiveis.map(l => l.id))
-    const byWeek = {}
-    resultadosHistorico
-      .filter(r => visiveisIds.has(r.lojaId))
-      .forEach(r => { byWeek[r.semana] = (byWeek[r.semana] ?? 0) + (r.faturamento ?? 0) })
-    return [...last8Weeks].reverse().map(w => ({
-      semana:      weekLabel(w),
-      faturamento: byWeek[w] ?? 0,
-    }))
-  }, [resultadosHistorico, lojasVisiveis, last8Weeks])
-
   const resultadosSemanaAnteriorFiltrados = useMemo(() =>
     isAdmin && filtroGestor
       ? resultadosSemanaAnterior.filter(r => r.gestorId === filtroGestor)
@@ -1409,6 +1404,11 @@ export default function Dashboard() {
     }))
   }, [selectedLoja, resultadosHistorico, last8Weeks])
 
+  const lojaSelecionadaNome = useMemo(() =>
+    lojasVisiveis.find(l => l.id === selectedLoja)?.nome ?? '',
+    [lojasVisiveis, selectedLoja]
+  )
+
   // ── Derivados do consolidado ────────────────────────────────────────────────
 
   const cLojaMap = useMemo(() =>
@@ -1553,20 +1553,21 @@ export default function Dashboard() {
               <motion.div
                 variants={itemVariants}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                  padding: '13px 18px',
+                  display: 'flex', alignItems: 'center', gap: '11px',
+                  padding: '11px 16px 11px 14px',
+                  borderLeft: '3px solid #DC2626',
                   borderBottom: isAdmin && lojasSemRelatorio.length > 0 ? '1px solid #F3F3F3' : 'none',
                 }}
               >
-                <div style={{ flexShrink: 0, width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(220,38,38,0.08)' }}>
-                  <AlertTriangle size={14} color="#DC2626" strokeWidth={2} />
-                </div>
+                <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#DC2626' }}>
+                  <AlertTriangle size={13} color="#FFFFFF" strokeWidth={2.25} />
+                </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p className="font-sans" style={{ fontSize: '13px', fontWeight: 500, color: '#111111', lineHeight: 1.35 }}>
-                    <span className="font-mono" style={{ fontWeight: 700, color: '#DC2626' }}>{lojasAtrasadas.length}</span>
+                  <p className="font-sans" style={{ fontSize: '13px', fontWeight: 400, color: '#111111', lineHeight: 1.35 }}>
+                    <span style={{ fontWeight: 700 }}>{lojasAtrasadas.length}</span>
                     {' '}{lojasAtrasadas.length === 1 ? 'relatório atrasado' : 'relatórios atrasados'}
                   </p>
-                  <p className="font-sans" style={{ fontSize: '11.5px', fontWeight: 400, color: '#999999', lineHeight: 1.4, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <p className="font-sans" style={{ fontSize: '11.5px', fontWeight: 400, color: '#999999', lineHeight: 1.4, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {lojasAtrasadas.map(l => l.nome).join(', ')}
                   </p>
                 </div>
@@ -1586,13 +1587,13 @@ export default function Dashboard() {
             {isAdmin && lojasSemRelatorio.length > 0 && (
               <motion.div
                 variants={itemVariants}
-                style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 18px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '11px 16px 11px 14px', borderLeft: '3px solid #CA8A04' }}
               >
-                <div style={{ flexShrink: 0, width: '28px', height: '28px', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(202,138,4,0.08)' }}>
-                  <AlertCircle size={14} color="#CA8A04" strokeWidth={2} />
-                </div>
-                <p className="font-sans" style={{ flex: 1, fontSize: '13px', fontWeight: 500, color: '#111111', lineHeight: 1.35 }}>
-                  <span className="font-mono" style={{ fontWeight: 700, color: '#CA8A04' }}>{lojasSemRelatorio.length}</span>
+                <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#CA8A04' }}>
+                  <AlertCircle size={13} color="#FFFFFF" strokeWidth={2.25} />
+                </span>
+                <p className="font-sans" style={{ flex: 1, fontSize: '13px', fontWeight: 400, color: '#111111', lineHeight: 1.35 }}>
+                  <span style={{ fontWeight: 700 }}>{lojasSemRelatorio.length}</span>
                   {' '}{lojasSemRelatorio.length === 1 ? 'loja sem resultado' : 'lojas sem resultado'} na semana anterior
                 </p>
                 <button
@@ -1881,43 +1882,52 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Faturamento total — últimas 8 semanas */}
-      <SectionCard
-        title="Faturamento Total"
-        subtitle="Acumulado das últimas 8 semanas"
-        headerRight={null}
-        style={{ marginTop: '28px' }}
-      >
-        {lineData.every(d => d.faturamento === 0) ? (
-          <p style={{ fontSize: '12px', color: '#999999', textAlign: 'center', padding: '24px 0' }}>
-            Sem histórico disponível.
-          </p>
-        ) : (
-          <div style={{ height: '176px', padding: '16px 16px 8px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={lineData} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
-                <CartesianGrid vertical={false} stroke="#F3F3F3" strokeDasharray="3 3" />
-                <XAxis dataKey="semana" tick={{ fill: '#999999', fontSize: 10 }} axisLine={false} tickLine={false} />
-                <YAxis
-                  tick={{ fill: '#999999', fontSize: 10 }}
-                  axisLine={false} tickLine={false}
-                  tickFormatter={v => `${(v / 1000).toFixed(0)}k`}
-                  width={32}
-                />
-                <Tooltip content={<ChartTooltip formatter={formatBRL} />} />
-                <Line
-                  type="monotone"
-                  dataKey="faturamento"
-                  stroke="#E5322D"
-                  strokeWidth={1.5}
-                  dot={{ fill: '#E5322D', r: 2.5, strokeWidth: 0 }}
-                  activeDot={{ r: 3.5, fill: '#E5322D', strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </SectionCard>
+      {/* Faturamento total da loja selecionada — últimas 8 semanas */}
+      {selectedLoja && (
+        <SectionCard
+          title="Faturamento Total"
+          subtitle={`${lojaSelecionadaNome ? lojaSelecionadaNome + ' — ' : ''}Acumulado das últimas 8 semanas`}
+          headerRight={null}
+          style={{ marginTop: '28px' }}
+        >
+          {lojaLineData.every(d => d.faturamento === 0) ? (
+            <p style={{ fontSize: '12px', color: '#999999', textAlign: 'center', padding: '24px 0' }}>
+              Sem histórico disponível.
+            </p>
+          ) : (
+            <>
+              <div style={{ padding: '0 16px 8px' }}>
+                <p className="font-mono" style={{ fontSize: '28px', fontWeight: 800, color: '#111111', lineHeight: 1 }}>
+                  {formatBRL(lojaLineData.reduce((s, d) => s + d.faturamento, 0))}
+                </p>
+              </div>
+              <div style={{ height: '140px', padding: '0 16px 8px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={lojaLineData} margin={{ top: 0, right: 16, bottom: 0, left: 0 }}>
+                    <CartesianGrid vertical={false} stroke="#F3F3F3" strokeDasharray="3 3" />
+                    <XAxis dataKey="semana" tick={{ fill: '#999999', fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis
+                      tick={{ fill: '#999999', fontSize: 10 }}
+                      axisLine={false} tickLine={false}
+                      tickFormatter={v => `${(v / 1000).toFixed(0)}k`}
+                      width={32}
+                    />
+                    <Tooltip content={<ChartTooltip formatter={formatBRL} />} />
+                    <Line
+                      type="monotone"
+                      dataKey="faturamento"
+                      stroke="#E5322D"
+                      strokeWidth={1.5}
+                      dot={{ fill: '#E5322D', r: 2.5, strokeWidth: 0 }}
+                      activeDot={{ r: 3.5, fill: '#E5322D', strokeWidth: 0 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </>
+          )}
+        </SectionCard>
+      )}
 
       {/* Modais */}
       {modalResultado && (

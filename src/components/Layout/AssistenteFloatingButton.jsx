@@ -128,7 +128,11 @@ export default function AssistenteFloatingButton() {
             backgroundColor: '#FF4B2E', color: '#FFFFFF', border: 'none',
             boxShadow: '0 4px 14px rgba(255,75,46,0.35)',
             cursor: 'grab', touchAction: 'none',
+            opacity: popupAberto ? 1 : 0.6,
+            transition: 'opacity 150ms ease-out',
           }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
+          onMouseLeave={e => { if (!popupAberto) e.currentTarget.style.opacity = '0.6' }}
         >
           {popupAberto
             ? <X size={37} strokeWidth={2} />

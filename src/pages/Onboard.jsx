@@ -1,14 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
+import { Layers } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
-  collection, doc, query, where, getDocs, updateDoc, serverTimestamp,
+  collection, doc, getDoc, query, where, getDocs, updateDoc, serverTimestamp,
 } from '../services/firebase'
 import { useToast } from '../components/UI/Toast'
 import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/UI/Modal'
 import Skeleton from '../components/UI/Skeleton'
 import ImageUpload from '../components/UI/ImageUpload'
+import PlatformBadge from '../components/UI/PlatformBadge'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -43,85 +45,41 @@ const EMPTY_PRE_GESTAO_FORM = {
 
 const EMPTY_AGENDAR_FORM = { data: '', horario: '', observacoes: '' }
 
-const PLATAFORMA_STRONG = {
-  iFood:    '#EA1D2C',
-  '99Food': '#FFD700',
-  Keeta:    '#00B14F',
-}
-
-const PLATAFORMA_TEXT_COLOR = {
-  iFood:    '#FFFFFF',
-  '99Food': '#000000',
-  Keeta:    '#FFFFFF',
-}
-
-const PLATAFORMA_CARD_BORDER = {
-  iFood:    'rgba(234,29,44,0.3)',
-  '99Food': 'rgba(255,215,0,0.5)',
-  Keeta:    'rgba(0,177,79,0.3)',
-}
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function getCardStyle(plataformas, hover) {
-  const plats = plataformas?.length ? plataformas : []
-  const borderColor = plats.length === 1
-    ? (PLATAFORMA_CARD_BORDER[plats[0]] ?? '#E8E8E8')
-    : '#E8E8E8'
-
-  return {
-    backgroundColor: '#FFFFFF',
-    border: `1px solid ${borderColor}`,
-    borderRadius: '8px',
-    overflow: 'hidden',
-    boxShadow: hover
-      ? '0 4px 12px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)'
-      : '0 2px 8px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)',
-    transition: 'box-shadow 200ms',
-  }
+// Plataformas de uma loja — array novo (`plataformas`) com fallback pro campo
+// singular antigo (`plataforma`), mesmo padrão usado em Carteira/Comparativo.
+function plataformasDe(loja) {
+  return loja.plataformas?.length ? loja.plataformas : (loja.plataforma ? [loja.plataforma] : [])
 }
 
-function renderPlatformHeader(plataformas) {
-  const plats = plataformas?.length ? plataformas : []
+// Agrupa lojas pelo mesmo cliente (só quando o cliente tem mais de uma loja
+// na MESMA coluna do funil) — cada plataforma de um cliente costuma ser um
+// documento de loja separado, então sem isso o kanban mostrava um cartão
+// duplicado por plataforma em vez de um cartão só pro cliente.
+function agruparPorCliente(lojas, clienteMap) {
+  const porCliente = {}
+  const avulsas = []
+  lojas.forEach(l => {
+    if (l.clienteId) (porCliente[l.clienteId] ??= []).push(l)
+    else avulsas.push(l)
+  })
 
-  if (plats.length === 0) {
-    return (
-      <div style={{
-        height: '28px', borderRadius: '8px 8px 0 0', backgroundColor: '#CCCCCC',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <span style={{ fontSize: '12px', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.15)' }}>
-          Sem plataforma
-        </span>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ display: 'flex', borderRadius: '8px 8px 0 0', overflow: 'hidden', height: '28px' }}>
-      {plats.map(p => {
-        const bg = PLATAFORMA_STRONG[p] ?? '#CCCCCC'
-        const color = PLATAFORMA_TEXT_COLOR[p] ?? '#FFFFFF'
-        return (
-          <div
-            key={p}
-            style={{
-              width: `${100 / plats.length}%`, background: bg, boxSizing: 'border-box',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderBottom: p === 'Keeta' ? '3px solid #FFD700' : undefined,
-            }}
-          >
-            <span style={{
-              fontSize: '12px', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase',
-              color, textShadow: p === '99Food' ? 'none' : '0 1px 2px rgba(0,0,0,0.15)',
-            }}>
-              {p}
-            </span>
-          </div>
-        )
-      })}
-    </div>
-  )
+  const itens = []
+  Object.entries(porCliente).forEach(([clienteId, lojasDoCliente]) => {
+    if (lojasDoCliente.length > 1) {
+      itens.push({
+        tipo: 'grupo',
+        clienteId,
+        clienteNome: lojasDoCliente[0].clienteNome ?? clienteMap[clienteId]?.nome ?? lojasDoCliente[0].nome,
+        lojas: lojasDoCliente,
+      })
+    } else {
+      avulsas.push(...lojasDoCliente)
+    }
+  })
+  avulsas.forEach(loja => itens.push({ tipo: 'loja', loja }))
+  return itens
 }
 
 function formatDate(ts) {
@@ -443,8 +401,21 @@ function ConfirmIniciarModal({ loja, onClose, onConfirm }) {
 
 // ─── Kanban card ────────────────────────────────────────────────────────────────
 
+// Linha de badges de plataforma — pill discreta (mesma usada em Lojas/Ranking),
+// substitui o antigo header colorido em faixa cheia.
+function PlataformasRow({ plataformas }) {
+  const plats = plataformas?.length ? plataformas : []
+  if (plats.length === 0) {
+    return <span style={{ fontSize: '10px', fontWeight: 600, color: '#BBBBBB', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Sem plataforma</span>
+  }
+  return (
+    <div className="flex items-center gap-1.5 flex-wrap">
+      {plats.map(p => <PlatformBadge key={p} plataforma={p} />)}
+    </div>
+  )
+}
+
 function OnboardCard({ loja, gestorNome, lineTop, lineBottom, children }) {
-  const plats = loja.plataformas?.length ? loja.plataformas : []
   const [hover, setHover] = useState(false)
 
   return (
@@ -452,22 +423,83 @@ function OnboardCard({ loja, gestorNome, lineTop, lineBottom, children }) {
       variants={itemVariants}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={getCardStyle(plats, hover)}
+      style={{
+        backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '8px',
+        boxShadow: hover ? '0 4px 12px rgba(0,0,0,0.1)' : '0 1px 4px rgba(0,0,0,0.06)',
+        transition: 'box-shadow 200ms', padding: '14px',
+      }}
     >
-      {renderPlatformHeader(plats)}
-      <div style={{ padding: '14px' }}>
-        <p style={{ fontSize: '14px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {loja.nome}
-        </p>
-        <p style={{ fontSize: '12px', color: '#888888', marginTop: '4px' }}>
+      <div style={{ marginBottom: '8px' }}>
+        <PlataformasRow plataformas={plataformasDe(loja)} />
+      </div>
+      <p style={{ fontSize: '14px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {loja.nome}
+      </p>
+      <p style={{ fontSize: '12px', color: '#888888', marginTop: '4px' }}>
+        {gestorNome ?? 'Sem gestor'}
+      </p>
+      {lineTop && (
+        <p style={{ fontSize: '11px', color: '#999999', marginTop: '4px' }}>{lineTop}</p>
+      )}
+      <p style={{ fontSize: '11px', color: '#BBBBBB', marginTop: '2px' }}>{lineBottom}</p>
+      <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
+        {children}
+      </div>
+    </motion.div>
+  )
+}
+
+// Cartão unificado pra clientes com mais de uma loja na mesma coluna (cada
+// plataforma normalmente é um documento de loja próprio) — uma "folha"
+// desalinhada atrás do card é o efeito visual que sinaliza o agrupamento,
+// e cada loja/plataforma vira uma sub-linha com suas próprias ações (os
+// dados de pré-gestão/agendamento são independentes por loja).
+function OnboardCardGroup({ clienteNome, gestorNome, lojas, renderMeta, renderActions }) {
+  const [hover, setHover] = useState(false)
+
+  return (
+    <motion.div variants={itemVariants} style={{ position: 'relative' }}>
+      <div style={{
+        position: 'absolute', top: '5px', left: '5px', right: '-5px', bottom: '-5px',
+        backgroundColor: '#F0F0F0', border: '1px solid #E5E5E5', borderRadius: '8px', zIndex: 0,
+      }} />
+      <div
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        style={{
+          position: 'relative', zIndex: 1,
+          backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '8px',
+          boxShadow: hover ? '0 4px 12px rgba(0,0,0,0.1)' : '0 1px 4px rgba(0,0,0,0.06)',
+          transition: 'box-shadow 200ms', padding: '14px',
+        }}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <p style={{ fontSize: '14px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {clienteNome}
+          </p>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0,
+            fontSize: '10px', fontWeight: 700, color: '#666666', backgroundColor: '#F3F3F3',
+            border: '1px solid #E8E8E8', borderRadius: '999px', padding: '2px 8px',
+          }}>
+            <Layers size={10} strokeWidth={2.5} />
+            {lojas.length} lojas
+          </span>
+        </div>
+        <p style={{ fontSize: '12px', color: '#888888', marginTop: '4px', marginBottom: '10px' }}>
           {gestorNome ?? 'Sem gestor'}
         </p>
-        {lineTop && (
-          <p style={{ fontSize: '11px', color: '#999999', marginTop: '4px' }}>{lineTop}</p>
-        )}
-        <p style={{ fontSize: '11px', color: '#BBBBBB', marginTop: '2px' }}>{lineBottom}</p>
-        <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-          {children}
+
+        <div className="flex flex-col" style={{ gap: '8px' }}>
+          {lojas.map(loja => (
+            <div key={loja.id} style={{ border: '1px solid #F0F0F0', borderRadius: '6px', padding: '9px 10px', backgroundColor: '#FAFAFA' }}>
+              <PlataformasRow plataformas={plataformasDe(loja)} />
+              {renderMeta(loja)}
+              <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                {renderActions(loja)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </motion.div>
@@ -552,6 +584,7 @@ export default function Onboard() {
 
   const [lojas,    setLojas]    = useState([])
   const [gestores, setGestores] = useState([])
+  const [clientes, setClientes] = useState([])
   const [loading,  setLoading]  = useState(true)
 
   const [preGestaoModal, setPreGestaoModal] = useState(null) // { loja, advanceStatus }
@@ -587,8 +620,27 @@ export default function Onboard() {
           ? getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('perfil', '==', 'gestor')))
           : Promise.resolve(null),
       ])
-      setLojas(lojasSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const lojasData = lojasSnap.docs.map(d => ({ id: d.id, ...d.data() }))
+      setLojas(lojasData)
       setGestores(gestoresSnap ? gestoresSnap.docs.map(d => ({ id: d.id, ...d.data() })) : [{ id: user.uid, nome: user.nome }])
+
+      // Nomes de cliente pra unificar cartões de lojas do mesmo cliente — se
+      // a loja já tem `clienteNome` cacheado o fallback nem é usado, mas
+      // gestor não tem permissão de ler a coleção inteira, então busca só
+      // os clientes das próprias lojas (mesmo padrão de Carteira.jsx).
+      try {
+        if (isAdmin) {
+          const clientesSnap = await getDocs(query(collection(db, COLLECTIONS.CLIENTES), ...escopoOrg))
+          setClientes(clientesSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+        } else {
+          const clienteIds = [...new Set(lojasData.map(l => l.clienteId).filter(Boolean))]
+          const docs = await Promise.all(clienteIds.map(id => getDoc(doc(db, COLLECTIONS.CLIENTES, id))))
+          setClientes(docs.filter(d => d.exists()).map(d => ({ id: d.id, ...d.data() })))
+        }
+      } catch (err) {
+        console.error('[Onboard] clientes inacessíveis:', err?.code, err?.message)
+        setClientes([])
+      }
     } finally {
       setLoading(false)
     }
@@ -596,7 +648,8 @@ export default function Onboard() {
 
   useEffect(() => { if (user) loadAll() }, [user, isAdmin, isSuperAdmin])
 
-  const gestorMap = useMemo(() => Object.fromEntries(gestores.map(g => [g.id, g])), [gestores])
+  const gestorMap  = useMemo(() => Object.fromEntries(gestores.map(g => [g.id, g])), [gestores])
+  const clienteMap = useMemo(() => Object.fromEntries(clientes.map(c => [c.id, c])), [clientes])
 
   const dadosPendentes = useMemo(() => lojas.filter(l => l.onboardStatus === 'dados_pendentes'), [lojas])
   const agendarOnboard = useMemo(() => lojas.filter(l => l.onboardStatus === 'agendar_onboard'), [lojas])
@@ -711,14 +764,29 @@ export default function Onboard() {
           {/* ── Coluna 1: Preencher Dados ── */}
           <div className="w-full shrink-0 snap-center sm:w-auto sm:shrink sm:snap-align-none">
           <KanbanColumn title="Preencher Dados" count={dadosPendentes.length} headerBg="#EFF6FF" headerColor="#3B82F6">
-            {dadosPendentes.map(loja => (
+            {agruparPorCliente(dadosPendentes, clienteMap).map(item => item.tipo === 'grupo' ? (
+              <OnboardCardGroup
+                key={item.clienteId}
+                clienteNome={item.clienteNome}
+                gestorNome={gestorMap[item.lojas[0].gestorId]?.nome}
+                lojas={item.lojas}
+                renderMeta={loja => (
+                  <p style={{ fontSize: '11px', color: '#BBBBBB', marginTop: '6px' }}>Cadastrada em {formatDate(loja.criadoEm)}</p>
+                )}
+                renderActions={loja => (
+                  <PreencherButton onClick={() => setPreGestaoModal({ loja, advanceStatus: true })}>
+                    Preencher
+                  </PreencherButton>
+                )}
+              />
+            ) : (
               <OnboardCard
-                key={loja.id}
-                loja={loja}
-                gestorNome={gestorMap[loja.gestorId]?.nome}
-                lineBottom={`Cadastrada em ${formatDate(loja.criadoEm)}`}
+                key={item.loja.id}
+                loja={item.loja}
+                gestorNome={gestorMap[item.loja.gestorId]?.nome}
+                lineBottom={`Cadastrada em ${formatDate(item.loja.criadoEm)}`}
               >
-                <PreencherButton onClick={() => setPreGestaoModal({ loja, advanceStatus: true })}>
+                <PreencherButton onClick={() => setPreGestaoModal({ loja: item.loja, advanceStatus: true })}>
                   Preencher
                 </PreencherButton>
               </OnboardCard>
@@ -729,18 +797,41 @@ export default function Onboard() {
           {/* ── Coluna 2: Agendar Onboard ── */}
           <div className="w-full shrink-0 snap-center sm:w-auto sm:shrink sm:snap-align-none">
           <KanbanColumn title="Agendar Onboard" count={agendarOnboard.length} headerBg="#FFFBEB" headerColor="#F59E0B">
-            {agendarOnboard.map(loja => (
+            {agruparPorCliente(agendarOnboard, clienteMap).map(item => item.tipo === 'grupo' ? (
+              <OnboardCardGroup
+                key={item.clienteId}
+                clienteNome={item.clienteNome}
+                gestorNome={gestorMap[item.lojas[0].gestorId]?.nome}
+                lojas={item.lojas}
+                renderMeta={loja => (
+                  <>
+                    <p style={{ fontSize: '11px', color: '#999999', marginTop: '6px' }}>{resumoPreGestao(loja)}</p>
+                    <p style={{ fontSize: '11px', color: '#BBBBBB', marginTop: '2px' }}>Cadastrada em {formatDate(loja.criadoEm)}</p>
+                  </>
+                )}
+                renderActions={loja => (
+                  <>
+                    <CardButton primary onClick={() => setAgendarModal({ loja, advanceStatus: true })}>
+                      Registrar Data
+                    </CardButton>
+                    <CardButton onClick={() => setPreGestaoModal({ loja, advanceStatus: false })}>
+                      Editar Dados
+                    </CardButton>
+                  </>
+                )}
+              />
+            ) : (
               <OnboardCard
-                key={loja.id}
-                loja={loja}
-                gestorNome={gestorMap[loja.gestorId]?.nome}
-                lineTop={resumoPreGestao(loja)}
-                lineBottom={`Cadastrada em ${formatDate(loja.criadoEm)}`}
+                key={item.loja.id}
+                loja={item.loja}
+                gestorNome={gestorMap[item.loja.gestorId]?.nome}
+                lineTop={resumoPreGestao(item.loja)}
+                lineBottom={`Cadastrada em ${formatDate(item.loja.criadoEm)}`}
               >
-                <CardButton primary onClick={() => setAgendarModal({ loja, advanceStatus: true })}>
+                <CardButton primary onClick={() => setAgendarModal({ loja: item.loja, advanceStatus: true })}>
                   Registrar Data
                 </CardButton>
-                <CardButton onClick={() => setPreGestaoModal({ loja, advanceStatus: false })}>
+                <CardButton onClick={() => setPreGestaoModal({ loja: item.loja, advanceStatus: false })}>
                   Editar Dados
                 </CardButton>
               </OnboardCard>
@@ -751,17 +842,37 @@ export default function Onboard() {
           {/* ── Coluna 3: Início da Gestão ── */}
           <div className="w-full shrink-0 snap-center sm:w-auto sm:shrink sm:snap-align-none">
           <KanbanColumn title="Início da Gestão" count={inicioGestao.length} headerBg="#ECFDF5" headerColor="#10B981">
-            {inicioGestao.map(loja => (
+            {agruparPorCliente(inicioGestao, clienteMap).map(item => item.tipo === 'grupo' ? (
+              <OnboardCardGroup
+                key={item.clienteId}
+                clienteNome={item.clienteNome}
+                gestorNome={gestorMap[item.lojas[0].gestorId]?.nome}
+                lojas={item.lojas}
+                renderMeta={loja => (
+                  <p style={{ fontSize: '11px', color: '#BBBBBB', marginTop: '6px' }}>{formatDataHorario(loja.onboardData, loja.onboardHorario)}</p>
+                )}
+                renderActions={loja => (
+                  <>
+                    <CardButton primary onClick={() => setConfirmModal(loja)}>
+                      Iniciar Gestão
+                    </CardButton>
+                    <CardButton onClick={() => setAgendarModal({ loja, advanceStatus: false })}>
+                      Editar
+                    </CardButton>
+                  </>
+                )}
+              />
+            ) : (
               <OnboardCard
-                key={loja.id}
-                loja={loja}
-                gestorNome={gestorMap[loja.gestorId]?.nome}
-                lineBottom={formatDataHorario(loja.onboardData, loja.onboardHorario)}
+                key={item.loja.id}
+                loja={item.loja}
+                gestorNome={gestorMap[item.loja.gestorId]?.nome}
+                lineBottom={formatDataHorario(item.loja.onboardData, item.loja.onboardHorario)}
               >
-                <CardButton primary onClick={() => setConfirmModal(loja)}>
+                <CardButton primary onClick={() => setConfirmModal(item.loja)}>
                   Iniciar Gestão
                 </CardButton>
-                <CardButton onClick={() => setAgendarModal({ loja, advanceStatus: false })}>
+                <CardButton onClick={() => setAgendarModal({ loja: item.loja, advanceStatus: false })}>
                   Editar
                 </CardButton>
               </OnboardCard>

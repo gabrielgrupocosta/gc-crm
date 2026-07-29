@@ -600,10 +600,19 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Logo */}
-      <div
+      {/* Logo — clicável, sempre volta pro Dashboard */}
+      <button
+        type="button"
+        onClick={() => { navigate('/dashboard'); setMobileOpen(false) }}
+        aria-label="Ir para o Dashboard"
         className={effectiveCollapsed ? 'shrink-0 flex justify-center' : 'shrink-0 px-4 flex items-center gap-2'}
-        style={{ paddingTop: '8px', paddingBottom: '16px', marginBottom: '8px', borderBottom: '1px solid #1C2128' }}
+        style={{
+          paddingTop: '8px', paddingBottom: '16px', marginBottom: '8px', borderBottom: '1px solid #1C2128',
+          background: 'none', border: 'none', borderBottomWidth: '1px', cursor: 'pointer', width: '100%',
+          opacity: 1, transition: 'opacity 150ms',
+        }}
+        onMouseEnter={e => { e.currentTarget.style.opacity = '0.8' }}
+        onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
       >
         <LogoMark size={effectiveCollapsed ? 24 : 22} />
         {!effectiveCollapsed && (
@@ -612,7 +621,7 @@ export default function Sidebar() {
             <span style={{ color: '#FF4B2E' }}>Food</span>
           </span>
         )}
-      </div>
+      </button>
 
       {/* Nav — clique em qualquer link fecha o drawer mobile (delegado, não afeta os botões de colapsar seção) */}
       <nav
