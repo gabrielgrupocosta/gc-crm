@@ -850,9 +850,14 @@ export default function Gestores() {
       const adicionadas = form.lojasIds.filter(id => !anteriores.includes(id))
       const removidas   = anteriores.filter(id => !form.lojasIds.includes(id))
 
+      // gestorNome é um cache desnormalizado no doc da loja (usado pra exibir o
+      // nome sem precisar de join) — sem atualizar aqui junto com gestorId, a
+      // tabela de Lojas continuava mostrando o gestor antigo mesmo após a
+      // reatribuição ter funcionado por baixo dos panos.
+      const nomeAtualizado = form.nome.trim()
       await Promise.all([
-        ...adicionadas.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: editingGestor.id })),
-        ...removidas.map(id   => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: null })),
+        ...adicionadas.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: editingGestor.id, gestorNome: nomeAtualizado })),
+        ...removidas.map(id   => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: null, gestorNome: null })),
       ])
 
       toast('Gestor atualizado.', 'success')
@@ -873,10 +878,10 @@ export default function Gestores() {
         await updateDoc(doc(db, COLLECTIONS.USERS, uid), { status: 'inativo' })
       }
 
-      // Atribui lojas selecionadas
+      // Atribui lojas selecionadas (gestorNome junto — ver comentário acima sobre o cache)
       if (form.lojasIds.length > 0) {
         await Promise.all(
-          form.lojasIds.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: uid }))
+          form.lojasIds.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: uid, gestorNome: form.nome.trim() }))
         )
       }
 

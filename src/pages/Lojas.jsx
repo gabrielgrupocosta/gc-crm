@@ -1634,10 +1634,12 @@ export default function Lojas() {
       const orgId = user?.organizacaoId ?? null
       const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
-      // Contas novas (multi-tenant) usam o campo `role`, não o `perfil` legado —
-      // um admin_org só tem gestores criados no modelo novo.
+      // Contas usam o campo `role` (não o `perfil` legado) — mesmo padrão de
+      // Gestores.jsx. Antes, o branch de master aqui buscava por `perfil`,
+      // que nenhuma conta atual tem, e o filtro/dropdown de gestor desta
+      // página sempre ficava vazio pra quem loga como master.
       const gestoresQuery = isSuperAdmin
-        ? query(collection(db, COLLECTIONS.USERS), where('perfil', '==', 'gestor'))
+        ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
         : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
 
       const [lojasSnap, clientesSnap, gestoresSnap] = await Promise.all([
