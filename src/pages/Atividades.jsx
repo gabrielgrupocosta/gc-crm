@@ -324,15 +324,9 @@ export default function Atividades() {
   const [loadingAcoes,        setLoadingAcoes]        = useState(false)
   const [excluindoAcaoId,     setExcluindoAcaoId]     = useState(null)
   const [concluindoAcaoId,    setConcluindoAcaoId]    = useState(null)
-
-  // ─ Modelos de ação (catálogo pessoal do gestor)
-  const [modelos,             setModelos]             = useState([])
-  const [loadingModelos,      setLoadingModelos]      = useState(false)
-  const [novoModeloTexto,     setNovoModeloTexto]     = useState('')
-  const [novoModeloPlataforma, setNovoModeloPlataforma] = useState('iFood')
-  const [salvandoModelo,      setSalvandoModelo]      = useState(false)
-  const [excluindoModeloId,   setExcluindoModeloId]   = useState(null)
-  const [lancandoModeloId,    setLancandoModeloId]    = useState(null)
+  const [novaAcaoTexto,       setNovaAcaoTexto]       = useState('')
+  const [novaAcaoPlataforma,  setNovaAcaoPlataforma]  = useState('iFood')
+  const [salvandoAcao,        setSalvandoAcao]        = useState(false)
 
   // ─── Load lojas + gestores ──────────────────────────────────────────────────
 
@@ -435,26 +429,25 @@ export default function Atividades() {
 
   // ─── Ações: registro livre de atividades ───────────────────────────────────
 
-  // Sem gestor nem loja selecionados: só faz sentido pro admin ficar sem nada
-  // (estado vazio pedindo um filtro) — o gestor logado sempre tem um escopo
-  // implícito (suas próprias lojas).
-  const semFiltroAcoes = isAdmin && !filtroGestorAcoes && !selectedLojaIdAcoes
-
   async function loadAcoes() {
-    if (semFiltroAcoes) { setAcoes([]); return }
     setLoadingAcoes(true)
     try {
       // Uma loja específica selecionada tem prioridade como filtro principal
       // da query (mais específico); sem loja, filtra pelo gestor (o
-      // selecionado pelo admin, ou o próprio gestor logado).
-      const [baseField, baseValue] = selectedLojaIdAcoes
-        ? ['lojaId', selectedLojaIdAcoes]
-        : ['gestorId', isAdmin ? filtroGestorAcoes : user.uid]
+      // selecionado pelo admin, ou o próprio gestor logado). Admin sem
+      // nenhum filtro vê tudo da organização — sem essa opção ele ficava
+      // obrigado a escolher um gestor ou loja só pra ver a lista.
+      const baseField = selectedLojaIdAcoes
+        ? 'lojaId'
+        : (isAdmin ? (filtroGestorAcoes ? 'gestorId' : null) : 'gestorId')
+      const baseValue = selectedLojaIdAcoes || (isAdmin ? filtroGestorAcoes : user.uid)
 
       // O filtro de organizacaoId precisa estar explícito na query (não só
       // implícito nas regras do Firestore) — senão o Firestore não consegue
       // provar que a lista inteira respeita a regra e nega tudo.
-      const constraints = [where(baseField, '==', baseValue)]
+      const constraints = []
+      if (baseField === 'lojaId') constraints.push(where('lojaId', '==', baseValue))
+      else if (baseField === 'gestorId') constraints.push(where('gestorId', '==', baseValue))
       if (!isSuperAdmin) constraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
       constraints.push(orderBy('timestamp', 'desc'), limit(100))
 
@@ -480,91 +473,34 @@ export default function Atividades() {
     loadAcoes()
   }, [user, isAdmin, filtroGestorAcoes, selectedLojaIdAcoes]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ─── Modelos de ação: catálogo pessoal de ações que o gestor pode lançar ───
-
-  async function loadModelos() {
-    if (!user) return
-    setLoadingModelos(true)
-    try {
-      const constraints = [where('gestorId', '==', user.uid)]
-      if (!isSuperAdmin) constraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
-      const snap = await getDocs(query(collection(db, COLLECTIONS.ACAO_MODELOS), ...constraints))
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      docs.sort((a, b) => tsMillis(b.criadoEm) - tsMillis(a.criadoEm))
-      setModelos(docs)
-    } catch (err) {
-      console.error('[Atividades] erro ao carregar modelos de ação:', err?.code, err?.message)
-    } finally {
-      setLoadingModelos(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!user) return
-    loadModelos()
-  }, [user, isSuperAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function handleAdicionarModelo() {
-    if (!novoModeloTexto.trim()) return
-    setSalvandoModelo(true)
-    try {
-      await addDoc(collection(db, COLLECTIONS.ACAO_MODELOS), {
-        gestorId:      user.uid,
-        organizacaoId: user.organizacaoId ?? null,
-        descricao:     novoModeloTexto.trim(),
-        plataforma:    novoModeloPlataforma,
-        criadoEm:      serverTimestamp(),
-      })
-      setNovoModeloTexto('')
-      toast('Modelo de ação criado.', 'success')
-      loadModelos()
-    } catch (err) {
-      console.error('[Atividades] erro ao criar modelo de ação:', err?.code, err?.message)
-      toast('Erro ao criar modelo. Tente novamente.', 'error')
-    } finally {
-      setSalvandoModelo(false)
-    }
-  }
-
-  async function handleExcluirModelo(modelo) {
-    setExcluindoModeloId(modelo.id)
-    try {
-      await deleteDoc(doc(db, COLLECTIONS.ACAO_MODELOS, modelo.id))
-      setModelos(prev => prev.filter(m => m.id !== modelo.id))
-      toast('Modelo excluído.', 'success')
-    } catch (err) {
-      console.error('[Atividades] erro ao excluir modelo:', err?.code, err?.message)
-      toast('Erro ao excluir modelo.', 'error')
-    } finally {
-      setExcluindoModeloId(null)
-    }
-  }
-
-  // Lançar um modelo pra loja selecionada gera um item de checklist novo —
-  // data de criação automática, e a data de conclusão só é gravada quando o
-  // gestor der o check.
-  async function handleLancarAcao(modelo) {
-    if (!selectedLojaIdAcoes) return
-    setLancandoModeloId(modelo.id)
+  // Cria a ação já como item de checklist pendente na loja selecionada — data
+  // de criação automática, e a data de conclusão só é gravada quando o gestor
+  // der o check. Sem etapa de "modelo": o gestor registra a melhoria que
+  // identificou assim que a encontra, pra fazer em algum momento enquanto a
+  // loja estiver na gestão.
+  async function handleCriarAcao() {
+    if (!selectedLojaIdAcoes || !novaAcaoTexto.trim()) return
+    setSalvandoAcao(true)
     try {
       await addDoc(collection(db, COLLECTIONS.ACOES), {
         lojaId:        selectedLojaIdAcoes,
         gestorId:      user.uid,
         gestorNome:    user.nome ?? '',
         organizacaoId: user.organizacaoId ?? null,
-        descricao:     modelo.descricao,
-        plataforma:    modelo.plataforma,
+        descricao:     novaAcaoTexto.trim(),
+        plataforma:    novaAcaoPlataforma,
         status:        'pendente',
         concluidoEm:   null,
         timestamp:     serverTimestamp(),
       })
-      toast('Ação lançada no checklist.', 'success')
+      setNovaAcaoTexto('')
+      toast('Ação adicionada ao checklist.', 'success')
       loadAcoes()
     } catch (err) {
-      console.error('[Atividades] erro ao lançar ação:', err?.code, err?.message)
-      toast('Erro ao lançar ação. Tente novamente.', 'error')
+      console.error('[Atividades] erro ao criar ação:', err?.code, err?.message)
+      toast('Erro ao criar ação. Tente novamente.', 'error')
     } finally {
-      setLancandoModeloId(null)
+      setSalvandoAcao(false)
     }
   }
 
@@ -739,84 +675,44 @@ export default function Atividades() {
               />
             </div>
 
-            {semFiltroAcoes ? (
-              <div className="bg-surface border border-border rounded-lg shadow-card flex items-center justify-center py-16">
-                <p className="text-[13px] text-text-subtle">Selecione um gestor ou uma loja para ver as ações.</p>
-              </div>
-            ) : (
-              <>
-                {/* Modelos de ação — catálogo pessoal que o gestor lança pra virar checklist */}
+                {/* Nova ação — registra a melhoria identificada como item de checklist */}
                 <div className="bg-surface border border-border rounded-lg shadow-card" style={{ padding: '16px' }}>
-                  <p className="field-label mb-1">Modelos de ação</p>
+                  <p className="field-label mb-1">Nova ação</p>
                   <p className="text-[12px] text-text-subtle mb-3">
-                    Cadastre as ações que você costuma tomar ao longo da gestão. Depois é só lançar pra loja selecionada — vira um item de checklist com data de criação automática.
+                    Registre uma melhoria identificada na loja. Ela entra no checklist abaixo como pendente, com data de criação automática, pra você fazer em algum momento enquanto a loja estiver na gestão.
                   </p>
 
-                  <div className="flex items-center gap-2 mb-3">
+                  <div className="flex items-center gap-2">
                     <input
                       type="text"
-                      value={novoModeloTexto}
-                      onChange={e => setNovoModeloTexto(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleAdicionarModelo() }}
+                      value={novaAcaoTexto}
+                      onChange={e => setNovaAcaoTexto(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleCriarAcao() }}
                       placeholder="Ex: Ajustar hits da semana"
                       className="input flex-1"
+                      disabled={!selectedLojaIdAcoes}
                     />
                     <select
-                      value={novoModeloPlataforma}
-                      onChange={e => setNovoModeloPlataforma(e.target.value)}
+                      value={novaAcaoPlataforma}
+                      onChange={e => setNovaAcaoPlataforma(e.target.value)}
                       className="select w-32 shrink-0"
+                      disabled={!selectedLojaIdAcoes}
                     >
                       <option value="iFood">iFood</option>
                       <option value="99Food">99Food</option>
                       <option value="Keeta">Keeta</option>
                     </select>
                     <button
-                      onClick={handleAdicionarModelo}
-                      disabled={salvandoModelo || !novoModeloTexto.trim()}
+                      onClick={handleCriarAcao}
+                      disabled={!selectedLojaIdAcoes || salvandoAcao || !novaAcaoTexto.trim()}
                       className="btn-primary shrink-0"
+                      title={!selectedLojaIdAcoes ? 'Selecione uma loja para adicionar' : undefined}
                     >
-                      {salvandoModelo ? 'Salvando…' : 'Adicionar'}
+                      {salvandoAcao ? 'Salvando…' : 'Adicionar'}
                     </button>
                   </div>
-
-                  {loadingModelos ? (
-                    <Skeleton.Table rows={2} cols={1} />
-                  ) : modelos.length === 0 ? (
-                    <p className="text-[12px] text-text-faint py-2">Nenhum modelo cadastrado ainda.</p>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {modelos.map(m => (
-                        <div
-                          key={m.id}
-                          className="flex items-center gap-2"
-                          style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid #E8E8E8', backgroundColor: '#FAFAFA' }}
-                        >
-                          <span
-                            className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
-                            style={{ padding: '2px 8px', borderRadius: '4px', ...PLATAFORMA_BADGE[m.plataforma] }}
-                          >
-                            {m.plataforma}
-                          </span>
-                          <span className="text-[13px] text-text-primary flex-1 min-w-0 truncate">{m.descricao}</span>
-                          <button
-                            onClick={() => handleLancarAcao(m)}
-                            disabled={!selectedLojaIdAcoes || lancandoModeloId === m.id}
-                            className="btn-secondary shrink-0"
-                            style={{ height: '28px', padding: '0 10px', fontSize: '11px' }}
-                            title={!selectedLojaIdAcoes ? 'Selecione uma loja para lançar' : undefined}
-                          >
-                            {lancandoModeloId === m.id ? 'Lançando…' : 'Lançar'}
-                          </button>
-                          <button
-                            onClick={() => handleExcluirModelo(m)}
-                            disabled={excluindoModeloId === m.id}
-                            className="inline-flex items-center text-negative hover:opacity-75 transition-opacity duration-150 p-1 rounded shrink-0"
-                          >
-                            <Trash2 size={13} strokeWidth={1.5} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                  {!selectedLojaIdAcoes && (
+                    <p className="text-[12px] text-text-faint mt-2">Selecione uma loja acima pra registrar uma ação.</p>
                   )}
                 </div>
 
@@ -910,8 +806,6 @@ export default function Atividades() {
                     </motion.div>
                   )}
                 </div>
-              </>
-            )}
           </div>
         )
       )}
