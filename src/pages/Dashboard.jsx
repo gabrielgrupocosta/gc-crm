@@ -181,7 +181,7 @@ function SectionCard({ title, subtitle, headerRight, children, style }) {
   )
 }
 
-function RankingList({ items, showGestor, showCliente }) {
+function RankingList({ items, showGestor }) {
   if (!items.length) return (
     <p style={{ fontSize: '12px', color: '#999999', textAlign: 'center', padding: '24px 0' }}>
       Nenhum resultado lançado esta semana.
@@ -206,11 +206,6 @@ function RankingList({ items, showGestor, showCliente }) {
               {item.nome}
             </span>
             <PlatformBadge plataforma={item.plataforma} />
-            {showCliente && (
-              <span style={{ fontSize: '11px', fontWeight: 500, color: '#666666', backgroundColor: '#F3F3F3', border: '1px solid #E8E8E8', borderRadius: '4px', padding: '2px 8px', width: '100px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
-                {item.clienteNome ?? '—'}
-              </span>
-            )}
             {showGestor && (
               <span className="font-sans" style={{ fontSize: '12px', fontWeight: 500, color: '#777777', width: '120px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
                 {item.gestorNome}
@@ -1672,7 +1667,7 @@ export default function Dashboard() {
           }
         >
           <div className="overflow-x-auto">
-            <RankingList items={ranking} showGestor={isAdmin} showCliente={isAdmin} />
+            <RankingList items={ranking} showGestor={isAdmin} />
           </div>
           <div style={{ padding: '12px 16px', borderTop: '1px solid #F3F3F3', display: 'flex', justifyContent: 'flex-end' }}>
             <button
