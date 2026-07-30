@@ -549,7 +549,7 @@ export default function Sidebar() {
       : null
 
   const atividadesHighlight = tarefasHoje > 0
-    ? { color: '#F59E0B', bg: 'rgba(245,158,11,0.16)', badge: <CountBadge n={tarefasHoje} color="#F59E0B" />, dot: tarefasHoje, dotColor: '#F59E0B' }
+    ? { color: '#F59E0B', bg: 'rgba(245,158,11,0.16)', badge: <SquareCountBadge n={tarefasHoje} color="#F59E0B" />, dot: tarefasHoje, dotColor: '#F59E0B' }
     : null
 
   const HIGHLIGHTS = {
