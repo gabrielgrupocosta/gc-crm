@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { motion } from 'framer-motion'
-import { Layers, ListChecks } from 'lucide-react'
+import { ListChecks } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
   collection, doc, getDoc, query, where, getDocs, updateDoc, serverTimestamp,
@@ -660,19 +660,9 @@ function OnboardCardGroup({ clienteNome, gestorNome, lojas, renderMeta, renderAc
           transition: 'box-shadow 200ms', padding: '14px',
         }}
       >
-        <div className="flex items-center justify-between gap-2">
-          <p style={{ fontSize: '14px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-            {clienteNome}
-          </p>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: '3px', flexShrink: 0,
-            fontSize: '10px', fontWeight: 700, color: '#666666', backgroundColor: '#F3F3F3',
-            border: '1px solid #E8E8E8', borderRadius: '999px', padding: '2px 8px',
-          }}>
-            <Layers size={10} strokeWidth={2.5} />
-            {lojas.length} lojas
-          </span>
-        </div>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {clienteNome}
+        </p>
         <p style={{ fontSize: '12px', color: '#888888', marginTop: '4px', marginBottom: '10px' }}>
           {gestorNome ?? 'Sem gestor'}
         </p>
