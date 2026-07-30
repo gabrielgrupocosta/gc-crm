@@ -77,7 +77,7 @@ function PublicRoute() {
 
 // ─── Popup de lembrete de tarefa ───────────────────────────────────────────────
 
-function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas }) {
+function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas, onFechar }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -93,6 +93,7 @@ function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas }) {
         exit={{ opacity: 0, scale: 0.94 }}
         transition={{ duration: 0.15, ease: 'easeOut' }}
         style={{
+          position: 'relative',
           backgroundColor: '#FFFFFF',
           border: '2px solid #E5322D',
           borderRadius: '12px',
@@ -103,6 +104,19 @@ function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas }) {
           textAlign: 'center',
         }}
       >
+        <button
+          onClick={onFechar}
+          aria-label="Fechar"
+          style={{
+            position: 'absolute', top: '12px', right: '12px',
+            width: '28px', height: '28px', borderRadius: '6px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'none', border: 'none', cursor: 'pointer', color: '#999999',
+          }}
+        >
+          <X size={16} strokeWidth={1.75} />
+        </button>
+
         <motion.div
           animate={{ scale: [1, 1.15, 1] }}
           transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
@@ -162,6 +176,7 @@ function LembretesGlobais() {
           onConcluir={concluirAtual}
           onAdiar={adiarAmanhaAtual}
           onVerTodas={handleVerTodas}
+          onFechar={fecharAtual}
         />
       )}
     </AnimatePresence>
