@@ -77,7 +77,36 @@ function PublicRoute() {
 
 // ─── Popup de lembrete de tarefa ───────────────────────────────────────────────
 
-function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas, onFechar }) {
+function LembreteItem({ lembrete, onConcluir, onAdiar }) {
+  return (
+    <div style={{
+      textAlign: 'left', border: '1px solid #E8E8E8', borderRadius: '8px',
+      padding: '12px 14px', backgroundColor: '#FAFAFA',
+    }}>
+      <p style={{ fontSize: '12px', color: '#E5322D', fontWeight: 600, marginBottom: '2px' }}>
+        {lembrete.lojaNome || 'Loja'}
+      </p>
+      <p style={{ fontSize: '13px', color: '#111111', lineHeight: 1.45 }}>
+        {lembrete.descricao}
+      </p>
+      {lembrete.observacao && (
+        <p style={{ fontSize: '12px', color: '#666666', lineHeight: 1.45, marginTop: '4px' }}>
+          {lembrete.observacao}
+        </p>
+      )}
+      <div className="flex gap-2" style={{ marginTop: '10px' }}>
+        <button onClick={() => onConcluir(lembrete.id)} className="btn-primary" style={{ flex: 1, height: '30px', fontSize: '12px' }}>
+          Concluir
+        </button>
+        <button onClick={() => onAdiar(lembrete.id)} className="btn-secondary" style={{ flex: 1, height: '30px', fontSize: '12px' }}>
+          Lembrar amanhã
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function LembreteModal({ lembretes, onConcluir, onAdiar, onVerTodas, onFechar }) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -98,7 +127,7 @@ function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas, onFechar }) 
           border: '2px solid #E5322D',
           borderRadius: '12px',
           padding: '28px',
-          maxWidth: '380px',
+          maxWidth: '400px',
           width: '100%',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           textAlign: 'center',
@@ -129,30 +158,24 @@ function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas, onFechar }) 
         </motion.div>
 
         <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#111111', marginBottom: '4px' }}>
-          Lembrete de Tarefa!
+          {lembretes.length > 1 ? `${lembretes.length} lembretes de tarefa!` : 'Lembrete de Tarefa!'}
         </h2>
-        <p style={{ fontSize: '13px', color: '#E5322D', fontWeight: 500, marginBottom: '12px' }}>
-          {lembrete.lojaNome || 'Loja'}
+        <p style={{ fontSize: '13px', color: '#666666', marginBottom: '16px' }}>
+          {lembretes.length > 1 ? 'Tarefas pendentes pra hoje' : 'Tarefa pendente pra hoje'}
         </p>
-        <p style={{ fontSize: '14px', color: '#111111', lineHeight: 1.5, marginBottom: lembrete.observacao ? '8px' : '20px' }}>
-          {lembrete.descricao}
-        </p>
-        {lembrete.observacao && (
-          <p style={{ fontSize: '12px', color: '#666666', lineHeight: 1.5, marginBottom: '20px' }}>
-            {lembrete.observacao}
-          </p>
-        )}
 
-        <div className="flex flex-col gap-2">
-          <button onClick={onConcluir} className="btn-primary w-full">Concluir tarefa</button>
-          <button onClick={onAdiar} className="btn-secondary w-full">Lembrar amanhã</button>
-          <button
-            onClick={onVerTodas}
-            style={{ fontSize: '12px', color: '#666666', background: 'none', border: 'none', cursor: 'pointer', padding: '4px', marginTop: '2px' }}
-          >
-            Ver todas as tarefas
-          </button>
+        <div className="flex flex-col gap-2" style={{ maxHeight: '340px', overflowY: 'auto', marginBottom: '16px' }}>
+          {lembretes.map(lembrete => (
+            <LembreteItem key={lembrete.id} lembrete={lembrete} onConcluir={onConcluir} onAdiar={onAdiar} />
+          ))}
         </div>
+
+        <button
+          onClick={onVerTodas}
+          style={{ fontSize: '12px', color: '#666666', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+        >
+          Ver todas as tarefas
+        </button>
       </motion.div>
     </motion.div>
   )
@@ -160,23 +183,23 @@ function LembreteModal({ lembrete, onConcluir, onAdiar, onVerTodas, onFechar }) 
 
 function LembretesGlobais() {
   const navigate = useNavigate()
-  const { lembreteAtual, concluirAtual, adiarAmanhaAtual, fecharAtual } = useLembretes()
+  const { lembretes, concluirTarefa, adiarAmanha, fechar } = useLembretes()
 
   function handleVerTodas() {
-    fecharAtual()
+    fechar()
     navigate('/atividades')
   }
 
   return (
     <AnimatePresence>
-      {lembreteAtual && (
+      {lembretes.length > 0 && (
         <LembreteModal
-          key={lembreteAtual.id}
-          lembrete={lembreteAtual}
-          onConcluir={concluirAtual}
-          onAdiar={adiarAmanhaAtual}
+          key="lembretes-popup"
+          lembretes={lembretes}
+          onConcluir={concluirTarefa}
+          onAdiar={adiarAmanha}
           onVerTodas={handleVerTodas}
-          onFechar={fecharAtual}
+          onFechar={fechar}
         />
       )}
     </AnimatePresence>

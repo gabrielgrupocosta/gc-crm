@@ -20,11 +20,11 @@ function dateOnlyLte(a, b) {
 }
 
 // Verifica periodicamente se há tarefas com dataLembrete no dia de hoje (ou
-// anterior), status pendente, do usuário logado, e mantém uma fila pra exibir
-// um popup de cada vez.
+// anterior), status pendente, do usuário logado, e junta tudo numa lista só —
+// um popup único com todas as pendências do dia, em vez de um por tarefa.
 export function useLembretes() {
   const { user, isSuperAdmin } = useAuth()
-  const [fila, setFila] = useState([])
+  const [lembretes, setLembretes] = useState([])
   const jaEnfileiradosRef = useRef(new Set())
 
   const verificar = useCallback(async () => {
@@ -47,7 +47,7 @@ export function useLembretes() {
 
       if (vencidas.length > 0) {
         vencidas.forEach(t => jaEnfileiradosRef.current.add(t.id))
-        setFila(prev => [...prev, ...vencidas])
+        setLembretes(prev => [...prev, ...vencidas])
       }
     } catch (err) {
       console.error('[useLembretes] erro ao verificar tarefas:', err?.code, err?.message)
@@ -61,16 +61,12 @@ export function useLembretes() {
     return () => clearInterval(interval)
   }, [user, verificar])
 
-  const lembreteAtual = fila[0] ?? null
-
-  function fecharAtual() {
-    setFila(prev => prev.slice(1))
+  function fechar() {
+    setLembretes([])
   }
 
-  async function concluirAtual() {
-    if (!lembreteAtual) return
-    const id = lembreteAtual.id
-    fecharAtual()
+  async function concluirTarefa(id) {
+    setLembretes(prev => prev.filter(t => t.id !== id))
     try {
       await updateDoc(doc(db, COLLECTIONS.TAREFAS, id), {
         status: 'concluida',
@@ -81,10 +77,8 @@ export function useLembretes() {
     }
   }
 
-  async function adiarAmanhaAtual() {
-    if (!lembreteAtual) return
-    const id = lembreteAtual.id
-    fecharAtual()
+  async function adiarAmanha(id) {
+    setLembretes(prev => prev.filter(t => t.id !== id))
     try {
       const amanha = new Date()
       amanha.setDate(amanha.getDate() + 1)
@@ -96,5 +90,5 @@ export function useLembretes() {
     }
   }
 
-  return { lembreteAtual, concluirAtual, adiarAmanhaAtual, fecharAtual }
+  return { lembretes, concluirTarefa, adiarAmanha, fechar }
 }
