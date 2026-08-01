@@ -56,6 +56,16 @@ function formatBRL(n) {
   }).format(n)
 }
 
+// "Valor total" precisa representar o valor mensal do contrato — pra
+// pagamento semanal isso é o valor por ciclo vezes a média de semanas por
+// mês (52 semanas / 12 meses ≈ 4,3). O valor bruto salvo no contrato
+// continua sendo o valor por ciclo (é o que a cobrança automática usa);
+// essa conversão é só de exibição.
+function valorMensalEquivalente(contrato) {
+  if (contrato.valorTotal == null) return contrato.valorTotal
+  return contrato.tipoPagamento === 'semanal' ? contrato.valorTotal * 4.3 : contrato.valorTotal
+}
+
 function hojeDateInput() {
   return new Date().toISOString().split('T')[0]
 }
@@ -796,7 +806,7 @@ export default function Contratos() {
                       {(c.itensLojas ?? []).length}
                     </td>
                     <td className="px-4 h-12 font-mono text-[13px] text-text-muted whitespace-nowrap">
-                      {formatBRL(c.valorTotal)}
+                      {formatBRL(valorMensalEquivalente(c))}
                     </td>
                     <td className="px-4 h-12 font-mono text-[13px] text-text-muted whitespace-nowrap">
                       {formatDate(c.dataInicio)}
@@ -830,7 +840,7 @@ export default function Contratos() {
                   <span className="text-[12px] text-text-subtle">{organizacaoMap[c.organizacaoId] ?? '—'}</span>
                 )}
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-text-muted font-mono">
-                  <span>{formatBRL(c.valorTotal)}</span>
+                  <span>{formatBRL(valorMensalEquivalente(c))}</span>
                   <span>{c.tipoPagamento === 'semanal' ? 'Semanal' : 'Mensal'}</span>
                   <span>{(c.itensLojas ?? []).length} loja{(c.itensLojas ?? []).length !== 1 ? 's' : ''}</span>
                 </div>
