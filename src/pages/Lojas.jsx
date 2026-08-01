@@ -1187,7 +1187,7 @@ function ClienteCell({ loja, clientes, clienteMap, onSelect, onClienteCriado }) 
     return () => document.removeEventListener('mousedown', onDocMouseDown)
   }, [open])
 
-  useEffect(() => { if (open) searchRef.current?.focus() }, [open])
+  useEffect(() => { if (open) searchRef.current?.focus({ preventScroll: true }) }, [open])
 
   function handleToggle() {
     if (!open) {
@@ -1317,7 +1317,7 @@ function EditableNomeCell({ loja, onSave }) {
   const inputRef = useRef(null)
 
   useEffect(() => { setValue(loja.nome ?? '') }, [loja.nome])
-  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+  useEffect(() => { if (editing) inputRef.current?.focus({ preventScroll: true }) }, [editing])
 
   function commit() {
     setEditing(false)
@@ -1367,7 +1367,7 @@ function EditableStatusCell({ loja, onSave }) {
   const [editing, setEditing] = useState(false)
   const selectRef = useRef(null)
 
-  useEffect(() => { if (editing) selectRef.current?.focus() }, [editing])
+  useEffect(() => { if (editing) selectRef.current?.focus({ preventScroll: true }) }, [editing])
 
   function handleChange(e) {
     const value = e.target.value
@@ -1407,7 +1407,7 @@ function EditableDiaRelatorioCell({ loja, onSave }) {
   const [editing, setEditing] = useState(false)
   const selectRef = useRef(null)
 
-  useEffect(() => { if (editing) selectRef.current?.focus() }, [editing])
+  useEffect(() => { if (editing) selectRef.current?.focus({ preventScroll: true }) }, [editing])
 
   function handleChange(e) {
     const value = e.target.value
@@ -1451,7 +1451,7 @@ function EditableDataInicioCell({ loja, onSave }) {
   const inputRef = useRef(null)
 
   useEffect(() => { setValue(tsToDateInput(loja.dataInicio)) }, [loja.dataInicio])
-  useEffect(() => { if (editing) inputRef.current?.focus() }, [editing])
+  useEffect(() => { if (editing) inputRef.current?.focus({ preventScroll: true }) }, [editing])
 
   function commit() {
     setEditing(false)

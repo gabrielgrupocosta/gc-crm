@@ -652,6 +652,7 @@ export default function Contratos() {
     const orgId = contrato.organizacaoId ?? user?.organizacaoId ?? null
     const idsOriginais = new Set((contrato.itensLojas ?? []).map(i => i.lojaId))
     const idsMantidos  = new Set()
+    const dataInicioContrato = form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null
 
     const itensLojas = []
     for (const item of form.lojasContrato) {
@@ -662,6 +663,10 @@ export default function Contratos() {
         plataformas: item.plataformas,
         plataforma:  item.plataformas[0] ?? '',
         status:      item.status,
+        // Mantém a loja sincronizada com a dataInicio do contrato — sem isso,
+        // lojas já existentes nunca recebiam essa data ao editar o contrato
+        // (só lojas novas criadas na própria edição ganhavam o campo).
+        ...(dataInicioContrato ? { dataInicio: dataInicioContrato } : {}),
       }
 
       if (item.lojaId) {
@@ -673,7 +678,6 @@ export default function Contratos() {
           ...dadosLoja,
           organizacaoId: orgId,
           clienteId: contrato.clienteId,
-          dataInicio: form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null,
           observacoes: '',
           criadoEm: serverTimestamp(),
         })
