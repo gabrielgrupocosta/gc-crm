@@ -478,10 +478,15 @@ const MESES_LABEL = [
 ]
 
 // Clampa o dia no último dia do mês quando o mês não tiver esse dia (ex:
-// contrato começado dia 31 → fevereiro vira dia 28/29).
-function diaSeguroDoMes(ano, mes, dia) {
+// contrato começado dia 31 → fevereiro vira dia 28/29). Preserva o horário de
+// `horaRef` (a dataInicio original) em vez de cair em meia-noite UTC — sem
+// isso, a data gerada perde o offset de meia-noite-Brasil e o Financeiro
+// exibe o vencimento um dia adiantado.
+function diaSeguroDoMes(ano, mes, dia, horaRef) {
   const ultimoDia = new Date(ano, mes + 1, 0).getDate()
-  return new Date(ano, mes, Math.min(dia, ultimoDia))
+  const d = new Date(ano, mes, Math.min(dia, ultimoDia))
+  if (horaRef) d.setHours(horaRef.getHours(), horaRef.getMinutes(), horaRef.getSeconds(), horaRef.getMilliseconds())
+  return d
 }
 
 // Janela de geração — nunca cria cobrança com vencimento no passado (evita
@@ -524,7 +529,7 @@ function gerarCiclosContrato(dataInicio, tipoPagamento, desde, ate, diaVenciment
     const diaAncora = dataInicio.getDate()
     let ano = dataInicio.getFullYear()
     let mes = dataInicio.getMonth()
-    let cursor = diaSeguroDoMes(ano, mes, diaAncora)
+    let cursor = diaSeguroDoMes(ano, mes, diaAncora, dataInicio)
     while (cursor <= ate) {
       if (cursor >= desde) {
         ciclos.push({
@@ -535,7 +540,7 @@ function gerarCiclosContrato(dataInicio, tipoPagamento, desde, ate, diaVenciment
       }
       mes += 1
       if (mes > 11) { mes = 0; ano += 1 }
-      cursor = diaSeguroDoMes(ano, mes, diaAncora)
+      cursor = diaSeguroDoMes(ano, mes, diaAncora, dataInicio)
     }
   }
   return ciclos
