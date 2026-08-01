@@ -3,8 +3,12 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { geoMercator, geoPath } from 'd3-geo'
 import html2canvas from 'html2canvas'
-import { X, Download, Loader2 } from 'lucide-react'
+import { X, Download, Loader2, Plus, Minus, Maximize2, ChevronDown, ChevronRight } from 'lucide-react'
 import { UF_POR_CODAREA, UF_INFO, REGIOES_ORDEM, normalizarUF } from '../../utils/brasil'
+
+const ZOOM_MIN = 1
+const ZOOM_MAX = 4
+const ZOOM_PASSO = 0.25
 
 const MALHA_URL = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima'
 
@@ -39,6 +43,63 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
   const [exporting, setExporting] = useState(false)
   const captureRef = useRef(null)
 
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const arrastandoMapaRef = useRef(false)
+  const inicioArrastoRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
+  const mapaContainerRef = useRef(null)
+
+  const [hoverPonto, setHoverPonto] = useState(null)
+  const [ufsColapsados, setUfsColapsados] = useState(() => new Set())
+
+  function toggleUf(uf) {
+    setUfsColapsados(prev => {
+      const next = new Set(prev)
+      if (next.has(uf)) next.delete(uf)
+      else next.add(uf)
+      return next
+    })
+  }
+
+  function handlePontoEnter(e, ponto) {
+    const rect = mapaContainerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setHoverPonto({ nome: ponto.nome, left: e.clientX - rect.left, top: e.clientY - rect.top })
+  }
+  function handlePontoLeave() {
+    setHoverPonto(null)
+  }
+
+  function aplicarZoom(novoZoom) {
+    const z = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, novoZoom))
+    setZoom(z)
+    if (z === ZOOM_MIN) setPan({ x: 0, y: 0 })
+  }
+  function handleZoomIn() { aplicarZoom(+(zoom + ZOOM_PASSO).toFixed(2)) }
+  function handleZoomOut() { aplicarZoom(+(zoom - ZOOM_PASSO).toFixed(2)) }
+  function handleZoomReset() { setZoom(1); setPan({ x: 0, y: 0 }) }
+
+  function handleWheelMapa(e) {
+    e.preventDefault()
+    aplicarZoom(+(zoom + (e.deltaY > 0 ? -ZOOM_PASSO : ZOOM_PASSO)).toFixed(2))
+  }
+  function handleMapaPointerDown(e) {
+    if (zoom === ZOOM_MIN) return
+    arrastandoMapaRef.current = true
+    inicioArrastoRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }
+  function handleMapaPointerMove(e) {
+    if (!arrastandoMapaRef.current) return
+    setPan({
+      x: inicioArrastoRef.current.panX + (e.clientX - inicioArrastoRef.current.x),
+      y: inicioArrastoRef.current.panY + (e.clientY - inicioArrastoRef.current.y),
+    })
+  }
+  function handleMapaPointerUp() {
+    arrastandoMapaRef.current = false
+  }
+
   useEffect(() => {
     if (!isOpen || geoData) return
     setLoading(true)
@@ -68,6 +129,26 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
     return REGIOES_ORDEM.filter(r => set.has(r))
   }, [ufsAtendidas])
 
+  // Cidades atendidas, agrupadas por UF — cada loja com estado + cidade
+  // preenchidos vira uma linha na lista (2 lojas na mesma cidade somam count).
+  const cidadesPorUf = useMemo(() => {
+    const map = {}
+    ;(lojas ?? []).forEach(l => {
+      const uf = normalizarUF(l.endereco?.estado)
+      const cidade = (l.endereco?.cidade ?? '').trim()
+      if (!uf || !cidade) return
+      map[uf] = map[uf] ?? {}
+      map[uf][cidade] = (map[uf][cidade] ?? 0) + 1
+    })
+    const resultado = {}
+    Object.entries(map).forEach(([uf, cidades]) => {
+      resultado[uf] = Object.entries(cidades)
+        .map(([cidade, count]) => ({ cidade, count }))
+        .sort((a, b) => a.cidade.localeCompare(b.cidade, 'pt-BR'))
+    })
+    return resultado
+  }, [lojas])
+
   const { pathFor, project, viewBox } = useMemo(() => {
     if (!geoData) return { pathFor: () => '', project: () => null, viewBox: '0 0 520 520' }
     const width = 520, height = 520
@@ -87,7 +168,7 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
       .filter(l => l.endereco?.lat != null && l.endereco?.lng != null)
       .map(l => {
         const xy = project(l.endereco.lng, l.endereco.lat)
-        return xy ? { id: l.id, x: xy[0], y: xy[1] } : null
+        return xy ? { id: l.id, x: xy[0], y: xy[1], nome: l.nome ?? 'Loja' } : null
       })
       .filter(Boolean)
   }, [lojas, geoData, project])
@@ -95,13 +176,26 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
   async function handleExportar() {
     if (!captureRef.current) return
     setExporting(true)
+    // A imagem exportada sempre sai com o mapa inteiro visível, independente
+    // do zoom/pan que a pessoa deixou na tela — restaura a visão depois.
+    const zoomAntes = zoom, panAntes = pan
+    const precisaResetar = zoom !== 1
+    if (precisaResetar) {
+      setZoom(1)
+      setPan({ x: 0, y: 0 })
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+    }
     try {
-      const canvas = await html2canvas(captureRef.current, { backgroundColor: '#FFFFFF', scale: 2 })
+      const canvas = await html2canvas(captureRef.current, {
+        backgroundColor: '#FFFFFF', scale: 2,
+        ignoreElements: el => el.classList?.contains('no-capture'),
+      })
       const link = document.createElement('a')
       link.download = 'ihubfood-regioes-atendidas.png'
       link.href = canvas.toDataURL('image/png')
       link.click()
     } finally {
+      if (precisaResetar) { setZoom(zoomAntes); setPan(panAntes) }
       setExporting(false)
     }
   }
@@ -202,7 +296,7 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
                   </div>
 
                   <p style={{ fontSize: '11px', fontWeight: 600, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-                    Estados atendidos ({Object.keys(ufsAtendidas).length})
+                    Estados e cidades atendidos ({Object.keys(ufsAtendidas).length})
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flex: 1, overflowY: 'auto' }}>
                     {REGIOES_ORDEM.filter(r => regioesAtendidas.includes(r)).map(regiao => (
@@ -213,12 +307,35 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
                         {Object.keys(ufsAtendidas)
                           .filter(uf => UF_INFO[uf]?.regiao === regiao)
                           .sort((a, b) => UF_INFO[a].nome.localeCompare(UF_INFO[b].nome, 'pt-BR'))
-                          .map(uf => (
-                            <div key={uf} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0' }}>
-                              <span style={{ fontSize: '13px', color: '#111111' }}>{UF_INFO[uf].nome}</span>
-                              <span className="font-mono" style={{ fontSize: '11px', color: '#999999' }}>{ufsAtendidas[uf]}</span>
-                            </div>
-                          ))}
+                          .map(uf => {
+                            const colapsado = ufsColapsados.has(uf)
+                            return (
+                              <div key={uf} style={{ padding: '4px 0' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleUf(uf)}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                                    background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                                  }}
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {colapsado
+                                      ? <ChevronRight size={12} strokeWidth={2} color="#BBBBBB" />
+                                      : <ChevronDown size={12} strokeWidth={2} color="#BBBBBB" />}
+                                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111' }}>{UF_INFO[uf].nome}</span>
+                                  </span>
+                                  <span className="font-mono" style={{ fontSize: '11px', color: '#999999' }}>{ufsAtendidas[uf]}</span>
+                                </button>
+                                {!colapsado && (cidadesPorUf[uf] ?? []).map(({ cidade, count }) => (
+                                  <div key={cidade} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0 2px 16px' }}>
+                                    <span style={{ fontSize: '12px', color: '#666666' }}>{cidade}</span>
+                                    <span className="font-mono" style={{ fontSize: '11px', color: '#BBBBBB' }}>{count}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })}
                       </div>
                     ))}
                   </div>
@@ -229,8 +346,28 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
                 </div>
 
                 {/* Mapa */}
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backgroundColor: '#FCFCFC' }}>
-                  <svg viewBox={viewBox} style={{ width: '100%', maxWidth: '480px', height: 'auto' }}>
+                <div
+                  ref={mapaContainerRef}
+                  style={{
+                    flex: 1, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    padding: '20px', backgroundColor: '#FCFCFC', overflow: 'hidden',
+                    cursor: zoom > 1 ? (arrastandoMapaRef.current ? 'grabbing' : 'grab') : 'default',
+                  }}
+                  onWheel={handleWheelMapa}
+                  onPointerDown={handleMapaPointerDown}
+                  onPointerMove={handleMapaPointerMove}
+                  onPointerUp={handleMapaPointerUp}
+                  onPointerLeave={handleMapaPointerUp}
+                >
+                  <svg
+                    viewBox={viewBox}
+                    style={{
+                      width: '100%', maxWidth: '480px', height: 'auto',
+                      transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                      transformOrigin: 'center center',
+                      touchAction: 'none',
+                    }}
+                  >
                     {geoData?.features.map(feature => {
                       const uf = UF_POR_CODAREA[feature.properties.codarea]
                       const atendida = uf && ufsAtendidas[uf] > 0
@@ -255,9 +392,91 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
                         fill="#111111"
                         stroke="#FFFFFF"
                         strokeWidth={1.4}
+                        style={{ cursor: 'pointer' }}
+                        onMouseEnter={e => handlePontoEnter(e, p)}
+                        onMouseMove={e => handlePontoEnter(e, p)}
+                        onMouseLeave={handlePontoLeave}
                       />
                     ))}
                   </svg>
+
+                  {hoverPonto && (
+                    <div
+                      className="no-capture"
+                      style={{
+                        position: 'absolute', left: `${hoverPonto.left}px`, top: `${hoverPonto.top}px`,
+                        transform: 'translate(-50%, -130%)', zIndex: 3, pointerEvents: 'none',
+                        backgroundColor: '#111111', color: '#FFFFFF', fontSize: '11px', fontWeight: 500,
+                        padding: '4px 9px', borderRadius: '6px', whiteSpace: 'nowrap',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                      }}
+                    >
+                      {hoverPonto.nome}
+                    </div>
+                  )}
+
+                  {/* Controles de zoom */}
+                  <div
+                    className="no-capture"
+                    style={{
+                      position: 'absolute', bottom: '14px', right: '14px', zIndex: 2,
+                      display: 'flex', flexDirection: 'column', gap: '1px',
+                      backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '8px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)', overflow: 'hidden',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={handleZoomIn}
+                      disabled={zoom >= ZOOM_MAX}
+                      aria-label="Aumentar zoom"
+                      style={{
+                        width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'none', border: 'none', cursor: zoom >= ZOOM_MAX ? 'default' : 'pointer',
+                        color: zoom >= ZOOM_MAX ? '#DDDDDD' : '#666666', borderBottom: '1px solid #F0F0F0',
+                      }}
+                    >
+                      <Plus size={14} strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleZoomOut}
+                      disabled={zoom <= ZOOM_MIN}
+                      aria-label="Diminuir zoom"
+                      style={{
+                        width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'none', border: 'none', cursor: zoom <= ZOOM_MIN ? 'default' : 'pointer',
+                        color: zoom <= ZOOM_MIN ? '#DDDDDD' : '#666666', borderBottom: '1px solid #F0F0F0',
+                      }}
+                    >
+                      <Minus size={14} strokeWidth={2} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleZoomReset}
+                      disabled={zoom === 1}
+                      aria-label="Restaurar zoom"
+                      style={{
+                        width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'none', border: 'none', cursor: zoom === 1 ? 'default' : 'pointer',
+                        color: zoom === 1 ? '#DDDDDD' : '#666666',
+                      }}
+                    >
+                      <Maximize2 size={12} strokeWidth={2} />
+                    </button>
+                  </div>
+                  {zoom > 1 && (
+                    <span
+                      className="font-mono no-capture"
+                      style={{
+                        position: 'absolute', bottom: '14px', left: '14px', zIndex: 2,
+                        fontSize: '11px', color: '#999999', backgroundColor: '#FFFFFF',
+                        border: '1px solid #E8E8E8', borderRadius: '999px', padding: '2px 10px',
+                      }}
+                    >
+                      {Math.round(zoom * 100)}%
+                    </span>
+                  )}
                 </div>
               </div>
             )}
