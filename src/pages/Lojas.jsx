@@ -17,6 +17,7 @@ import ConfirmModal from '../components/UI/ConfirmModal'
 import ImageUpload from '../components/UI/ImageUpload'
 import LojaSelect from '../components/UI/LojaSelect'
 import ClienteSelect from '../components/UI/ClienteSelect'
+import { parseLocalDate } from '../utils/format'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1809,7 +1810,7 @@ export default function Lojas() {
       gestorId:     form.gestorId,
       segmento:     form.segmento.trim(),
       status:       form.status,
-      dataInicio:   form.dataInicio ? Timestamp.fromDate(new Date(form.dataInicio)) : null,
+      dataInicio:   form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null,
       dataCancelamento,
       observacoes:  form.observacoes.trim(),
       diaRelatorio: form.diaRelatorio || null,
@@ -1886,12 +1887,12 @@ export default function Lojas() {
       telefone:    form.telefone.trim(),
       email:       form.email.trim().toLowerCase(),
       status:      form.status,
-      dataInicio:  form.dataInicio ? Timestamp.fromDate(new Date(form.dataInicio)) : null,
+      dataInicio:  form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null,
       observacoes: form.observacoes.trim(),
       criadoEm:    serverTimestamp(),
     })
     if (novasLojas.length) {
-      const dataInicioLoja = form.dataInicio ? Timestamp.fromDate(new Date(form.dataInicio)) : null
+      const dataInicioLoja = form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null
       // Só o master passa por aqui vendo múltiplas organizações — o
       // formulário de "novo cliente" não expõe seletor de organização, então
       // a loja nasce vinculada à organização do admin_org logado, ou sem
@@ -2153,7 +2154,7 @@ export default function Lojas() {
                       <td className="px-4" style={{ height: '36px' }}>
                         <EditableDataInicioCell
                           loja={loja}
-                          onSave={v => handleInlineUpdate(loja, 'dataInicio', v ? Timestamp.fromDate(new Date(v)) : null)}
+                          onSave={v => handleInlineUpdate(loja, 'dataInicio', v ? Timestamp.fromDate(parseLocalDate(v)) : null)}
                         />
                       </td>
                       <td className="px-4" style={{ height: '36px', textAlign: 'right', whiteSpace: 'nowrap' }}>

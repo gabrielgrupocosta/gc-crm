@@ -11,6 +11,7 @@ import Modal from '../components/UI/Modal'
 import ConfirmModal from '../components/UI/ConfirmModal'
 import Skeleton from '../components/UI/Skeleton'
 import LojasContratoBuilder, { EMPTY_LOJA_CONTRATO_ITEM, somaValorLojas } from '../components/UI/LojasContratoBuilder'
+import { parseLocalDate } from '../utils/format'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -610,7 +611,7 @@ export default function Contratos() {
     }
     const valorTotal = somaValorLojas(form.lojasContrato)
 
-    const dataInicioDate = form.dataInicio ? new Date(form.dataInicio) : new Date()
+    const dataInicioDate = form.dataInicio ? parseLocalDate(form.dataInicio) : new Date()
     const agora    = new Date()
     const imediato = dataInicioDate <= agora
 
@@ -692,7 +693,7 @@ export default function Contratos() {
         : null,
       itensLojas,
       valorTotal,
-      dataInicio: Timestamp.fromDate(new Date(form.dataInicio)),
+      dataInicio: Timestamp.fromDate(parseLocalDate(form.dataInicio)),
       observacoes: form.observacoes.trim() || null,
     })
 

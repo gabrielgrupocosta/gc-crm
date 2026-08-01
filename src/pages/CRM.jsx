@@ -11,6 +11,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
 import Skeleton from '../components/UI/Skeleton'
+import { parseLocalDate } from '../utils/format'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -765,7 +766,7 @@ export default function CRM() {
 
   async function handleSalvarProximaAcao(leadId, descricao, dataStr) {
     const proximaAcao = dataStr && descricao.trim()
-      ? { descricao: descricao.trim(), data: Timestamp.fromDate(new Date(dataStr)) }
+      ? { descricao: descricao.trim(), data: Timestamp.fromDate(parseLocalDate(dataStr)) }
       : null
     await updateDoc(doc(db, COLLECTIONS.CRM_LEADS, leadId), { proximaAcao, dataUltimaAtualizacao: serverTimestamp() })
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, proximaAcao } : l))

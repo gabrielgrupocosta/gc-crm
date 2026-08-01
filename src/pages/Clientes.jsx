@@ -13,6 +13,7 @@ import Skeleton from '../components/UI/Skeleton'
 import ConfirmModal from '../components/UI/ConfirmModal'
 import LojaSelect from '../components/UI/LojaSelect'
 import LojasContratoBuilder, { EMPTY_LOJA_CONTRATO_ITEM, somaValorLojas } from '../components/UI/LojasContratoBuilder'
+import { parseLocalDate } from '../utils/format'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -749,7 +750,7 @@ export default function Clientes() {
 
   async function handleCriarContrato(cliente, form) {
     const orgId = cliente.organizacaoId ?? (isSuperAdmin ? null : user?.organizacaoId ?? null)
-    const dataInicioDate = form.dataInicio ? new Date(form.dataInicio) : new Date()
+    const dataInicioDate = form.dataInicio ? parseLocalDate(form.dataInicio) : new Date()
     const agora = new Date()
     const imediato = dataInicioDate <= agora
 
@@ -812,7 +813,7 @@ export default function Clientes() {
       telefone:    form.telefone.trim(),
       email:       form.email.trim().toLowerCase(),
       status:      form.status,
-      dataInicio:  form.dataInicio ? Timestamp.fromDate(new Date(form.dataInicio)) : null,
+      dataInicio:  form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null,
       observacoes: form.observacoes.trim(),
     }
 
