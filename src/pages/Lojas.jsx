@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Layers } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
   collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
@@ -17,6 +17,8 @@ import ConfirmModal from '../components/UI/ConfirmModal'
 import ImageUpload from '../components/UI/ImageUpload'
 import LojaSelect from '../components/UI/LojaSelect'
 import ClienteSelect from '../components/UI/ClienteSelect'
+import EnderecoFields, { EMPTY_ENDERECO } from '../components/UI/EnderecoFields'
+import MapaLojasModal from '../components/UI/MapaLojasModal'
 import { parseLocalDate } from '../utils/format'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ const EMPTY_FORM = {
   segmento: '', status: 'Ativa', dataInicio: '', observacoes: '',
   diaRelatorio: '',
   preGestao30dias: '', preGestao7dias: '', preGestaoValorVendas: '', preGestaoTotalFaturamento: '',
+  endereco: EMPTY_ENDERECO,
 }
 
 const EMPTY_CLIENTE_FORM = {
@@ -514,6 +517,7 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organiza
       preGestaoValorVendas:      loja.preGestao?.valorVendas        != null ? String(loja.preGestao.valorVendas)        : '',
       preGestaoTotalFaturamento: loja.preGestao?.totalFaturamento   != null ? String(loja.preGestao.totalFaturamento)   :
                                  loja.preGestao?.repasseTotal       != null ? String(loja.preGestao.repasseTotal)       : '',
+      endereco:         loja.endereco ? { ...EMPTY_ENDERECO, ...loja.endereco } : EMPTY_ENDERECO,
     } : {
       ...EMPTY_FORM,
       // admin_org só enxerga a própria organização (única opção na lista) —
@@ -706,6 +710,8 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organiza
             </select>
           </div>
         )}
+
+        <EnderecoFields value={form.endereco} onChange={v => set('endereco', v)} />
 
         {/* Observações */}
         <div className="flex flex-col gap-1.5">
@@ -1616,6 +1622,7 @@ export default function Lojas() {
   const [filtroStatus, setFiltroStatus] = useState('')
 
   const [modalOpen,        setModalOpen]        = useState(false)
+  const [mapaOpen,         setMapaOpen]          = useState(false)
   const [editingLoja,      setEditingLoja]       = useState(null)
   const [clienteModalOpen, setClienteModalOpen]  = useState(false)
   const [expandedLojaId,   setExpandedLojaId]    = useState(null)
@@ -1814,6 +1821,7 @@ export default function Lojas() {
       dataCancelamento,
       observacoes:  form.observacoes.trim(),
       diaRelatorio: form.diaRelatorio || null,
+      endereco:     form.endereco?.cep || form.endereco?.cidade ? form.endereco : null,
       preGestao: {
         faturamento30dias: parseMoney(form.preGestao30dias),
         faturamento7dias:  parseMoney(form.preGestao7dias),
@@ -2006,6 +2014,10 @@ export default function Lojas() {
       <div className="page-header flex flex-col gap-3 sm:flex-row sm:items-center justify-between">
         <h1 className="page-title" style={{ marginBottom: 0 }}>Lojas</h1>
         <div className="flex items-center gap-2">
+          <button onClick={() => setMapaOpen(true)} className="btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2 h-11 sm:h-8">
+            <MapPin size={13} strokeWidth={2} />
+            Mapa das lojas
+          </button>
           <button onClick={() => setClienteModalOpen(true)} className="btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2 h-11 sm:h-8">
             <Plus size={13} strokeWidth={2} />
             Novo cliente
@@ -2016,6 +2028,14 @@ export default function Lojas() {
           </button>
         </div>
       </div>
+
+      <MapaLojasModal
+        isOpen={mapaOpen}
+        onClose={() => setMapaOpen(false)}
+        lojas={lojas}
+        clienteMap={clienteMap}
+        gestorMap={gestorMap}
+      />
 
       {/* Filtros */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-4">
