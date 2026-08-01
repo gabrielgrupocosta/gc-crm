@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, Search, X, ChevronDown, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, MapPin } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
   collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
@@ -1454,6 +1454,7 @@ export default function Lojas() {
   const [editingLoja,      setEditingLoja]       = useState(null)
   const [clienteModalOpen, setClienteModalOpen]  = useState(false)
   const [deletingLoja,     setDeletingLoja]      = useState(null)
+  const [clientesColapsados, setClientesColapsados] = useState(() => new Set())
 
   const [sortCol, setSortCol] = useState('nome')
   const [sortDir, setSortDir] = useState('asc')
@@ -1626,6 +1627,22 @@ export default function Lojas() {
 
     return linhas
   }, [lojasFiltradas, lojasOrdenadas, sortCol, sortDir, clienteMap])
+
+  // Some as lojas de um cliente colapsado — só o cabeçalho do grupo continua
+  // visível, com o nome do cliente.
+  const linhasVisiveis = useMemo(
+    () => linhasExibicao.filter(item => !(item.emGrupo && clientesColapsados.has(item.loja.clienteId))),
+    [linhasExibicao, clientesColapsados]
+  )
+
+  function toggleClienteColapsado(clienteId) {
+    setClientesColapsados(prev => {
+      const next = new Set(prev)
+      if (next.has(clienteId)) next.delete(clienteId)
+      else next.add(clienteId)
+      return next
+    })
+  }
 
   // ─── Save ───────────────────────────────────────────────────────────────────
 
@@ -1917,33 +1934,27 @@ export default function Lojas() {
                 </tr>
               </thead>
               <motion.tbody variants={listVariants} initial="initial" animate="animate">
-                {linhasExibicao.map(item => {
+                {linhasVisiveis.map(item => {
                   if (item.tipo === 'grupo') {
+                    const colapsado = clientesColapsados.has(item.clienteId)
                     return (
                       <tr key={`cliente-${item.clienteId}`}>
                         <td colSpan={8} style={{ padding: 0 }}>
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            backgroundColor: '#F5F5F5', padding: '8px 12px',
-                            borderRadius: '8px 8px 0 0', marginTop: '12px',
-                            borderLeft: '3px solid #D8D8D8',
-                          }}>
-                            <div style={{
-                              width: '20px', height: '20px', borderRadius: '6px',
-                              backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                            }}>
-                              <Layers size={11} strokeWidth={2} style={{ color: '#888888' }} />
-                            </div>
-                            <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#111111' }}>{item.clienteNome}</span>
-                            <span style={{
-                              fontSize: '10.5px', fontWeight: 500, color: '#999999',
-                              backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
-                              borderRadius: '999px', padding: '1px 8px',
-                            }}>
-                              {item.totalLojas} lojas
-                            </span>
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleClienteColapsado(item.clienteId)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '6px', width: '100%',
+                              background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
+                              padding: '6px 16px', borderBottom: '1px solid #F3F3F3',
+                            }}
+                          >
+                            {colapsado
+                              ? <ChevronRight size={12} strokeWidth={2} color="#BBBBBB" />
+                              : <ChevronDown size={12} strokeWidth={2} color="#BBBBBB" />}
+                            <span style={{ fontSize: '12px', fontWeight: 500, color: '#666666' }}>{item.clienteNome}</span>
+                            <span style={{ fontSize: '11px', color: '#BBBBBB' }}>· {item.totalLojas} lojas</span>
+                          </button>
                         </td>
                       </tr>
                     )
@@ -1955,14 +1966,12 @@ export default function Lojas() {
                       key={loja.id}
                       variants={itemVariants}
                       className="table-row-base"
-                      style={{ backgroundColor: item.emGrupo ? 'rgba(0,0,0,0.014)' : undefined }}
                     >
                       <td
                         className="px-4"
                         style={{
                           height: '36px', fontSize: '13px', color: '#111111', fontWeight: 500,
                           paddingLeft: item.emGrupo ? '24px' : undefined,
-                          borderLeft: item.emGrupo ? '3px solid #D8D8D8' : undefined,
                         }}
                       >
                         <EditableNomeCell loja={loja} onSave={v => handleInlineUpdate(loja, 'nome', v)} />
@@ -2031,30 +2040,23 @@ export default function Lojas() {
 
           {/* Mobile: cards (leitura + ações via modal — edição inline fica só no desktop) */}
           <motion.div className="sm:hidden flex flex-col" variants={listVariants} initial="initial" animate="animate">
-            {linhasExibicao.map(item => {
+            {linhasVisiveis.map(item => {
               if (item.tipo === 'grupo') {
+                const colapsado = clientesColapsados.has(item.clienteId)
                 return (
-                  <div
+                  <button
                     key={`cliente-${item.clienteId}`}
-                    className="flex items-center gap-2 px-4 py-2.5"
-                    style={{ backgroundColor: '#F5F5F5', marginTop: '8px', borderLeft: '3px solid #D8D8D8' }}
+                    type="button"
+                    onClick={() => toggleClienteColapsado(item.clienteId)}
+                    className="flex items-center gap-2 px-4 py-2.5 w-full"
+                    style={{ background: 'none', border: 'none', borderBottom: '1px solid #F3F3F3', textAlign: 'left' }}
                   >
-                    <div style={{
-                      width: '20px', height: '20px', borderRadius: '6px',
-                      backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                    }}>
-                      <Layers size={11} strokeWidth={2} style={{ color: '#888888' }} />
-                    </div>
-                    <span className="text-[12.5px] font-semibold text-text-primary">{item.clienteNome}</span>
-                    <span style={{
-                      fontSize: '10.5px', fontWeight: 500, color: '#999999',
-                      backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8',
-                      borderRadius: '999px', padding: '1px 8px',
-                    }}>
-                      {item.totalLojas} lojas
-                    </span>
-                  </div>
+                    {colapsado
+                      ? <ChevronRight size={12} strokeWidth={2} color="#BBBBBB" />
+                      : <ChevronDown size={12} strokeWidth={2} color="#BBBBBB" />}
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#666666' }}>{item.clienteNome}</span>
+                    <span style={{ fontSize: '11px', color: '#BBBBBB' }}>· {item.totalLojas} lojas</span>
+                  </button>
                 )
               }
 
@@ -2067,11 +2069,7 @@ export default function Lojas() {
                   key={loja.id}
                   variants={itemVariants}
                   className="p-4 border-b border-border-subtle last:border-0 flex flex-col gap-2"
-                  style={{
-                    paddingLeft: item.emGrupo ? '28px' : undefined,
-                    borderLeft: item.emGrupo ? '3px solid #D8D8D8' : undefined,
-                    backgroundColor: item.emGrupo ? 'rgba(0,0,0,0.014)' : undefined,
-                  }}
+                  style={{ paddingLeft: item.emGrupo ? '28px' : undefined }}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[14px] text-text-primary font-medium truncate">{loja.nome}</span>
