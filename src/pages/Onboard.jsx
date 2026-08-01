@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { ListChecks } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
-  collection, doc, getDoc, query, where, getDocs, updateDoc, serverTimestamp,
+  collection, doc, getDoc, query, where, getDocs, updateDoc, addDoc, serverTimestamp,
 } from '../services/firebase'
 import { useToast } from '../components/UI/Toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -941,7 +941,30 @@ export default function Onboard() {
       dataInicioGestao:  serverTimestamp(),
       status:            'Ativa',
     })
-    toast('Gestão iniciada — loja ativa.', 'success')
+
+    // Transfere o checklist de início de gestão pro checklist de Ações da
+    // loja — cada item vira uma ação já concluída (se estava marcado) ou
+    // pendente (se não foi feito ainda), pra não se perder o que ficou
+    // faltando assim que a loja sai do onboard.
+    const checklist = loja.onboardChecklist ?? EMPTY_CHECKLIST
+    const gestorNome = gestorMap[loja.gestorId]?.nome ?? ''
+    await Promise.all(CHECKLIST_ITENS.map(item => {
+      const feito = !!checklist[item.key]
+      return addDoc(collection(db, COLLECTIONS.ACOES), {
+        lojaId:        loja.id,
+        gestorId:      loja.gestorId || null,
+        gestorNome,
+        organizacaoId: loja.organizacaoId ?? null,
+        descricao:     item.label,
+        plataforma:    null,
+        origem:        'onboard_checklist',
+        status:        feito ? 'concluida' : 'pendente',
+        concluidoEm:   feito ? serverTimestamp() : null,
+        timestamp:     serverTimestamp(),
+      })
+    }))
+
+    toast('Gestão iniciada — loja ativa. Checklist transferido pra Ações.', 'success')
     await loadAll()
   }
 

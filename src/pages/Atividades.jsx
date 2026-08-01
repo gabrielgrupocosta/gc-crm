@@ -535,6 +535,19 @@ export default function Atividades() {
     }
   }
 
+  // Pendentes sempre primeiro (mais recente primeiro dentro do grupo),
+  // concluídas por último — assim que o checklist de onboard é transferido
+  // pra cá, o que ainda falta fica visível no topo em vez de misturado com
+  // o que já foi feito.
+  const acoesOrdenadas = useMemo(() => {
+    return [...acoes].sort((a, b) => {
+      const aConcluida = a.status === 'concluida'
+      const bConcluida = b.status === 'concluida'
+      if (aConcluida !== bConcluida) return aConcluida ? 1 : -1
+      return tsMillis(b.timestamp) - tsMillis(a.timestamp)
+    })
+  }, [acoes]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Tarefas ────────────────────────────────────────────────────────────────
 
   async function loadTarefas() {
@@ -720,13 +733,13 @@ export default function Atividades() {
                 <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
                   {loadingAcoes ? (
                     <Skeleton.Table rows={5} cols={2} />
-                  ) : acoes.length === 0 ? (
+                  ) : acoesOrdenadas.length === 0 ? (
                     <p className="text-[13px] text-text-subtle text-center py-10">
                       Nenhuma ação encontrada.
                     </p>
                   ) : (
                     <motion.div variants={listVariants} initial="initial" animate="animate">
-                      {acoes.map((a, idx) => {
+                      {acoesOrdenadas.map((a, idx) => {
                         const podeExcluir = isAdmin || a.gestorId === user.uid
                         const isChecklist = a.status != null
                         const concluida = a.status === 'concluida'
@@ -737,7 +750,7 @@ export default function Atividades() {
                             style={{
                               display: 'flex', alignItems: 'flex-start', gap: '12px',
                               padding: '12px 16px', opacity: concluida ? 0.6 : 1,
-                              borderBottom: idx < acoes.length - 1 ? '1px solid #F3F3F3' : 'none',
+                              borderBottom: idx < acoesOrdenadas.length - 1 ? '1px solid #F3F3F3' : 'none',
                             }}
                           >
                             {isChecklist && (
@@ -780,6 +793,17 @@ export default function Atividades() {
                                     }}
                                   >
                                     Relatório Semanal
+                                  </span>
+                                )}
+                                {a.origem === 'onboard_checklist' && (
+                                  <span
+                                    className="text-[10px] font-medium shrink-0"
+                                    style={{
+                                      padding: '1px 6px', borderRadius: '10px',
+                                      color: '#2563EB', backgroundColor: '#EFF6FF',
+                                    }}
+                                  >
+                                    Checklist Onboard
                                   </span>
                                 )}
                                 <span className="text-[12px] text-text-subtle">· {a.gestorNome || '—'}</span>
