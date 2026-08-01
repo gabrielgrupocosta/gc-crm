@@ -40,7 +40,7 @@ const STATUS_CONTRATO_LABEL = { ativo: 'Ativo', futuro: 'Futuro', encerrado: 'En
 
 const EMPTY_LOJA_FORM = {
   nome: '', gestorId: '', plataformas: [],
-  status: 'Ativa', observacoes: '',
+  status: 'Ativa', observacoes: '', entrarOnboard: true,
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -597,6 +597,16 @@ function ClienteModal({ isOpen, onClose, onSave, cliente, gestores, lojas, lojas
                 />
               </div>
 
+              <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={subForm.entrarOnboard}
+                  onChange={e => setSub('entrarOnboard', e.target.checked)}
+                  style={{ accentColor: '#E5322D' }}
+                />
+                <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
+              </label>
+
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   type="button"
@@ -769,6 +779,7 @@ export default function Clientes() {
         status:        item.status,
         dataInicio:    Timestamp.fromDate(dataInicioDate),
         observacoes:   '',
+        ...(item.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
       })
       const valorLoja = parseFloat(String(item.valor).replace(',', '.'))
@@ -847,6 +858,7 @@ export default function Clientes() {
         status:      l.status,
         dataInicio:  payload.dataInicio,
         observacoes: l.observacoes.trim(),
+        ...(l.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:    serverTimestamp(),
       }))
     })

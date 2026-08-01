@@ -51,6 +51,40 @@ function TileConformeZoom({ zoomInicial }) {
   return <TileLayer attribution={tile.attribution} url={tile.url} />
 }
 
+// Preenchimento translúcido (laranja da marca) nos estados com loja — visível
+// no zoom afastado (mapa do país inteiro) e vai sumindo conforme dá zoom,
+// até restar só o contorno colorido. Reagenda o estilo a cada zoomend porque
+// o Leaflet não recalcula sozinho um `style` que depende do zoom atual.
+const FILL_ZOOM_CHEIO = 5  // <= isso: preenchimento no máximo
+const FILL_ZOOM_VAZIO = 8  // >= isso: sem preenchimento, só contorno
+
+function opacidadePreenchimento(zoom) {
+  if (zoom <= FILL_ZOOM_CHEIO) return 0.3
+  if (zoom >= FILL_ZOOM_VAZIO) return 0
+  return 0.3 * (1 - (zoom - FILL_ZOOM_CHEIO) / (FILL_ZOOM_VAZIO - FILL_ZOOM_CHEIO))
+}
+
+function ContornoEstados({ geoData, ufsAtendidas, zoomInicial }) {
+  const [zoom, setZoom] = useState(zoomInicial)
+  useMapEvents({
+    zoomend(e) { setZoom(e.target.getZoom()) },
+  })
+
+  function estiloEstado(feature) {
+    const uf = UF_POR_CODAREA[feature.properties.codarea]
+    const atendida = uf && ufsAtendidas[uf] > 0
+    return {
+      color: atendida ? '#E5322D' : '#BBBBBB',
+      weight: atendida ? 2.5 : 1,
+      opacity: atendida ? 0.9 : 0.35,
+      fillColor: '#F97316',
+      fillOpacity: atendida ? opacidadePreenchimento(zoom) : 0,
+    }
+  }
+
+  return <GeoJSON data={geoData} style={estiloEstado} interactive={false} />
+}
+
 function FitBounds({ pontos }) {
   const map = useMap()
   useMemo(() => {
@@ -131,20 +165,6 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
     })
     return resultado
   }, [lojas])
-
-  // Estilo do contorno de cada estado no mapa real — só a borda (sem
-  // preenchimento, pra não tampar o tile por baixo), destacada em vermelho
-  // da marca nos estados com pelo menos uma loja.
-  function estiloEstado(feature) {
-    const uf = UF_POR_CODAREA[feature.properties.codarea]
-    const atendida = uf && ufsAtendidas[uf] > 0
-    return {
-      color: atendida ? '#E5322D' : '#BBBBBB',
-      weight: atendida ? 2.5 : 1,
-      opacity: atendida ? 0.9 : 0.35,
-      fillOpacity: 0,
-    }
-  }
 
   const pontos = useMemo(() => {
     return (lojas ?? [])
@@ -294,7 +314,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
               )}
               <MapContainer center={BRASIL_CENTER} zoom={4} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
                 <TileConformeZoom zoomInicial={4} />
-                {geoData && <GeoJSON data={geoData} style={estiloEstado} interactive={false} />}
+                {geoData && <ContornoEstados geoData={geoData} ufsAtendidas={ufsAtendidas} zoomInicial={4} />}
                 <FitBounds pontos={pontos} />
                 {pontos.map(p => (
                   <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon}>

@@ -12,7 +12,7 @@ export const PLATAFORMA_COLORS = {
 }
 
 export const EMPTY_LOJA_CONTRATO_ITEM = {
-  nome: '', gestorId: '', plataformas: [], status: 'Ativa', valor: '',
+  nome: '', gestorId: '', plataformas: [], status: 'Ativa', valor: '', entrarOnboard: true,
 }
 
 // ─── PlataformaPills ──────────────────────────────────────────────────────────
@@ -162,6 +162,16 @@ export default function LojasContratoBuilder({ itens, onChange, gestores }) {
             <label className="field-label">Plataformas</label>
             <PlataformaPills value={item.plataformas} onChange={v => updateItem(idx, 'plataformas', v)} />
           </div>
+
+          <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={item.entrarOnboard ?? true}
+              onChange={e => updateItem(idx, 'entrarOnboard', e.target.checked)}
+              style={{ accentColor: '#E5322D' }}
+            />
+            <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
+          </label>
         </div>
       ))}
 

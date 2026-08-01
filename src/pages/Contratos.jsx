@@ -611,6 +611,7 @@ export default function Contratos() {
         status:        item.status,
         dataInicio:    Timestamp.fromDate(dataInicioDate),
         observacoes:   '',
+        ...(item.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
       })
       const valorLoja = parseFloat(String(item.valor).replace(',', '.'))
@@ -679,6 +680,7 @@ export default function Contratos() {
           organizacaoId: orgId,
           clienteId: contrato.clienteId,
           observacoes: '',
+          ...(item.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
           criadoEm: serverTimestamp(),
         })
         itensLojas.push({ lojaId: lojaRef.id, lojaNome: dadosLoja.nome, valor: isNaN(valorLoja) ? 0 : valorLoja })

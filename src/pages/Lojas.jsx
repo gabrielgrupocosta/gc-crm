@@ -67,6 +67,7 @@ const EMPTY_FORM = {
   diaRelatorio: '',
   preGestao30dias: '', preGestao7dias: '', preGestaoValorVendas: '', preGestaoTotalFaturamento: '',
   endereco: EMPTY_ENDERECO,
+  entrarOnboard: true,
 }
 
 const EMPTY_CLIENTE_FORM = {
@@ -76,7 +77,7 @@ const EMPTY_CLIENTE_FORM = {
 
 const EMPTY_LOJA_SUB = {
   nome: '', gestorId: '', plataformas: [],
-  status: 'Ativa', observacoes: '',
+  status: 'Ativa', observacoes: '', entrarOnboard: true,
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -469,6 +470,16 @@ function NovoClienteModal({ isOpen, onClose, onSave, gestores, lojas }) {
                 />
               </div>
 
+              <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={subForm.entrarOnboard}
+                  onChange={e => setSub('entrarOnboard', e.target.checked)}
+                  style={{ accentColor: '#E5322D' }}
+                />
+                <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
+              </label>
+
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button type="button"
                   onClick={() => { setSubOpen(false); setSubForm(EMPTY_LOJA_SUB) }}
@@ -709,6 +720,18 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organiza
               {DIAS_RELATORIO.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
             </select>
           </div>
+        )}
+
+        {!loja && (
+          <label className="flex items-center gap-2" style={{ cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.entrarOnboard}
+              onChange={e => set('entrarOnboard', e.target.checked)}
+              style={{ accentColor: '#E5322D' }}
+            />
+            <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
+          </label>
         )}
 
         <EnderecoFields value={form.endereco} onChange={v => set('endereco', v)} />
@@ -1871,7 +1894,7 @@ export default function Lojas() {
         nome:          `${basePayload.nome} — ${p}`,
         plataforma:    p,
         plataformas:   [p],
-        onboardStatus: 'dados_pendentes',
+        ...(form.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
       })))
       toast(`${form.plataformas.length} lojas criadas — uma por plataforma.`, 'success')
@@ -1880,7 +1903,7 @@ export default function Lojas() {
         ...basePayload,
         plataforma:    form.plataformas[0] ?? '',
         plataformas:   form.plataformas,
-        onboardStatus: 'dados_pendentes',
+        ...(form.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
       })
       toast('Loja criada.', 'success')
@@ -1916,7 +1939,7 @@ export default function Lojas() {
         status:        l.status,
         dataInicio:    dataInicioLoja,
         observacoes:   l.observacoes.trim(),
-        onboardStatus: 'dados_pendentes',
+        ...(l.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
       })))
     }
