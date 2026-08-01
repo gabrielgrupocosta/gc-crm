@@ -590,9 +590,15 @@ export default function Contratos() {
       orgId = cliente.organizacaoId ?? (isSuperAdmin ? null : user?.organizacaoId ?? null)
     }
 
+    const dataInicioDate = form.dataInicio ? parseLocalDate(form.dataInicio) : new Date()
+    const agora    = new Date()
+    const imediato = dataInicioDate <= agora
+
     // Cada linha de "lojas do contrato" vira uma loja nova vinculada ao
     // cliente — o valor de cada uma vai pro item do contrato, e a soma é o
-    // valorTotal (não existe mais um valor único pro contrato inteiro).
+    // valorTotal (não existe mais um valor único pro contrato inteiro). A
+    // loja nasce com a mesma dataInicio do contrato — sem isso, o "Tempo de
+    // contrato atual" da Carteira fica sem dado nenhum pra calcular.
     const itensLojas = []
     for (const item of form.lojasContrato) {
       const lojaRef = await addDoc(collection(db, COLLECTIONS.LOJAS), {
@@ -603,6 +609,7 @@ export default function Contratos() {
         plataformas:   item.plataformas,
         plataforma:    item.plataformas[0] ?? '',
         status:        item.status,
+        dataInicio:    Timestamp.fromDate(dataInicioDate),
         observacoes:   '',
         criadoEm:      serverTimestamp(),
       })
@@ -610,10 +617,6 @@ export default function Contratos() {
       itensLojas.push({ lojaId: lojaRef.id, lojaNome: item.nome.trim(), valor: isNaN(valorLoja) ? 0 : valorLoja })
     }
     const valorTotal = somaValorLojas(form.lojasContrato)
-
-    const dataInicioDate = form.dataInicio ? parseLocalDate(form.dataInicio) : new Date()
-    const agora    = new Date()
-    const imediato = dataInicioDate <= agora
 
     const contratosDoCliente = contratos.filter(c => c.clienteId === clienteId)
     const ativoAtual = contratosDoCliente.find(c => c.status === 'ativo')
@@ -670,6 +673,7 @@ export default function Contratos() {
           ...dadosLoja,
           organizacaoId: orgId,
           clienteId: contrato.clienteId,
+          dataInicio: form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null,
           observacoes: '',
           criadoEm: serverTimestamp(),
         })

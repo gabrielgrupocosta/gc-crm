@@ -767,6 +767,7 @@ export default function Clientes() {
         plataformas:   item.plataformas,
         plataforma:    item.plataformas[0] ?? '',
         status:        item.status,
+        dataInicio:    Timestamp.fromDate(dataInicioDate),
         observacoes:   '',
         criadoEm:      serverTimestamp(),
       })
