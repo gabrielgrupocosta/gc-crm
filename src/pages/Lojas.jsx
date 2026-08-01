@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Layers, MapPin, Image as ImageIcon } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
   collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
@@ -19,6 +19,7 @@ import LojaSelect from '../components/UI/LojaSelect'
 import ClienteSelect from '../components/UI/ClienteSelect'
 import EnderecoFields, { EMPTY_ENDERECO } from '../components/UI/EnderecoFields'
 import MapaLojasModal from '../components/UI/MapaLojasModal'
+import MapaInstitucionalModal from '../components/UI/MapaInstitucionalModal'
 import { parseLocalDate } from '../utils/format'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -1623,6 +1624,7 @@ export default function Lojas() {
 
   const [modalOpen,        setModalOpen]        = useState(false)
   const [mapaOpen,         setMapaOpen]          = useState(false)
+  const [mapaInstOpen,     setMapaInstOpen]      = useState(false)
   const [editingLoja,      setEditingLoja]       = useState(null)
   const [clienteModalOpen, setClienteModalOpen]  = useState(false)
   const [expandedLojaId,   setExpandedLojaId]    = useState(null)
@@ -2018,6 +2020,10 @@ export default function Lojas() {
             <MapPin size={13} strokeWidth={2} />
             Mapa das lojas
           </button>
+          <button onClick={() => setMapaInstOpen(true)} className="btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2 h-11 sm:h-8">
+            <ImageIcon size={13} strokeWidth={2} />
+            Mapa institucional
+          </button>
           <button onClick={() => setClienteModalOpen(true)} className="btn-secondary flex-1 sm:flex-none flex items-center justify-center gap-2 h-11 sm:h-8">
             <Plus size={13} strokeWidth={2} />
             Novo cliente
@@ -2035,6 +2041,12 @@ export default function Lojas() {
         lojas={lojas}
         clienteMap={clienteMap}
         gestorMap={gestorMap}
+      />
+
+      <MapaInstitucionalModal
+        isOpen={mapaInstOpen}
+        onClose={() => setMapaInstOpen(false)}
+        lojas={lojas}
       />
 
       {/* Filtros */}
