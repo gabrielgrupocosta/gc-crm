@@ -2,14 +2,15 @@ import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import { Plus, X, Phone, MessageSquare, Mail, Users as UsersIcon, FileText, Clock } from 'lucide-react'
+import { Plus, X, Phone, MessageSquare, Mail, Users as UsersIcon, FileText, Clock, Trash2 } from 'lucide-react'
 import {
   db, COLLECTIONS,
-  collection, doc, query, where, getDocs, addDoc, updateDoc, serverTimestamp, Timestamp, orderBy,
+  collection, doc, query, where, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp, orderBy,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
+import ConfirmModal from '../components/UI/ConfirmModal'
 import Skeleton from '../components/UI/Skeleton'
 import { parseLocalDate } from '../utils/format'
 
@@ -392,7 +393,7 @@ function FecharPerdidoModal({ lead, onClose, onConfirm }) {
 
 // ─── Modal: detalhe do lead ───────────────────────────────────────────────────
 
-function LeadDetailModal({ lead, onClose, responsavelNome, onSalvarProximaAcao, onRegistrarInteracao }) {
+function LeadDetailModal({ lead, onClose, responsavelNome, onSalvarProximaAcao, onRegistrarInteracao, onExcluir }) {
   const toast = useToast()
   const [interacoes,     setInteracoes]     = useState([])
   const [loadingInter,   setLoadingInter]   = useState(false)
@@ -461,7 +462,19 @@ function LeadDetailModal({ lead, onClose, responsavelNome, onSalvarProximaAcao, 
       onClose={onClose}
       title={lead.nomeRestaurante}
       width="max-w-2xl"
-      footer={<button type="button" onClick={onClose} className="btn-secondary">Fechar</button>}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={() => onExcluir(lead)}
+            className="inline-flex items-center gap-1.5 text-[13px] text-negative hover:opacity-75 transition-opacity duration-150 px-2 py-1.5 rounded mr-auto"
+          >
+            <Trash2 size={14} strokeWidth={1.5} />
+            Excluir lead
+          </button>
+          <button type="button" onClick={onClose} className="btn-secondary">Fechar</button>
+        </>
+      }
     >
       <div className="flex flex-col gap-5">
         {/* Dados do lead */}
@@ -634,6 +647,7 @@ export default function CRM() {
   const [detailLeadId, setDetailLeadId] = useState(null)
   const [ganhoLead,    setGanhoLead]    = useState(null)
   const [perdidoLead,  setPerdidoLead]  = useState(null)
+  const [excluindoLead, setExcluindoLead] = useState(null)
   // Mobile: sem drag — abas por estágio, uma coluna por vez
   const [mobileEstagio, setMobileEstagio] = useState(ESTAGIOS[0].key)
 
@@ -770,6 +784,16 @@ export default function CRM() {
       : null
     await updateDoc(doc(db, COLLECTIONS.CRM_LEADS, leadId), { proximaAcao, dataUltimaAtualizacao: serverTimestamp() })
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, proximaAcao } : l))
+  }
+
+  async function handleExcluirLead(lead) {
+    const interacoesSnap = await getDocs(collection(db, COLLECTIONS.CRM_LEADS, lead.id, 'interacoes'))
+    await Promise.all(interacoesSnap.docs.map(d => deleteDoc(d.ref)))
+    await deleteDoc(doc(db, COLLECTIONS.CRM_LEADS, lead.id))
+    setLeads(prev => prev.filter(l => l.id !== lead.id))
+    setDetailLeadId(null)
+    setExcluindoLead(null)
+    toast('Lead excluído.', 'success')
   }
 
   async function carregarInteracoes(leadId) {
@@ -1029,6 +1053,16 @@ export default function CRM() {
         responsavelNome={detailLead ? responsavelMap[detailLead.responsavelId]?.nome : null}
         onSalvarProximaAcao={handleSalvarProximaAcao}
         onRegistrarInteracao={{ carregar: carregarInteracoes, registrar: registrarInteracao }}
+        onExcluir={setExcluindoLead}
+      />
+
+      <ConfirmModal
+        isOpen={!!excluindoLead}
+        title="Excluir lead"
+        message={`Tem certeza que quer excluir "${excluindoLead?.nomeRestaurante}"? Essa ação não pode ser desfeita.`}
+        confirmLabel="Excluir"
+        onConfirm={() => handleExcluirLead(excluindoLead)}
+        onCancel={() => setExcluindoLead(null)}
       />
 
       <FecharGanhoModal
