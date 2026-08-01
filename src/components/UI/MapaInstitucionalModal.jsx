@@ -68,13 +68,29 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
     return REGIOES_ORDEM.filter(r => set.has(r))
   }, [ufsAtendidas])
 
-  const { pathFor, viewBox } = useMemo(() => {
-    if (!geoData) return { pathFor: () => '', viewBox: '0 0 520 520' }
+  const { pathFor, project, viewBox } = useMemo(() => {
+    if (!geoData) return { pathFor: () => '', project: () => null, viewBox: '0 0 520 520' }
     const width = 520, height = 520
     const projection = geoMercator().fitExtent([[16, 16], [width - 16, height - 16]], geoData)
     const path = geoPath(projection)
-    return { pathFor: feature => path(feature) ?? '', viewBox: `0 0 ${width} ${height}` }
+    return {
+      pathFor: feature => path(feature) ?? '',
+      project: (lng, lat) => projection([lng, lat]),
+      viewBox: `0 0 ${width} ${height}`,
+    }
   }, [geoData])
+
+  // Pins das lojas com coordenadas — projetados no mesmo espaço do mapa.
+  const pontos = useMemo(() => {
+    if (!geoData) return []
+    return (lojas ?? [])
+      .filter(l => l.endereco?.lat != null && l.endereco?.lng != null)
+      .map(l => {
+        const xy = project(l.endereco.lng, l.endereco.lat)
+        return xy ? { id: l.id, x: xy[0], y: xy[1] } : null
+      })
+      .filter(Boolean)
+  }, [lojas, geoData, project])
 
   async function handleExportar() {
     if (!captureRef.current) return
@@ -230,6 +246,17 @@ export default function MapaInstitucionalModal({ isOpen, onClose, lojas }) {
                         />
                       )
                     })}
+                    {pontos.map(p => (
+                      <circle
+                        key={p.id}
+                        cx={p.x}
+                        cy={p.y}
+                        r={4}
+                        fill="#111111"
+                        stroke="#FFFFFF"
+                        strokeWidth={1.4}
+                      />
+                    ))}
                   </svg>
                 </div>
               </div>
