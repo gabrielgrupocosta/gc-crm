@@ -15,7 +15,7 @@ import PlatformBadge from '../components/UI/PlatformBadge'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SEGMENTOS = [
-  'Açaí', 'Árabe', 'Cafeteria', 'Frutos do Mar', 'Hamburgeria',
+  'Açaí', 'Árabe', 'Assados', 'Cafeteria', 'Confeitaria', 'Frutos do Mar', 'Hamburgeria',
   'Italiana', 'Japonesa', 'Marmitaria', 'Padaria', 'Pastelaria',
   'Pizza', 'Salgados', 'Sorveteria',
 ]

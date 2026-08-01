@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
 
 export const EMPTY_ENDERECO = {
@@ -67,6 +67,8 @@ async function geocodificar(endereco) {
 export default function EnderecoFields({ value, onChange }) {
   const [buscando, setBuscando] = useState(false)
   const endereco = value ?? EMPTY_ENDERECO
+  const geocodeTimerRef = useRef(null)
+  const geocodeTokenRef = useRef(0)
 
   function set(key, v) {
     onChange({ ...endereco, [key]: v })
@@ -96,6 +98,38 @@ export default function EnderecoFields({ value, onChange }) {
     } finally {
       setBuscando(false)
     }
+  }
+
+  // Editar rua/bairro/cidade/estado à mão (sem mexer no CEP) nunca atualizava
+  // lat/lng — uma loja corrigida manualmente continuava com a coordenada
+  // antiga (ex: um endereço de teste ficava "grudado" no mapa mesmo depois
+  // de corrigir o endereço). Re-geocodifica ao sair de qualquer um desses
+  // campos, pra manter o pin do mapa coerente com o endereço atual.
+  //
+  // Debounça (espera a pessoa parar de tabular entre campos) e descarta
+  // qualquer resposta que não seja a do último pedido — sem isso, editar
+  // "cidade" e já emendar pro "estado" disparava dois geocodes quase juntos,
+  // e o que respondesse por último vencia, mesmo que fosse o com dado
+  // incompleto (endereço novo + estado ainda velho), jogando o pin num
+  // lugar errado mesmo com o endereço final correto.
+  function handleEnderecoCampoBlur() {
+    if (geocodeTimerRef.current) clearTimeout(geocodeTimerRef.current)
+    const meuToken = ++geocodeTokenRef.current
+    const enderecoNoMomento = endereco
+
+    geocodeTimerRef.current = setTimeout(async () => {
+      const partes = [enderecoNoMomento.logradouro, enderecoNoMomento.bairro, enderecoNoMomento.cidade, enderecoNoMomento.estado].filter(Boolean)
+      if (partes.length < 2) return
+      setBuscando(true)
+      try {
+        const geo = await geocodificar(enderecoNoMomento)
+        if (geo && geocodeTokenRef.current === meuToken) {
+          onChange({ ...enderecoNoMomento, lat: geo.lat, lng: geo.lng })
+        }
+      } finally {
+        if (geocodeTokenRef.current === meuToken) setBuscando(false)
+      }
+    }, 500)
   }
 
   return (
@@ -140,6 +174,7 @@ export default function EnderecoFields({ value, onChange }) {
             type="text"
             value={endereco.bairro}
             onChange={e => set('bairro', e.target.value)}
+            onBlur={handleEnderecoCampoBlur}
             placeholder="Ex: Centro"
             className="input"
             style={{ height: '36px', fontSize: '13px' }}
@@ -152,6 +187,7 @@ export default function EnderecoFields({ value, onChange }) {
             type="text"
             value={endereco.logradouro}
             onChange={e => set('logradouro', e.target.value)}
+            onBlur={handleEnderecoCampoBlur}
             placeholder="Ex: Av. Brasil"
             className="input"
             style={{ height: '36px', fontSize: '13px' }}
@@ -164,6 +200,7 @@ export default function EnderecoFields({ value, onChange }) {
             type="text"
             value={endereco.cidade}
             onChange={e => set('cidade', e.target.value)}
+            onBlur={handleEnderecoCampoBlur}
             placeholder="Ex: São Paulo"
             className="input"
             style={{ height: '36px', fontSize: '13px' }}
@@ -177,6 +214,7 @@ export default function EnderecoFields({ value, onChange }) {
             maxLength={2}
             value={endereco.estado}
             onChange={e => set('estado', e.target.value.toUpperCase())}
+            onBlur={handleEnderecoCampoBlur}
             placeholder="Ex: SP"
             className="input font-mono"
             style={{ height: '36px', fontSize: '13px' }}

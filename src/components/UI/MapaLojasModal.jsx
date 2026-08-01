@@ -1,11 +1,36 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import { X } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 import PlatformBadge from './PlatformBadge'
+
+// Zoom a partir do qual troca pro tile "de verdade" (com nome de rua,
+// prédios etc) — abaixo disso fica só no estilo claro/minimalista da marca,
+// sem a poluição visual (verde de parque, azul forte de água, ícones) do
+// tile padrão do OpenStreetMap. Suficiente pra confirmar a região/cidade;
+// o detalhe de rua só aparece quando a pessoa já deu bastante zoom.
+const ZOOM_TROCA_TILE_DETALHADO = 16
+
+const TILE_MARCA = {
+  url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+}
+const TILE_DETALHADO = {
+  url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+}
+
+function TileConformeZoom({ zoomInicial }) {
+  const [detalhado, setDetalhado] = useState(zoomInicial >= ZOOM_TROCA_TILE_DETALHADO)
+  useMapEvents({
+    zoomend(e) { setDetalhado(e.target.getZoom() >= ZOOM_TROCA_TILE_DETALHADO) },
+  })
+  const tile = detalhado ? TILE_DETALHADO : TILE_MARCA
+  return <TileLayer attribution={tile.attribution} url={tile.url} />
+}
 
 // Ícone padrão do Leaflet quebra com bundlers (os caminhos de imagem não
 // resolvem) — substitui por um pin simples em SVG inline, sem depender de
@@ -99,10 +124,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
 
           <div style={{ flex: 1, minHeight: 0 }}>
             <MapContainer center={BRASIL_CENTER} zoom={4} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
+              <TileConformeZoom zoomInicial={4} />
               <FitBounds pontos={pontos} />
               {pontos.map(p => (
                 <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon}>
