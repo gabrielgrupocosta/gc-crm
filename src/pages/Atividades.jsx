@@ -49,7 +49,7 @@ const itemVariants = {
 
 // ─── Modal de nova tarefa ─────────────────────────────────────────────────────
 
-const EMPTY_TAREFA_FORM = { lojaId: '', descricao: '', data: '', observacao: '', agendar: true, prioridade: 'agendada' }
+const EMPTY_TAREFA_FORM = { lojaId: '', descricao: '', data: '', observacao: '', agendar: false, prioridade: 'normal' }
 
 const PRIORIDADE_LABEL = { normal: 'Normal', urgente: 'Urgente', agendada: 'Agendada' }
 const PRIORIDADE_COLOR = {
