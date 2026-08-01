@@ -1,8 +1,8 @@
-import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, X, ChevronDown, ArrowUp, ArrowDown, Layers, MapPin } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
   collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
@@ -92,14 +92,6 @@ function tsToDateInput(ts) {
   if (!ts) return ''
   const d = ts.toDate ? ts.toDate() : new Date(ts)
   return d.toISOString().split('T')[0]
-}
-
-function formatBRL(n) {
-  if (n == null) return '—'
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency', currency: 'BRL',
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(n)
 }
 
 function parseMoney(str) {
@@ -913,193 +905,6 @@ function MiniClienteModal({ isOpen, onClose, onCreated }) {
   )
 }
 
-// ─── Lightbox ─────────────────────────────────────────────────────────────────
-
-function Lightbox({ src, caption, onClose }) {
-  useEffect(() => {
-    function onKey(e) { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  return (
-    <AnimatePresence>
-      {src && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          onClick={onClose}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 100,
-            backgroundColor: 'rgba(0,0,0,0.85)',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: '32px', cursor: 'zoom-out',
-          }}
-        >
-          <motion.img
-            initial={{ scale: 0.96, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-            src={src}
-            alt={caption}
-            onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '90vw', maxHeight: '82vh', borderRadius: '8px', objectFit: 'contain', cursor: 'default' }}
-          />
-          {caption && (
-            <p style={{ color: '#FFFFFF', fontSize: '12px', marginTop: '14px' }}>{caption}</p>
-          )}
-          <button
-            onClick={onClose}
-            style={{ position: 'absolute', top: '20px', right: '24px', width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'rgba(255,255,255,0.12)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <X size={16} color="#fff" />
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
-}
-
-// ─── LojaDetailPanel ──────────────────────────────────────────────────────────
-
-function LojaDetailPanel({ loja }) {
-  const [lightbox, setLightbox] = useState(null)
-
-  const pg = loja.preGestao
-  const hasDesempenho = pg && (pg.faturamento30dias != null || pg.faturamento7dias != null)
-  const hasFinanceiro = pg && (pg.valorVendas != null || pg.totalFaturamento != null || pg.repasseTotal != null)
-  const prints         = pg?.prints ?? {}
-  const hasPrints       = Object.keys(PRINT_LABELS).some(k => prints[k])
-  const hasPreGestao  = hasDesempenho || hasFinanceiro || hasPrints
-
-  const cardStyle = {
-    backgroundColor: '#FAFAFA', border: '1px solid #E8E8E8',
-    borderRadius: '8px', padding: '16px',
-  }
-  const cardTitleStyle = {
-    fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em',
-    color: '#999999', borderBottom: '1px solid #E8E8E8',
-    paddingBottom: '8px', marginBottom: '12px',
-  }
-
-  return (
-    <td
-      colSpan={8}
-      style={{ padding: 0, borderBottom: '1px solid #F3F3F3', backgroundColor: 'rgba(0,0,0,0.015)' }}
-    >
-      <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-
-        {/* Campos inline */}
-        <div style={{ display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
-          {loja.diaRelatorio && (
-            <div>
-              <p className="section-label" style={{ marginBottom: '3px' }}>Dia de relatório</p>
-              <p style={{ fontSize: '12px', color: '#111111' }}>{DIA_LABEL[loja.diaRelatorio]}</p>
-            </div>
-          )}
-          {loja.segmento && (
-            <div>
-              <p className="section-label" style={{ marginBottom: '3px' }}>Segmento</p>
-              <p style={{ fontSize: '12px', color: '#111111' }}>{loja.segmento}</p>
-            </div>
-          )}
-          {loja.observacoes && (
-            <div style={{ flex: 1, minWidth: '200px' }}>
-              <p className="section-label" style={{ marginBottom: '3px' }}>Observações</p>
-              <p style={{ fontSize: '12px', color: '#666666' }}>{loja.observacoes}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Dados Pré-Gestão */}
-        {hasPreGestao && (
-          <div style={{ borderTop: '1px solid #E8E8E8', paddingTop: '12px' }}>
-            <p className="section-label" style={{ marginBottom: '10px' }}>Dados Pré-Gestão</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {hasDesempenho && (
-                <div style={cardStyle}>
-                  <p style={cardTitleStyle}>Desempenho</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {pg.faturamento30dias != null && (
-                      <div>
-                        <p className="section-label" style={{ marginBottom: '3px' }}>Faturamento últimos 30 dias</p>
-                        <p style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '13px', color: '#111111' }}>{formatBRL(pg.faturamento30dias)}</p>
-                      </div>
-                    )}
-                    {pg.faturamento7dias != null && (
-                      <div>
-                        <p className="section-label" style={{ marginBottom: '3px' }}>Faturamento últimos 7 dias</p>
-                        <p style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '13px', color: '#111111' }}>{formatBRL(pg.faturamento7dias)}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-              {hasFinanceiro && (
-                <div style={cardStyle}>
-                  <p style={cardTitleStyle}>Financeiro</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {pg.valorVendas != null && (
-                      <div>
-                        <p className="section-label" style={{ marginBottom: '3px' }}>Valor das Vendas</p>
-                        <p style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '13px', color: '#111111' }}>{formatBRL(pg.valorVendas)}</p>
-                      </div>
-                    )}
-                    {(pg.totalFaturamento ?? pg.repasseTotal) != null && (
-                      <div>
-                        <p className="section-label" style={{ marginBottom: '3px' }}>Total Faturamento</p>
-                        <p style={{ fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '13px', color: '#111111' }}>{formatBRL(pg.totalFaturamento ?? pg.repasseTotal)}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {hasPrints && (
-              <div style={{ marginTop: '12px' }}>
-                <p className="section-label" style={{ marginBottom: '8px' }}>Prints</p>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', maxWidth: '420px' }}>
-                  {Object.keys(PRINT_LABELS).map(key => prints[key] && (
-                    <div key={key}>
-                      <div
-                        onClick={() => setLightbox({ src: prints[key], caption: PRINT_LABELS[key] })}
-                        style={{ borderRadius: '6px', overflow: 'hidden', border: '1px solid #E8E8E8', cursor: 'zoom-in' }}
-                      >
-                        <img
-                          src={prints[key]}
-                          alt={PRINT_LABELS[key]}
-                          style={{ width: '100%', height: '100px', objectFit: 'cover', display: 'block' }}
-                        />
-                      </div>
-                      <p style={{ fontSize: '11px', color: '#666666', marginTop: '4px', textAlign: 'center' }}>
-                        {PRINT_LABELS[key]}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {!loja.diaRelatorio && !loja.segmento && !loja.observacoes && !hasPreGestao && (
-          <p style={{ fontSize: '12px', color: '#999999' }}>Sem dados adicionais.</p>
-        )}
-      </div>
-
-      <Lightbox
-        src={lightbox?.src}
-        caption={lightbox?.caption}
-        onClose={() => setLightbox(null)}
-      />
-    </td>
-  )
-}
-
 // ─── GestorCell ───────────────────────────────────────────────────────────────
 
 function GestorCell({ loja, gestorMap, gestoresAtivos, contagemPorGestor, onSelect }) {
@@ -1648,7 +1453,6 @@ export default function Lojas() {
   const [mapaOpen,         setMapaOpen]          = useState(false)
   const [editingLoja,      setEditingLoja]       = useState(null)
   const [clienteModalOpen, setClienteModalOpen]  = useState(false)
-  const [expandedLojaId,   setExpandedLojaId]    = useState(null)
   const [deletingLoja,     setDeletingLoja]      = useState(null)
 
   const [sortCol, setSortCol] = useState('nome')
@@ -2020,10 +1824,6 @@ export default function Lojas() {
   function openNew() { setEditingLoja(null); setModalOpen(true) }
   function openEdit(loja) { setEditingLoja(loja); setModalOpen(true) }
 
-  function toggleDetail(lojaId) {
-    setExpandedLojaId(prev => prev === lojaId ? null : lojaId)
-  }
-
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -2151,8 +1951,8 @@ export default function Lojas() {
 
                   const loja = item.loja
                   return (
-                  <Fragment key={loja.id}>
                     <motion.tr
+                      key={loja.id}
                       variants={itemVariants}
                       className="table-row-base"
                       style={{ backgroundColor: item.emGrupo ? 'rgba(0,0,0,0.014)' : undefined }}
@@ -2202,17 +2002,6 @@ export default function Lojas() {
                       </td>
                       <td className="px-4" style={{ height: '36px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         <button
-                          onClick={() => toggleDetail(loja.id)}
-                          className="inline-flex items-center gap-1.5 px-2 py-1 rounded transition-colors duration-150"
-                          style={{ fontSize: '11px', color: expandedLojaId === loja.id ? '#111111' : '#999999', background: expandedLojaId === loja.id ? 'rgba(0,0,0,0.05)' : 'none', border: 'none', cursor: 'pointer', marginRight: '4px' }}
-                        >
-                          {expandedLojaId === loja.id
-                            ? <ChevronDown size={12} strokeWidth={1.5} />
-                            : <ChevronRight size={12} strokeWidth={1.5} />
-                          }
-                          Detalhes
-                        </button>
-                        <button
                           onClick={() => openEdit(loja)}
                           className="inline-flex items-center gap-1.5 px-2 py-1 rounded transition-colors duration-150"
                           style={{ fontSize: '11px', color: '#999999', background: 'none', border: 'none', cursor: 'pointer' }}
@@ -2234,13 +2023,6 @@ export default function Lojas() {
                         </button>
                       </td>
                     </motion.tr>
-
-                    {expandedLojaId === loja.id && (
-                      <tr>
-                        <LojaDetailPanel loja={loja} />
-                      </tr>
-                    )}
-                  </Fragment>
                   )
                 })}
               </motion.tbody>
