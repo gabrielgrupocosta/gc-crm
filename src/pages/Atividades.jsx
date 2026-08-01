@@ -362,10 +362,20 @@ export default function Atividades() {
   const lojaMap   = useMemo(() => Object.fromEntries(lojas.map(l => [l.id, l])), [lojas])
   const gestorMap = useMemo(() => Object.fromEntries(gestores.map(g => [g.id, g])), [gestores])
 
-  // Tarefas tab: só o que ainda está pendente (registros e tarefas concluídas
-  // vivem no Histórico agora — ver historicoFiltrado abaixo).
-  const tarefasPendentes    = useMemo(() => tarefas.filter(t => t.tipo !== 'registro' && t.status !== 'concluida'), [tarefas])
-  const tarefasParaHistorico = useMemo(() => tarefas.filter(t => t.tipo === 'registro' || t.status === 'concluida'), [tarefas])
+  // Tarefas tab: tudo que ainda está pendente, mais o que foi concluído HOJE
+  // (continua visível, já riscado, até virar o dia) — só migra pro Histórico
+  // à meia-noite seguinte à conclusão. Antes disso dependia do campo `tipo`
+  // (registro ia direto pro Histórico mesmo pendente), o que fazia uma
+  // tarefa recém-criada sem lembrete "sumir" pra aba errada — a separação
+  // agora é só por status + data de conclusão.
+  const tarefasPendentes = useMemo(() => {
+    const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0)
+    return tarefas.filter(t => t.status !== 'concluida' || tsMillis(t.concluidoEm) >= inicioHoje.getTime())
+  }, [tarefas]) // eslint-disable-line react-hooks/exhaustive-deps
+  const tarefasParaHistorico = useMemo(() => {
+    const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0)
+    return tarefas.filter(t => t.status === 'concluida' && tsMillis(t.concluidoEm) < inicioHoje.getTime())
+  }, [tarefas]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const lojasVisiveisAcoes = useMemo(() => {
     if (!isAdmin || !filtroGestorAcoes) return lojas
@@ -607,7 +617,7 @@ export default function Atividades() {
         status: 'concluida',
         concluidoEm: serverTimestamp(),
       })
-      setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, status: 'concluida' } : t))
+      setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, status: 'concluida', concluidoEm: Timestamp.now() } : t))
       toast('Tarefa concluída.', 'success')
     } catch (err) {
       console.error('[Atividades] erro ao concluir tarefa:', err?.code, err?.message)
