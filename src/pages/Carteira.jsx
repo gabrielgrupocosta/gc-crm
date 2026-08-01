@@ -434,11 +434,10 @@ export default function Carteira() {
 
   const lojaIdsCarteira = useMemo(() => new Set(lojas.map(l => l.id)), [lojas])
 
-  const { valorTotalContratos, faturamentoMensalEstimado, clientesComContrato } = useMemo(() => {
+  const { faturamentoMensalEstimado, clientesComContrato } = useMemo(() => {
     const refMonthStart = monthStart ?? new Date(hoje.getFullYear(), hoje.getMonth(), 1)
     const refMonthEnd   = monthEnd   ?? new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0, 23, 59, 59, 999)
 
-    let valorTotal = 0
     let faturamentoMensal = 0
     const clientesSet = new Set()
 
@@ -452,7 +451,6 @@ export default function Carteira() {
       ;(c.itensLojas ?? []).forEach(item => {
         if (!lojaIdsCarteira.has(item.lojaId)) return
         const valor = item.valor ?? 0
-        valorTotal += valor
         clientesSet.add(c.clienteId)
         if (c.tipoPagamento === 'semanal') {
           const ocorrencias = contarOcorrenciasSemanais(inicio, fim, refMonthStart, refMonthEnd)
@@ -463,7 +461,7 @@ export default function Carteira() {
       })
     })
 
-    return { valorTotalContratos: valorTotal, faturamentoMensalEstimado: faturamentoMensal, clientesComContrato: clientesSet.size }
+    return { faturamentoMensalEstimado: faturamentoMensal, clientesComContrato: clientesSet.size }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratos, lojaIdsCarteira, monthStart, monthEnd])
 
@@ -478,6 +476,25 @@ export default function Carteira() {
       return !di || di >= monthStart
     })
   }, [clientes, selectedMonth, monthStart, monthEnd])
+
+  // Tempo de contrato atual — diferente do "Tempo médio de contrato" abaixo
+  // (que depende de clientes.dataInicio, nem sempre preenchido): usa
+  // lojas.dataInicio, que toda loja tem, então sempre tem o que mostrar.
+  const tempoContratoAtualLojas = useMemo(() => {
+    let total = 0, count = 0
+    lojas.forEach(l => {
+      const inicio = tsDate(l.dataInicio)
+      if (!inicio) return
+      let fim = hoje
+      if (l.status === 'Cancelada') {
+        const dc = tsDate(l.dataCancelamento)
+        if (dc && dc < hoje) fim = dc
+      }
+      const meses = diffMonths(inicio, fim)
+      if (meses >= 0) { total += meses; count++ }
+    })
+    return count > 0 ? Math.round(total / count) : null
+  }, [lojas, hoje])
 
   const tempoMedioContrato = useMemo(() => {
     let total = 0, count = 0
@@ -691,9 +708,11 @@ export default function Carteira() {
               </div>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="card-kpi">
-                  <p className="section-label mb-3">Valor total em contratos</p>
-                  <p className="kpi-value">{formatBRL(valorTotalContratos)}</p>
-                  <p className="text-[12px] text-text-subtle mt-1.5">Soma dos valores por loja nos contratos vigentes no período</p>
+                  <p className="section-label mb-3">Tempo de contrato atual</p>
+                  <p className="kpi-value">
+                    {tempoContratoAtualLojas != null ? `${tempoContratoAtualLojas} meses` : '—'}
+                  </p>
+                  <p className="text-[12px] text-text-subtle mt-1.5">Média de tempo desde o início do contrato de cada loja</p>
                 </div>
                 <div className="card-kpi">
                   <p className="section-label mb-3">Faturamento mensal estimado</p>
