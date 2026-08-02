@@ -3,7 +3,8 @@ import { motion } from 'framer-motion'
 import { Plus, Search } from 'lucide-react'
 import {
   db, COLLECTIONS,
-  collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, Timestamp, serverTimestamp,
+  collection, doc, query, where, getDocs, getDoc, updateDoc, deleteDoc, Timestamp, serverTimestamp,
+  criarComRateLimit,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/UI/Toast'
@@ -573,7 +574,7 @@ export default function Contratos() {
       // Cliente nasce direto no fluxo de contrato — evita ter que ir cadastrar
       // em Clientes primeiro pra depois voltar aqui e criar o contrato.
       orgId = isSuperAdmin ? form.novoClienteOrganizacaoId : (user?.organizacaoId ?? null)
-      const ref = await addDoc(collection(db, COLLECTIONS.CLIENTES), {
+      const ref = await criarComRateLimit(COLLECTIONS.CLIENTES, {
         nome:        form.novoClienteNome.trim(),
         organizacaoId: orgId,
         telefone:    form.novoClienteTelefone.trim(),
@@ -601,7 +602,7 @@ export default function Contratos() {
     // contrato atual" da Carteira fica sem dado nenhum pra calcular.
     const itensLojas = []
     for (const item of form.lojasContrato) {
-      const lojaRef = await addDoc(collection(db, COLLECTIONS.LOJAS), {
+      const lojaRef = await criarComRateLimit(COLLECTIONS.LOJAS, {
         nome:          item.nome.trim(),
         organizacaoId: orgId,
         clienteId,
@@ -629,7 +630,7 @@ export default function Contratos() {
       })
     }
 
-    await addDoc(collection(db, COLLECTIONS.CONTRATOS), {
+    await criarComRateLimit(COLLECTIONS.CONTRATOS, {
       organizacaoId: orgId,
       clienteId,
       tipoPagamento: form.tipoPagamento,
@@ -675,7 +676,7 @@ export default function Contratos() {
         await updateDoc(doc(db, COLLECTIONS.LOJAS, item.lojaId), dadosLoja)
         itensLojas.push({ lojaId: item.lojaId, lojaNome: dadosLoja.nome, valor: isNaN(valorLoja) ? 0 : valorLoja })
       } else {
-        const lojaRef = await addDoc(collection(db, COLLECTIONS.LOJAS), {
+        const lojaRef = await criarComRateLimit(COLLECTIONS.LOJAS, {
           ...dadosLoja,
           organizacaoId: orgId,
           clienteId: contrato.clienteId,

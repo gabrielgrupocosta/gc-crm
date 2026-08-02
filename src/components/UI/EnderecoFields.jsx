@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import { Loader2 } from 'lucide-react'
+import { geocodificar } from '../../utils/geocodificar'
 
 export const EMPTY_ENDERECO = {
   cep: '', logradouro: '', numero: '', bairro: '', cidade: '', estado: '',
@@ -40,24 +41,6 @@ async function buscarCep(cepDigits) {
     cidade:     d2.localidade ?? '',
     estado:     d2.uf ?? '',
     lat: null, lng: null,
-  }
-}
-
-// Sem coordenadas do CEP (comum fora de capitais): geocodifica pelo
-// endereço via Nominatim (OpenStreetMap, gratuito, sem chave) pra garantir
-// que a loja apareça no mapa mesmo assim — menos precisa, mas resolve.
-async function geocodificar(endereco) {
-  const partes = [endereco.logradouro, endereco.bairro, endereco.cidade, endereco.estado, 'Brasil'].filter(Boolean)
-  if (partes.length < 2) return null
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=br&q=${encodeURIComponent(partes.join(', '))}`
-    const r = await fetch(url, { headers: { Accept: 'application/json' } })
-    if (!r.ok) return null
-    const arr = await r.json()
-    if (!arr.length) return null
-    return { lat: Number(arr[0].lat), lng: Number(arr[0].lon) }
-  } catch {
-    return null
   }
 }
 

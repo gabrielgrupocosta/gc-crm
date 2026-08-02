@@ -3,10 +3,12 @@ import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { X, ChevronDown, ChevronRight, Loader2 } from 'lucide-react'
+import { X, ChevronDown, ChevronRight, ChevronLeft, Loader2, MapPinOff, PanelLeft } from 'lucide-react'
 import 'leaflet/dist/leaflet.css'
 import PlatformBadge from './PlatformBadge'
 import { UF_POR_CODAREA, UF_INFO, REGIOES_ORDEM, normalizarUF } from '../../utils/brasil'
+import { geocodificar } from '../../utils/geocodificar'
+import { db, COLLECTIONS, doc, updateDoc } from '../../services/firebase'
 
 const MALHA_URL = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intrarregiao=UF&formato=application/vnd.geo+json&qualidade=minima'
 
@@ -25,6 +27,34 @@ const pinIcon = L.divIcon({
 })
 
 const BRASIL_CENTER = [-14.235, -51.9253]
+
+// Lojas com o mesmo endereço geocodificam pro mesmíssimo lat/lng — sem
+// tratamento, um pin fica exatamente em cima do outro e só o de cima
+// responde a clique. Agrupa por coordenada (arredondada pra absorver
+// variações de ponto flutuante) e espalha os pins do grupo lado a lado
+// no eixo longitude, centralizados na coordenada original.
+const OFFSET_COLISAO_LNG = 0.0004
+
+function espalharColisoes(pontos) {
+  const grupos = new Map()
+  pontos.forEach(p => {
+    const chave = `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`
+    if (!grupos.has(chave)) grupos.set(chave, [])
+    grupos.get(chave).push(p)
+  })
+  const resultado = []
+  grupos.forEach(grupo => {
+    if (grupo.length === 1) {
+      resultado.push(grupo[0])
+      return
+    }
+    const meio = (grupo.length - 1) / 2
+    grupo.forEach((p, i) => {
+      resultado.push({ ...p, lng: p.lng + (i - meio) * OFFSET_COLISAO_LNG })
+    })
+  })
+  return resultado
+}
 
 // Zoom a partir do qual troca pro tile "de verdade" (com nome de rua,
 // prédios etc) — abaixo disso fica só no estilo claro/minimalista da marca,
@@ -110,9 +140,14 @@ const overlayVariants = {
 // verdade, com o menu lateral e o contorno de estados atendidos que antes
 // viviam no Mapa Institucional — que existia separado só pra gerar uma
 // imagem estilizada de divulgação, função removida daqui (sem exportação).
-export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, gestorMap }) {
+export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, gestorMap, onLojaGeocodificada }) {
   const [geoData, setGeoData] = useState(null)
-  const [ufsColapsados, setUfsColapsados] = useState(() => new Set())
+  // Cidades ficam escondidas por padrão — guarda quais UFs a pessoa abriu,
+  // em vez de quais escondeu, pra não precisar pré-popular com todas as UFs.
+  const [ufsExpandidos, setUfsExpandidos] = useState(() => new Set())
+  // Menu lateral começa recolhido — o mapa é o foco principal, a lista de
+  // estados/cidades é um complemento que a pessoa abre quando precisa.
+  const [sidebarAberta, setSidebarAberta] = useState(false)
 
   useEffect(() => {
     if (!isOpen || geoData) return
@@ -123,7 +158,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
   }, [isOpen, geoData])
 
   function toggleUf(uf) {
-    setUfsColapsados(prev => {
+    setUfsExpandidos(prev => {
       const next = new Set(prev)
       if (next.has(uf)) next.delete(uf)
       else next.add(uf)
@@ -167,7 +202,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
   }, [lojas])
 
   const pontos = useMemo(() => {
-    return (lojas ?? [])
+    const base = (lojas ?? [])
       .filter(l => l.endereco?.lat != null && l.endereco?.lng != null)
       .map(l => ({
         id: l.id,
@@ -180,7 +215,49 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
         gestorNome:  gestorMap?.[l.gestorId]?.nome,
         plataformas: l.plataformas?.length ? l.plataformas : (l.plataforma ? [l.plataforma] : []),
       }))
+    return espalharColisoes(base)
   }, [lojas, clienteMap, gestorMap])
+
+  // Lojas com cidade/estado preenchidos mas sem coordenada — aparecem na
+  // lista lateral (contam pro total do estado) mas não têm pin no mapa.
+  // Acontece com lojas cadastradas antes do geocode existir, ou cujo
+  // endereço nunca passou pelo blur que dispara a geocodificação.
+  const pendentesGeocode = useMemo(() => {
+    return (lojas ?? []).filter(l =>
+      (l.endereco?.lat == null || l.endereco?.lng == null) && (l.endereco?.cidade || l.endereco?.estado)
+    )
+  }, [lojas])
+
+  const [geocodificando, setGeocodificando] = useState(false)
+  const [progressoGeocode, setProgressoGeocode] = useState(null)
+
+  // Roda uma loja de cada vez, respeitando o limite de 1 req/s do Nominatim
+  // (uso gratuito) — em paralelo a API bloqueia e a geocodificação falha.
+  async function geocodificarPendentes() {
+    setGeocodificando(true)
+    try {
+      for (let i = 0; i < pendentesGeocode.length; i++) {
+        const loja = pendentesGeocode[i]
+        setProgressoGeocode({ atual: i + 1, total: pendentesGeocode.length })
+        try {
+          const geo = await geocodificar(loja.endereco)
+          if (geo) {
+            await updateDoc(doc(db, COLLECTIONS.LOJAS, loja.id), {
+              'endereco.lat': geo.lat,
+              'endereco.lng': geo.lng,
+            })
+            onLojaGeocodificada?.(loja.id, geo)
+          }
+        } catch (err) {
+          console.error(`[MapaLojasModal] falha ao geocodificar "${loja.nome}":`, err)
+        }
+        if (i < pendentesGeocode.length - 1) await new Promise(r => setTimeout(r, 1100))
+      }
+    } finally {
+      setGeocodificando(false)
+      setProgressoGeocode(null)
+    }
+  }
 
   const totalLojas = lojas?.length ?? 0
 
@@ -204,104 +281,150 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
                 {pontos.length} de {totalLojas} loja{totalLojas !== 1 ? 's' : ''} com endereço geolocalizado
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Fechar"
-              style={{
-                width: '32px', height: '32px', borderRadius: '6px',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                background: 'none', border: 'none', cursor: 'pointer', color: '#666666',
-              }}
-            >
-              <X size={18} strokeWidth={1.75} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {pendentesGeocode.length > 0 && (
+                <button
+                  type="button"
+                  onClick={geocodificarPendentes}
+                  disabled={geocodificando}
+                  className="btn-secondary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', height: '32px', fontSize: '12px', opacity: geocodificando ? 0.6 : 1 }}
+                >
+                  {geocodificando
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <MapPinOff size={13} strokeWidth={1.75} />}
+                  {geocodificando
+                    ? `Geocodificando ${progressoGeocode?.atual ?? 1}/${progressoGeocode?.total ?? pendentesGeocode.length}…`
+                    : `Geocodificar ${pendentesGeocode.length} pendente${pendentesGeocode.length !== 1 ? 's' : ''}`}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Fechar"
+                style={{
+                  width: '32px', height: '32px', borderRadius: '6px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'none', border: 'none', cursor: 'pointer', color: '#666666',
+                }}
+              >
+                <X size={18} strokeWidth={1.75} />
+              </button>
+            </div>
           </div>
 
           <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
             {/* Sidebar */}
-            <div style={{ width: '260px', flexShrink: 0, padding: '24px 20px', borderRight: '1px solid #E8E8E8', backgroundColor: '#FFFFFF', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                <div style={{
-                  width: '26px', height: '26px', borderRadius: '7px', backgroundColor: '#E5322D',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5">
-                    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                    <circle cx="12" cy="10" r="3" />
-                  </svg>
-                </div>
-                <p style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111111' }}>
-                  iHub<span style={{ color: '#E5322D' }}>Food</span>
-                </p>
-              </div>
-              <p style={{ fontSize: '11px', color: '#999999', marginBottom: '24px' }}>Presença nacional</p>
+            <div style={{
+              width: sidebarAberta ? '260px' : '48px',
+              flexShrink: 0,
+              borderRight: '1px solid #E8E8E8',
+              backgroundColor: '#FFFFFF',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              transition: 'width 0.2s ease',
+            }}>
+              <button
+                type="button"
+                onClick={() => setSidebarAberta(v => !v)}
+                aria-label={sidebarAberta ? 'Recolher menu' : 'Expandir menu'}
+                title={sidebarAberta ? 'Recolher menu' : 'Expandir menu'}
+                style={{
+                  width: '32px', height: '32px', borderRadius: '6px', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'none', border: 'none', cursor: 'pointer', color: '#666666',
+                  margin: sidebarAberta ? '16px 20px 0 auto' : '16px auto 0',
+                }}
+              >
+                {sidebarAberta ? <ChevronLeft size={16} strokeWidth={1.75} /> : <PanelLeft size={16} strokeWidth={1.75} />}
+              </button>
 
-              <p style={{ fontSize: '11px', fontWeight: 600, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-                Regiões atendidas
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '22px' }}>
-                {regioesAtendidas.map(r => (
-                  <span key={r} style={{
-                    fontSize: '11px', fontWeight: 500, color: '#E5322D', backgroundColor: '#FFF5F5',
-                    border: '1px solid #FECACA', borderRadius: '999px', padding: '3px 10px',
-                  }}>
-                    {r}
-                  </span>
-                ))}
-                {regioesAtendidas.length === 0 && (
-                  <span style={{ fontSize: '12px', color: '#BBBBBB' }}>Nenhuma loja com estado cadastrado</span>
-                )}
-              </div>
-
-              <p style={{ fontSize: '11px', fontWeight: 600, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
-                Estados e cidades atendidos ({Object.keys(ufsAtendidas).length})
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                {REGIOES_ORDEM.filter(r => regioesAtendidas.includes(r)).map(regiao => (
-                  <div key={regiao} style={{ marginBottom: '10px' }}>
-                    <p style={{ fontSize: '10px', fontWeight: 600, color: '#BBBBBB', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 4px' }}>
-                      {regiao}
+              {sidebarAberta && (
+                <div style={{ padding: '12px 20px 24px', display: 'flex', flexDirection: 'column', overflowY: 'auto', minWidth: '260px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <div style={{
+                      width: '26px', height: '26px', borderRadius: '7px', backgroundColor: '#E5322D',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                    }}>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5">
+                        <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                        <circle cx="12" cy="10" r="3" />
+                      </svg>
+                    </div>
+                    <p style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111111' }}>
+                      iHub<span style={{ color: '#E5322D' }}>Food</span>
                     </p>
-                    {Object.keys(ufsAtendidas)
-                      .filter(uf => UF_INFO[uf]?.regiao === regiao)
-                      .sort((a, b) => UF_INFO[a].nome.localeCompare(UF_INFO[b].nome, 'pt-BR'))
-                      .map(uf => {
-                        const colapsado = ufsColapsados.has(uf)
-                        return (
-                          <div key={uf} style={{ padding: '4px 0' }}>
-                            <button
-                              type="button"
-                              onClick={() => toggleUf(uf)}
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
-                                background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
-                              }}
-                            >
-                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                {colapsado
-                                  ? <ChevronRight size={12} strokeWidth={2} color="#BBBBBB" />
-                                  : <ChevronDown size={12} strokeWidth={2} color="#BBBBBB" />}
-                                <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111' }}>{UF_INFO[uf].nome}</span>
-                              </span>
-                              <span className="font-mono" style={{ fontSize: '11px', color: '#999999' }}>{ufsAtendidas[uf]}</span>
-                            </button>
-                            {!colapsado && (cidadesPorUf[uf] ?? []).map(({ cidade, count }) => (
-                              <div key={cidade} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0 2px 16px' }}>
-                                <span style={{ fontSize: '12px', color: '#666666' }}>{cidade}</span>
-                                <span className="font-mono" style={{ fontSize: '11px', color: '#BBBBBB' }}>{count}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      })}
                   </div>
-                ))}
-              </div>
+                  <p style={{ fontSize: '11px', color: '#999999', marginBottom: '24px' }}>Presença nacional</p>
 
-              <p style={{ fontSize: '10px', color: '#BBBBBB', marginTop: '16px', lineHeight: 1.5 }}>
-                Número de lojas atendidas por estado
-              </p>
+                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
+                    Regiões atendidas
+                  </p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '22px' }}>
+                    {regioesAtendidas.map(r => (
+                      <span key={r} style={{
+                        fontSize: '11px', fontWeight: 500, color: '#E5322D', backgroundColor: '#FFF5F5',
+                        border: '1px solid #FECACA', borderRadius: '999px', padding: '3px 10px',
+                      }}>
+                        {r}
+                      </span>
+                    ))}
+                    {regioesAtendidas.length === 0 && (
+                      <span style={{ fontSize: '12px', color: '#BBBBBB' }}>Nenhuma loja com estado cadastrado</span>
+                    )}
+                  </div>
+
+                  <p style={{ fontSize: '11px', fontWeight: 600, color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>
+                    Estados e cidades atendidos ({Object.keys(ufsAtendidas).length})
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                    {REGIOES_ORDEM.filter(r => regioesAtendidas.includes(r)).map(regiao => (
+                      <div key={regiao} style={{ marginBottom: '10px' }}>
+                        <p style={{ fontSize: '10px', fontWeight: 600, color: '#BBBBBB', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '6px 0 4px' }}>
+                          {regiao}
+                        </p>
+                        {Object.keys(ufsAtendidas)
+                          .filter(uf => UF_INFO[uf]?.regiao === regiao)
+                          .sort((a, b) => UF_INFO[a].nome.localeCompare(UF_INFO[b].nome, 'pt-BR'))
+                          .map(uf => {
+                            const colapsado = !ufsExpandidos.has(uf)
+                            return (
+                              <div key={uf} style={{ padding: '4px 0' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleUf(uf)}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                                    background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left',
+                                  }}
+                                >
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    {colapsado
+                                      ? <ChevronRight size={12} strokeWidth={2} color="#BBBBBB" />
+                                      : <ChevronDown size={12} strokeWidth={2} color="#BBBBBB" />}
+                                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#111111' }}>{UF_INFO[uf].nome}</span>
+                                  </span>
+                                  <span className="font-mono" style={{ fontSize: '11px', color: '#999999' }}>{ufsAtendidas[uf]}</span>
+                                </button>
+                                {!colapsado && (cidadesPorUf[uf] ?? []).map(({ cidade, count }) => (
+                                  <div key={cidade} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0 2px 16px' }}>
+                                    <span style={{ fontSize: '12px', color: '#666666' }}>{cidade}</span>
+                                    <span className="font-mono" style={{ fontSize: '11px', color: '#BBBBBB' }}>{count}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })}
+                      </div>
+                    ))}
+                  </div>
+
+                  <p style={{ fontSize: '10px', color: '#BBBBBB', marginTop: '16px', lineHeight: 1.5 }}>
+                    Número de lojas atendidas por estado
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Mapa */}

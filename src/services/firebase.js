@@ -21,6 +21,7 @@ import {
   updateDoc,
   deleteDoc,
   writeBatch,
+  runTransaction,
   query,
   where,
   orderBy,
@@ -143,6 +144,41 @@ export {
   onSnapshot,
   serverTimestamp,
   Timestamp,
+}
+
+// Rate limit de criação nas coleções críticas (clientes/contratos/lojas) —
+// espelha o limite validado em firestore.rules (função rateLimitOk). Cria o
+// documento novo e incrementa o contador rate_limits/{uid}_{colecao} numa
+// única transação: sem isso, dá pra criar o documento sem tocar no contador
+// (a regra do Firestore só aceita a criação se getAfter() enxergar o contador
+// já incrementado dentro da MESMA transação).
+const LIMITE_CRIACAO_POR_HORA = 40
+const JANELA_RATE_LIMIT_MS = 60 * 60 * 1000
+
+export async function criarComRateLimit(colecao, dados) {
+  const uid = auth.currentUser?.uid
+  if (!uid) throw new Error('Login necessário')
+
+  const novoRef = doc(collection(db, colecao))
+  const rlRef = doc(db, 'rate_limits', `${uid}_${colecao}`)
+
+  await runTransaction(db, async (tx) => {
+    const rlSnap = await tx.get(rlRef)
+    const atual = rlSnap.exists() ? rlSnap.data() : null
+    const janelaExpirada = !atual || (Date.now() - atual.inicio.toMillis()) > JANELA_RATE_LIMIT_MS
+
+    if (janelaExpirada) {
+      tx.set(rlRef, { contagem: 1, inicio: serverTimestamp() })
+    } else {
+      if (atual.contagem >= LIMITE_CRIACAO_POR_HORA) {
+        throw new Error('Limite de criação atingido para esta seção. Aguarde alguns minutos e tente novamente.')
+      }
+      tx.set(rlRef, { contagem: atual.contagem + 1, inicio: atual.inicio })
+    }
+    tx.set(novoRef, dados)
+  })
+
+  return novoRef
 }
 
 // Nomes das coleções como constantes para evitar typos

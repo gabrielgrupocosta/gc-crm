@@ -6,6 +6,7 @@ import { Plus, X, Phone, MessageSquare, Mail, Users as UsersIcon, FileText, Cloc
 import {
   db, COLLECTIONS,
   collection, doc, query, where, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp, orderBy,
+  criarComRateLimit,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/UI/Toast'
@@ -750,7 +751,7 @@ export default function CRM() {
   async function handleConfirmarGanho(lead, clienteIdExistente) {
     let clienteId = clienteIdExistente
     if (!clienteId) {
-      const ref = await addDoc(collection(db, COLLECTIONS.CLIENTES), {
+      const ref = await criarComRateLimit(COLLECTIONS.CLIENTES, {
         nome:          lead.nomeRestaurante,
         telefone:      lead.telefone ?? '',
         email:         lead.email ?? '',

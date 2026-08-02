@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, Pencil, Trash2, Search, X, ChevronDown, ChevronRight, ArrowUp, ArrowDown, MapPin } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
-  collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
+  collection, doc, query, where, getDocs, getDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
+  criarComRateLimit,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/UI/Toast'
@@ -841,7 +842,7 @@ function MiniClienteModal({ isOpen, onClose, onCreated }) {
         observacoes: '',
         criadoEm:    serverTimestamp(),
       }
-      const ref = await addDoc(collection(db, COLLECTIONS.CLIENTES), payload)
+      const ref = await criarComRateLimit(COLLECTIONS.CLIENTES, payload)
       toast('Cliente criado.', 'success')
       onCreated({ id: ref.id, ...payload })
     } catch (err) {
@@ -1710,7 +1711,7 @@ export default function Lojas() {
       }
     } else if (form.plataformas.length > 1) {
       // Múltiplas plataformas na criação → um documento de loja por plataforma
-      await Promise.all(form.plataformas.map(p => addDoc(collection(db, COLLECTIONS.LOJAS), {
+      await Promise.all(form.plataformas.map(p => criarComRateLimit(COLLECTIONS.LOJAS, {
         ...basePayload,
         nome:          `${basePayload.nome} — ${p}`,
         plataforma:    p,
@@ -1720,7 +1721,7 @@ export default function Lojas() {
       })))
       toast(`${form.plataformas.length} lojas criadas — uma por plataforma.`, 'success')
     } else {
-      await addDoc(collection(db, COLLECTIONS.LOJAS), {
+      await criarComRateLimit(COLLECTIONS.LOJAS, {
         ...basePayload,
         plataforma:    form.plataformas[0] ?? '',
         plataformas:   form.plataformas,
@@ -1734,7 +1735,7 @@ export default function Lojas() {
   }
 
   async function handleSaveCliente(form, novasLojas = [], vinculadas = []) {
-    const ref = await addDoc(collection(db, COLLECTIONS.CLIENTES), {
+    const ref = await criarComRateLimit(COLLECTIONS.CLIENTES, {
       nome:        form.nome.trim(),
       telefone:    form.telefone.trim(),
       email:       form.email.trim().toLowerCase(),
@@ -1750,7 +1751,7 @@ export default function Lojas() {
       // a loja nasce vinculada à organização do admin_org logado, ou sem
       // organização (null) se for o master criando sem contexto de org.
       const organizacaoId = !isSuperAdmin ? (user?.organizacaoId ?? null) : null
-      await Promise.all(novasLojas.map(l => addDoc(collection(db, COLLECTIONS.LOJAS), {
+      await Promise.all(novasLojas.map(l => criarComRateLimit(COLLECTIONS.LOJAS, {
         nome:          l.nome.trim(),
         organizacaoId,
         clienteId:     ref.id,
@@ -1875,6 +1876,9 @@ export default function Lojas() {
         lojas={lojas}
         clienteMap={clienteMap}
         gestorMap={gestorMap}
+        onLojaGeocodificada={(lojaId, coords) =>
+          setLojas(prev => prev.map(l => l.id === lojaId ? { ...l, endereco: { ...l.endereco, ...coords } } : l))
+        }
       />
 
       {/* Filtros */}

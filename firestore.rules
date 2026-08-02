@@ -31,6 +31,53 @@ service cloud.firestore {
       return autenticado() && organizacaoId() == dados.organizacaoId;
     }
 
+    // Dupla política de escrita para tabelas críticas (financeiro/contratual/
+    // sensível): confere a organização do documento ANTES (dadosAntigos,
+    // equivalente a USING) e DEPOIS (dadosNovos, equivalente a WITH CHECK) da
+    // escrita, e garante que organizacaoId é imutável — sem isso, admin_org
+    // poderia "sequestrar" um contrato/cobrança/resultado trocando o campo
+    // organizacaoId para fora da própria organização.
+    function escritaSeguraOrg(dadosAntigos, dadosNovos) {
+      return mesmaOrg(dadosAntigos) && mesmaOrg(dadosNovos)
+        && dadosNovos.organizacaoId == dadosAntigos.organizacaoId;
+    }
+
+    // Rate limit de criação nas coleções críticas (clientes/contratos/lojas):
+    // o front cria o documento numa transação que também incrementa
+    // rate_limits/{uid}_{colecao} — getAfter() lê o valor desse contador já
+    // considerando os writes pendentes da MESMA transação, então não dá pra
+    // criar o documento sem que o contador tenha sido corretamente atualizado
+    // junto (client não consegue "pular" o incremento).
+    function limiteCriacaoPorHora() {
+      return 40;
+    }
+
+    function rateLimitOk(colecao) {
+      let rl = getAfter(/databases/$(database)/documents/rate_limits/$(request.auth.uid + '_' + colecao)).data;
+      return rl.contagem <= limiteCriacaoPorHora();
+    }
+
+    // Companion doc do rate limit — só o próprio usuário lê/escreve o seu, e a
+    // escrita só é aceita se a contagem for matematicamente consistente (reset
+    // de janela com contagem=1, ou incremento de exatamente +1 dentro da hora).
+    match /rate_limits/{rlId} {
+      allow read: if autenticado() && rlId.split('_')[0] == request.auth.uid;
+      allow create: if autenticado() && rlId.split('_')[0] == request.auth.uid
+        && request.resource.data.contagem == 1
+        && request.resource.data.inicio == request.time;
+      allow update: if autenticado() && rlId.split('_')[0] == request.auth.uid
+        && (
+          (request.time.toMillis() - resource.data.inicio.toMillis() > 3600000
+            && request.resource.data.contagem == 1
+            && request.resource.data.inicio == request.time)
+          ||
+          (request.time.toMillis() - resource.data.inicio.toMillis() <= 3600000
+            && request.resource.data.contagem == resource.data.contagem + 1
+            && request.resource.data.inicio == resource.data.inicio)
+        );
+      allow delete: if false;
+    }
+
     // master: acesso total à plataforma. admin_org só pode ler a
     // própria organização (ex: exibir nome dela no formulário de loja) —
     // nunca listar ou ler outras, e nunca escrever.
@@ -39,8 +86,13 @@ service cloud.firestore {
       allow write: if isSuperAdmin();
     }
 
+    // Faturas: dado financeiro da plataforma (cobrança da própria organização
+    // pelo uso do sistema) — só master acessa. Update com dupla política:
+    // organizacaoId da fatura não pode ser trocado numa edição.
     match /faturas/{faturaId} {
-      allow read, write: if isSuperAdmin();
+      allow read, create, delete: if isSuperAdmin();
+      allow update: if isSuperAdmin()
+        && resource.data.organizacaoId == request.resource.data.organizacaoId;
     }
 
     match /configuracoes/{docId} {
@@ -56,45 +108,69 @@ service cloud.firestore {
       allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
+    // Clientes: contém mensalidade (dado financeiro). Update exige dupla
+    // política — organizacaoId não pode ser alterado na edição.
     match /clientes/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
-      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
-      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('clientes'));
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data));
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
     // Contratos: dado financeiro/contratual do cliente — só master e admin_org
     // da própria organização (gestor não acessa, mesma exclusividade de Clientes).
+    // Update exige dupla política — organizacaoId não pode ser alterado.
     match /contratos/{docId} {
       allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
-      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
-      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('contratos'));
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data));
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
     // Cobranças (Financeiro/recebíveis): mesma exclusividade de Contratos —
     // dado financeiro do cliente, só master e admin_org da própria organização.
+    // Update exige dupla política — organizacaoId não pode ser alterado.
     match /cobrancas/{docId} {
       allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
       allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
-      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
-    }
-
-    match /lojas/{docId} {
-      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
-      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
       allow update: if isSuperAdmin()
-        || (isAdminOrg() && mesmaOrg(resource.data))
-        || (isGestor() && mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data));
       allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
+    // Lojas: gestorId é o campo que determina acesso (regra crítica do
+    // sistema) — update exige dupla política para impedir que organizacaoId
+    // seja trocado numa edição, e o gestor só pode alterar o próprio
+    // status/observações, nunca reatribuir a loja a outro gestorId.
+    match /lojas/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('lojas'));
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (isGestor() && escritaSeguraOrg(resource.data, request.resource.data)
+            && resource.data.gestorId == request.auth.uid
+            && request.resource.data.gestorId == request.auth.uid);
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    // Resultados: contém faturamento (dado financeiro). Update exige dupla
+    // política — organizacaoId não pode ser alterado na edição, e o gestor
+    // só edita resultado que continua sendo dele antes e depois da escrita.
     match /resultados/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin()
         || (isAdminOrg() && mesmaOrg(request.resource.data))
         || (isGestor() && mesmaOrg(request.resource.data) && request.resource.data.gestorId == request.auth.uid);
       allow update: if isSuperAdmin()
-        || (isAdminOrg() && mesmaOrg(resource.data))
-        || (isGestor() && mesmaOrg(resource.data) && resource.data.gestorId == request.auth.uid);
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (isGestor() && escritaSeguraOrg(resource.data, request.resource.data)
+            && resource.data.gestorId == request.auth.uid
+            && request.resource.data.gestorId == request.auth.uid);
       allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 

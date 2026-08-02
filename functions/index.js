@@ -35,6 +35,30 @@ function exigirAdminDaOrg(request, organizacaoId) {
   throw new HttpsError('permission-denied', 'Sem permissão para gerenciar usuários desta organização')
 }
 
+// Rate limit das funções de IA (Gemini/Anthropic) — cada chamada custa dinheiro
+// real, então o limite é aplicado por usuário via um contador transacional em
+// rate_limits/{uid}_{chave}, com janela deslizante simples (reseta a cada
+// janelaMs). Transação garante atomicidade mesmo com chamadas concorrentes do
+// mesmo usuário, o que uma leitura + escrita separadas não garantiriam.
+async function verificarRateLimit(uid, chave, limite, janelaMs) {
+  const ref = db.collection('rate_limits').doc(`${uid}_${chave}`)
+  const permitido = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    const agora = Date.now()
+    const dados = snap.exists ? snap.data() : null
+    if (!dados || agora - dados.inicioJanela > janelaMs) {
+      tx.set(ref, { inicioJanela: agora, contagem: 1 })
+      return true
+    }
+    if (dados.contagem >= limite) return false
+    tx.update(ref, { contagem: FieldValue.increment(1) })
+    return true
+  })
+  if (!permitido) {
+    throw new HttpsError('resource-exhausted', 'Limite de uso da IA atingido. Aguarde alguns minutos e tente novamente.')
+  }
+}
+
 // Traduz erros conhecidos do Firebase Auth pra HttpsError com mensagem clara —
 // sem isso, o client só via um "internal" genérico (ex: e-mail duplicado virava
 // um erro opaco "INTERNAL" sem dizer qual era o problema real).
@@ -233,6 +257,7 @@ ALAVANCAS DO IFOOD (ordem de prioridade):
 
 exports.gerarResumoRelatorio = onCall({ secrets: [geminiApiKey], timeoutSeconds: 60, memory: '256MiB' }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário')
+  await verificarRateLimit(request.auth.uid, 'gerarResumoRelatorio', 20, 60 * 60 * 1000)
 
   const {
     nomeLoja, semana, plataforma, faturamento, variacao,
@@ -371,6 +396,9 @@ const PROMPTS_POR_TIPO = {
 // print específico terminar, sem esperar os outros.
 exports.extrairPrintIndividual = onCall({ secrets: [geminiApiKey], timeoutSeconds: 30, memory: '256MiB' }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário')
+  // Limite maior que gerarResumoRelatorio pois o front dispara 3 chamadas em
+  // paralelo (uma por print) a cada relatório.
+  await verificarRateLimit(request.auth.uid, 'extrairPrintIndividual', 60, 60 * 60 * 1000)
 
   const { print, tipoPrint } = request.data || {}
 
@@ -888,6 +916,7 @@ function limparMarkdown(texto) {
 
 exports.assistenteChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 30, memory: '256MiB' }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário')
+  await verificarRateLimit(request.auth.uid, 'assistenteChat', 40, 60 * 60 * 1000)
 
   const { messages, lojaId } = request.data || {}
   if (!Array.isArray(messages) || messages.length === 0) {

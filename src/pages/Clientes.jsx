@@ -3,7 +3,8 @@ import { motion } from 'framer-motion'
 import { Plus, Pencil, Trash2, Search, X, Link2 } from 'lucide-react'
 import {
   db, COLLECTIONS,
-  collection, doc, query, where, getDocs, getDoc, addDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
+  collection, doc, query, where, getDocs, getDoc, updateDoc, deleteDoc, serverTimestamp, Timestamp,
+  criarComRateLimit,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/UI/Toast'
@@ -769,7 +770,7 @@ export default function Clientes() {
     // valorTotal (não existe mais um valor único pro contrato inteiro).
     const itensLojas = []
     for (const item of form.lojasContrato) {
-      const lojaRef = await addDoc(collection(db, COLLECTIONS.LOJAS), {
+      const lojaRef = await criarComRateLimit(COLLECTIONS.LOJAS, {
         nome:          item.nome.trim(),
         organizacaoId: orgId,
         clienteId:     cliente.id,
@@ -797,7 +798,7 @@ export default function Clientes() {
       })
     }
 
-    await addDoc(collection(db, COLLECTIONS.CONTRATOS), {
+    await criarComRateLimit(COLLECTIONS.CONTRATOS, {
       organizacaoId: orgId,
       clienteId: cliente.id,
       tipoPagamento: form.tipoPagamento,
@@ -840,7 +841,7 @@ export default function Clientes() {
       clienteId = original.id
       toast('Cliente atualizado.', 'success')
     } else {
-      const ref = await addDoc(collection(db, COLLECTIONS.CLIENTES), { ...payload, criadoEm: serverTimestamp() })
+      const ref = await criarComRateLimit(COLLECTIONS.CLIENTES, { ...payload, criadoEm: serverTimestamp() })
       clienteId = ref.id
       toast('Cliente criado.', 'success')
     }
@@ -848,7 +849,7 @@ export default function Clientes() {
     // Salva novas lojas vinculadas
     const ops = []
     novasLojas.forEach(l => {
-      ops.push(addDoc(collection(db, COLLECTIONS.LOJAS), {
+      ops.push(criarComRateLimit(COLLECTIONS.LOJAS, {
         nome:          l.nome.trim(),
         organizacaoId: payload.organizacaoId,
         clienteId,
