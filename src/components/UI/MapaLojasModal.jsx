@@ -14,27 +14,41 @@ const MALHA_URL = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intr
 
 // Ícone padrão do Leaflet quebra com bundlers (os caminhos de imagem não
 // resolvem) — substitui por um pin simples em SVG inline, sem depender de
-// nenhum arquivo de imagem.
-const pinIcon = L.divIcon({
-  className: '',
-  html: `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
-    <path d="M13 0C5.8 0 0 5.8 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.8 20.2 0 13 0z" fill="#E5322D"/>
-    <circle cx="13" cy="13" r="5.5" fill="#FFFFFF"/>
-  </svg>`,
-  iconSize: [26, 34],
-  iconAnchor: [13, 34],
-  popupAnchor: [0, -30],
-})
+// nenhum arquivo de imagem. Quando a loja divide coordenada com outra(s)
+// (mesmo endereço), desloca o ícone por um valor fixo em PIXELS (via
+// iconAnchor) em vez de em graus de lat/lng — um deslocamento geográfico
+// vira poucos pixels (ou nenhum) quando o mapa está bem afastado, enquanto
+// o deslocamento em pixel mantém os pins visualmente lado a lado, como uma
+// sequência, em qualquer nível de zoom.
+const OFFSET_PIN_PX = 10
+const iconesPorPosicao = new Map()
+
+function pinIcon(indiceNoGrupo = 0, totalNoGrupo = 1) {
+  const chave = `${indiceNoGrupo}-${totalNoGrupo}`
+  if (iconesPorPosicao.has(chave)) return iconesPorPosicao.get(chave)
+  const meio = (totalNoGrupo - 1) / 2
+  const deslocamentoPx = (indiceNoGrupo - meio) * OFFSET_PIN_PX
+  const icon = L.divIcon({
+    className: '',
+    html: `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13 0C5.8 0 0 5.8 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.8 20.2 0 13 0z" fill="#E5322D"/>
+      <circle cx="13" cy="13" r="5.5" fill="#FFFFFF"/>
+    </svg>`,
+    iconSize: [26, 34],
+    iconAnchor: [13 - deslocamentoPx, 34],
+    popupAnchor: [deslocamentoPx, -30],
+  })
+  iconesPorPosicao.set(chave, icon)
+  return icon
+}
 
 const BRASIL_CENTER = [-14.235, -51.9253]
 
 // Lojas com o mesmo endereço geocodificam pro mesmíssimo lat/lng — sem
 // tratamento, um pin fica exatamente em cima do outro e só o de cima
 // responde a clique. Agrupa por coordenada (arredondada pra absorver
-// variações de ponto flutuante) e espalha os pins do grupo lado a lado
-// no eixo longitude, centralizados na coordenada original.
-const OFFSET_COLISAO_LNG = 0.0004
-
+// variações de ponto flutuante) e marca a posição de cada uma dentro do
+// grupo, pro ícone deslocar em pixels e virarem uma sequência visível.
 function espalharColisoes(pontos) {
   const grupos = new Map()
   pontos.forEach(p => {
@@ -44,13 +58,8 @@ function espalharColisoes(pontos) {
   })
   const resultado = []
   grupos.forEach(grupo => {
-    if (grupo.length === 1) {
-      resultado.push(grupo[0])
-      return
-    }
-    const meio = (grupo.length - 1) / 2
     grupo.forEach((p, i) => {
-      resultado.push({ ...p, lng: p.lng + (i - meio) * OFFSET_COLISAO_LNG })
+      resultado.push({ ...p, indiceGrupo: i, totalGrupo: grupo.length })
     })
   })
   return resultado
@@ -440,7 +449,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
                 {geoData && <ContornoEstados geoData={geoData} ufsAtendidas={ufsAtendidas} zoomInicial={4} />}
                 <FitBounds pontos={pontos} />
                 {pontos.map(p => (
-                  <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon}>
+                  <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon(p.indiceGrupo, p.totalGrupo)}>
                     <Popup>
                       <div style={{ fontFamily: 'Inter, sans-serif', minWidth: '160px' }}>
                         <p style={{ fontSize: '13px', fontWeight: 600, color: '#111111', margin: '0 0 4px' }}>{p.nome}</p>
