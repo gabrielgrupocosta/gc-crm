@@ -486,6 +486,7 @@ export default function Financeiro() {
 
   const [cobrancas, setCobrancas] = useState([])
   const [clientes,  setClientes]  = useState([])
+  const [contratos, setContratos] = useState([])
   const [loading,   setLoading]   = useState(true)
   const [syncing,   setSyncing]   = useState(false)
   const [limpando,  setLimpando]  = useState(false)
@@ -506,12 +507,14 @@ export default function Financeiro() {
     try {
       const orgId  = user?.organizacaoId ?? null
       const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
-      const [cobrancasSnap, clientesSnap] = await Promise.all([
+      const [cobrancasSnap, clientesSnap, contratosSnap] = await Promise.all([
         getDocs(query(collection(db, COLLECTIONS.COBRANCAS), ...escopo)),
         getDocs(query(collection(db, COLLECTIONS.CLIENTES), ...escopo)),
+        getDocs(query(collection(db, COLLECTIONS.CONTRATOS), ...escopo)),
       ])
       setCobrancas(cobrancasSnap.docs.map(d => ({ id: d.id, ...d.data() })))
       setClientes(clientesSnap.docs.map(d => ({ id: d.id, ...d.data() })))
+      setContratos(contratosSnap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch (err) {
       console.error('[Financeiro] loadAll:', err)
       toast('Erro ao carregar dados financeiros.', 'error')
@@ -522,7 +525,17 @@ export default function Financeiro() {
 
   useEffect(() => { if (user) loadAll() }, [user, isSuperAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const clienteMap = useMemo(() => Object.fromEntries(clientes.map(c => [c.id, c])), [clientes])
+  const clienteMap  = useMemo(() => Object.fromEntries(clientes.map(c => [c.id, c])), [clientes])
+  const contratoMap = useMemo(() => Object.fromEntries(contratos.map(c => [c.id, c])), [contratos])
+
+  // "Cliente (Loja)" — quando o contrato tem mais de uma loja, mostra só a
+  // primeira (o nome só serve de referência rápida na lista, não precisa
+  // listar todas).
+  function nomeClienteComLoja(cobranca) {
+    const nomeCliente = clienteMap[cobranca.clienteId]?.nome ?? '—'
+    const lojaNome = contratoMap[cobranca.contratoId]?.itensLojas?.[0]?.lojaNome
+    return lojaNome ? `${nomeCliente} (${lojaNome})` : nomeCliente
+  }
 
   async function handleSincronizar() {
     setSyncing(true)
@@ -637,7 +650,7 @@ export default function Financeiro() {
           ...c,
           vencimentoLabel: vencimentosNaSemana.map(formatDateBR).join(', '),
           primeiroVencimento: vencimentosNaSemana[0] ?? null,
-          nomeCliente: clienteMap[c.clienteId]?.nome ?? '',
+          nomeCliente: nomeClienteComLoja(c),
         }
       })
       .filter(c => {
@@ -727,7 +740,7 @@ export default function Financeiro() {
               {itensDoDiaSelecionado.map(({ cobranca, parcela }) => (
                 <div key={parcela.id} className="flex items-center justify-between gap-2 p-2.5 border border-border-subtle rounded-md">
                   <div className="min-w-0 flex flex-col gap-0.5">
-                    <span className="text-[13px] text-text-primary font-medium truncate">{clienteMap[cobranca.clienteId]?.nome ?? '—'}</span>
+                    <span className="text-[13px] text-text-primary font-medium truncate">{nomeClienteComLoja(cobranca)}</span>
                     <span className="text-[12px] font-mono text-text-muted">{formatBRL(parcela.valor)}</span>
                   </div>
                   <button
@@ -841,7 +854,7 @@ export default function Financeiro() {
                     onClick={() => setEditingCobranca(c)}
                   >
                     <td className="px-4 h-12 text-[14px] text-text-primary font-medium max-w-[200px]">
-                      <span className="block truncate">{clienteMap[c.clienteId]?.nome ?? '—'}</span>
+                      <span className="block truncate">{c.nomeCliente || '—'}</span>
                     </td>
                     <td className="px-4 h-12 font-mono text-[13px] text-text-muted whitespace-nowrap">{c.vencimentoLabel}</td>
                     <td className="px-4 h-12 text-[13px] text-text-muted whitespace-nowrap">{(c.parcelas ?? []).length}</td>
@@ -862,7 +875,7 @@ export default function Financeiro() {
                 className="p-4 border-b border-border-subtle last:border-0 flex flex-col gap-2 cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[14px] text-text-primary font-medium truncate">{clienteMap[c.clienteId]?.nome ?? '—'}</span>
+                  <span className="text-[14px] text-text-primary font-medium truncate">{c.nomeCliente || '—'}</span>
                   <StatusBadge status={statusCobranca(c, hoje)} />
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-text-muted font-mono">
