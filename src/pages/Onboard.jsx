@@ -73,6 +73,7 @@ const CUPONS_TIPOS = [
 const EMPTY_CHECKLIST = {
   ...Object.fromEntries(CHECKLIST_ITENS.map(i => [i.key, false])),
   anunciosLigados: null,
+  valorDiarioAds: null,
   cuponsLigados: null,
   cupons: Object.fromEntries(CUPONS_TIPOS.map(t => [t.key, false])),
 }
@@ -450,6 +451,7 @@ function ChecklistModal({ loja, onClose, onSave }) {
   const toast = useToast()
   const [checklist,       setChecklist]       = useState({})
   const [anunciosLigados, setAnunciosLigados] = useState(null)
+  const [valorDiarioAds,  setValorDiarioAds]  = useState('')
   const [cuponsLigados,   setCuponsLigados]   = useState(null)
   const [cupons,          setCupons]          = useState({})
   const [saving,          setSaving]          = useState(false)
@@ -459,6 +461,7 @@ function ChecklistModal({ loja, onClose, onSave }) {
     const c = loja.onboardChecklist ?? EMPTY_CHECKLIST
     setChecklist(Object.fromEntries(CHECKLIST_ITENS.map(i => [i.key, !!c[i.key]])))
     setAnunciosLigados(c.anunciosLigados ?? null)
+    setValorDiarioAds(c.valorDiarioAds != null ? String(c.valorDiarioAds) : '')
     setCuponsLigados(c.cuponsLigados ?? null)
     setCupons(Object.fromEntries(CUPONS_TIPOS.map(t => [t.key, !!c.cupons?.[t.key]])))
   }, [loja])
@@ -466,12 +469,19 @@ function ChecklistModal({ loja, onClose, onSave }) {
   function toggleItem(key)  { setChecklist(prev => ({ ...prev, [key]: !prev[key] })) }
   function toggleCupom(key) { setCupons(prev => ({ ...prev, [key]: !prev[key] })) }
 
+  function handleAnunciosChange(v) {
+    setAnunciosLigados(v)
+    if (!v) setValorDiarioAds('')
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
     if (saving) return
     setSaving(true)
     try {
-      await onSave(loja, { ...checklist, anunciosLigados, cuponsLigados, cupons })
+      const valorNum = parseFloat(String(valorDiarioAds).replace(',', '.'))
+      const valorDiario = anunciosLigados === true && !isNaN(valorNum) ? valorNum : null
+      await onSave(loja, { ...checklist, anunciosLigados, valorDiarioAds: valorDiario, cuponsLigados, cupons })
       onClose()
     } catch (err) {
       console.error('[Onboard] salvar checklist:', err?.code, err?.message)
@@ -525,7 +535,28 @@ function ChecklistModal({ loja, onClose, onSave }) {
 
         <div className="flex flex-col gap-2">
           <p className="field-label">Configurações</p>
-          <YesNoField label="Anúncios ligados" value={anunciosLigados} onChange={setAnunciosLigados} />
+          <YesNoField label="Anúncios ligados" value={anunciosLigados} onChange={handleAnunciosChange} />
+
+          {anunciosLigados === true && (
+            <div style={{ marginLeft: '2px', paddingLeft: '14px', borderLeft: '2px solid #E8E8E8' }} className="flex flex-col gap-1.5 mt-1 mb-1">
+              <label className="field-label" htmlFor="ck-valor-ads">Valor diário investido (R$)</label>
+              <div className="relative" style={{ maxWidth: '160px' }}>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ fontSize: '12px', color: '#999999' }}>R$</span>
+                <input
+                  id="ck-valor-ads"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0,00"
+                  value={valorDiarioAds}
+                  onChange={e => setValorDiarioAds(e.target.value)}
+                  className="input pl-9 font-mono"
+                  style={{ height: '34px', fontSize: '13px' }}
+                />
+              </div>
+            </div>
+          )}
+
           <YesNoField label="Cupons ligados?" value={cuponsLigados} onChange={setCuponsLigados} />
 
           {cuponsLigados === true && (
