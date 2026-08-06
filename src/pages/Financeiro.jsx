@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { httpsCallable } from 'firebase/functions'
-import { RefreshCw, ChevronLeft, ChevronRight, Search, Check, Undo2, Plus, X, Trash2 } from 'lucide-react'
+import { RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Search, Check, Undo2, Plus, X, Trash2 } from 'lucide-react'
 import {
   db, COLLECTIONS, functions,
   collection, doc, query, where, getDocs, updateDoc, Timestamp,
@@ -103,6 +103,17 @@ const STATUS_COLORS = {
   atrasado:  { color: '#DC2626', bg: 'rgba(220,38,38,0.1)',  label: 'Atrasado' },
 }
 
+// Severidade — usada só como critério de ordenação da coluna Status.
+const STATUS_ORDEM = { atrasado: 0, pendente: 1, parcial: 2, pago: 3 }
+
+const COLUNAS_ORDENAVEIS = [
+  { campo: 'cliente',     label: 'Cliente' },
+  { campo: 'vencimento',  label: 'Vencimento' },
+  { campo: null,          label: 'Parcelas' },
+  { campo: 'valorTotal',  label: 'Valor total' },
+  { campo: 'status',      label: 'Status' },
+]
+
 function StatusBadge({ status }) {
   const c = STATUS_COLORS[status] ?? STATUS_COLORS.pendente
   return (
@@ -166,6 +177,8 @@ function CobrancaModal({ isOpen, onClose, cobranca, clienteNome, onSalvar }) {
   const [parcelas, setParcelas] = useState([])
   const [saving,   setSaving]   = useState(false)
   const [dataBase, setDataBase] = useState(null)
+  const [valorTotalStr, setValorTotalStr] = useState('')
+  const [motivoAjuste,  setMotivoAjuste]  = useState('')
 
   useEffect(() => {
     if (!isOpen || !cobranca) return
@@ -180,7 +193,12 @@ function CobrancaModal({ isOpen, onClose, cobranca, clienteNome, onSalvar }) {
     setParcelas(parcelasIniciais)
     const menorData = parcelasIniciais.reduce((min, p) => !min || p.dataVencimento < min ? p.dataVencimento : min, null)
     setDataBase(menorData ? new Date(menorData) : new Date())
+    setValorTotalStr(String(cobranca.valorTotal ?? ''))
+    setMotivoAjuste(cobranca.motivoAjuste ?? '')
   }, [isOpen, cobranca])
+
+  const valorTotal = parseFloat(String(valorTotalStr).replace(',', '.')) || 0
+  const valorTotalMudou = cobranca && valorTotal !== (cobranca.valorTotal ?? 0)
 
   if (!cobranca) return null
 
@@ -200,7 +218,7 @@ function CobrancaModal({ isOpen, onClose, cobranca, clienteNome, onSalvar }) {
   }
 
   function usarPreset(preset) {
-    setParcelas(aplicarPreset(preset, cobranca.valorTotal, dataBase ?? new Date()))
+    setParcelas(aplicarPreset(preset, valorTotal, dataBase ?? new Date()))
   }
 
   function toggleLinhaPago(idx) {
@@ -211,9 +229,9 @@ function CobrancaModal({ isOpen, onClose, cobranca, clienteNome, onSalvar }) {
   }
 
   const somaParcelas = parcelas.reduce((s, p) => s + (parseFloat(String(p.valor).replace(',', '.')) || 0), 0)
-  const diferenca = Math.round((cobranca.valorTotal - somaParcelas) * 100) / 100
+  const diferenca = Math.round((valorTotal - somaParcelas) * 100) / 100
   const parcelasValidas = parcelas.length > 0 && parcelas.every(p => p.valor !== '' && !isNaN(parseFloat(String(p.valor).replace(',', '.'))) && p.dataVencimento)
-  const canSave = parcelasValidas && diferenca === 0
+  const canSave = parcelasValidas && diferenca === 0 && valorTotalStr !== '' && !isNaN(valorTotal)
 
   async function handleSalvar() {
     setSaving(true)
@@ -226,7 +244,7 @@ function CobrancaModal({ isOpen, onClose, cobranca, clienteNome, onSalvar }) {
         pago: p.pago,
         dataPagamento: p.pago ? (p.dataPagamento ?? Timestamp.now()) : null,
       }))
-      await onSalvar(cobranca, payload)
+      await onSalvar(cobranca, valorTotal, payload, motivoAjuste.trim())
       onClose()
     } finally {
       setSaving(false)
@@ -249,10 +267,34 @@ function CobrancaModal({ isOpen, onClose, cobranca, clienteNome, onSalvar }) {
       }
     >
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <span className="text-[13px] text-text-muted">Valor total da cobrança</span>
-          <span className="font-mono text-[15px] font-semibold text-text-primary">{formatBRL(cobranca.valorTotal)}</span>
+        <div className="flex flex-col gap-1.5">
+          <label className="field-label" htmlFor="cb-valor-total">Valor total da cobrança</label>
+          <input
+            id="cb-valor-total"
+            type="number" min="0" step="0.01"
+            value={valorTotalStr}
+            onChange={e => setValorTotalStr(e.target.value)}
+            className="input font-mono"
+          />
+          {valorTotalMudou && (
+            <span className="text-[11px] text-warning leading-snug">
+              Valor ajustado — o padrão gerado automaticamente era {formatBRL(cobranca.valorTotal)}. Esse ajuste vale só para esta cobrança; as próximas continuam com o valor normal do contrato.
+            </span>
+          )}
         </div>
+
+        {valorTotalMudou && (
+          <div className="flex flex-col gap-1.5">
+            <label className="field-label" htmlFor="cb-motivo">Motivo do ajuste (opcional)</label>
+            <input
+              id="cb-motivo" type="text"
+              value={motivoAjuste}
+              onChange={e => setMotivoAjuste(e.target.value)}
+              placeholder="Ex: desconto no 1º mês, serviço extra na semana…"
+              className="input"
+            />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <p className="section-label">Modelos de parcelamento</p>
@@ -455,6 +497,7 @@ export default function Financeiro() {
   const [search,          setSearch]          = useState('')
   const [filtroStatus,    setFiltroStatus]    = useState('')
   const [editingCobranca, setEditingCobranca] = useState(null)
+  const [ordenacao,       setOrdenacao]       = useState({ campo: 'competencia', direcao: 'desc' })
 
   const hoje = useMemo(() => new Date(), [])
 
@@ -510,9 +553,13 @@ export default function Financeiro() {
     }
   }
 
-  async function handleSalvarParcelas(cobranca, novasParcelas) {
+  async function handleSalvarParcelas(cobranca, valorTotal, novasParcelas, motivoAjuste) {
     try {
-      await updateDoc(doc(db, COLLECTIONS.COBRANCAS, cobranca.id), { parcelas: novasParcelas })
+      await updateDoc(doc(db, COLLECTIONS.COBRANCAS, cobranca.id), {
+        valorTotal,
+        parcelas: novasParcelas,
+        motivoAjuste: motivoAjuste || null,
+      })
       toast('Cobrança atualizada.', 'success')
       await loadAll()
     } catch (err) {
@@ -580,23 +627,51 @@ export default function Financeiro() {
     const term = search.toLowerCase()
     const inicio = inicioDaSemana(semanaRef)
     const fim    = fimDaSemana(semanaRef)
-    return cobrancas
+    const linhas = cobrancas
       .map(c => {
         const vencimentosNaSemana = (c.parcelas ?? [])
           .map(p => toDate(p.dataVencimento))
           .filter(d => d && d >= inicio && d <= fim)
           .sort((a, b) => a - b)
-        return { ...c, vencimentoLabel: vencimentosNaSemana.map(formatDateBR).join(', ') }
+        return {
+          ...c,
+          vencimentoLabel: vencimentosNaSemana.map(formatDateBR).join(', '),
+          primeiroVencimento: vencimentosNaSemana[0] ?? null,
+          nomeCliente: clienteMap[c.clienteId]?.nome ?? '',
+        }
       })
       .filter(c => {
-        const nomeCliente = clienteMap[c.clienteId]?.nome ?? ''
-        const matchNome    = !term || nomeCliente.toLowerCase().includes(term)
+        const matchNome    = !term || c.nomeCliente.toLowerCase().includes(term)
         const matchStatus  = !filtroStatus || statusCobranca(c, hoje) === filtroStatus
         const matchSemana  = c.vencimentoLabel !== ''
         return matchNome && matchStatus && matchSemana
       })
-      .sort((a, b) => (b.competencia ?? '').localeCompare(a.competencia ?? ''))
-  }, [cobrancas, clienteMap, search, filtroStatus, hoje, semanaRef])
+
+    const { campo, direcao } = ordenacao
+    const sinal = direcao === 'asc' ? 1 : -1
+    linhas.sort((a, b) => {
+      switch (campo) {
+        case 'cliente':
+          return sinal * a.nomeCliente.localeCompare(b.nomeCliente, 'pt-BR')
+        case 'vencimento':
+          return sinal * ((a.primeiroVencimento?.getTime() ?? 0) - (b.primeiroVencimento?.getTime() ?? 0))
+        case 'valorTotal':
+          return sinal * ((a.valorTotal ?? 0) - (b.valorTotal ?? 0))
+        case 'status':
+          return sinal * (STATUS_ORDEM[statusCobranca(a, hoje)] - STATUS_ORDEM[statusCobranca(b, hoje)])
+        default:
+          return sinal * (a.competencia ?? '').localeCompare(b.competencia ?? '')
+      }
+    })
+    return linhas
+  }, [cobrancas, clienteMap, search, filtroStatus, hoje, semanaRef, ordenacao])
+
+  function toggleOrdenacao(campo) {
+    if (!campo) return
+    setOrdenacao(prev => prev.campo === campo
+      ? { campo, direcao: prev.direcao === 'asc' ? 'desc' : 'asc' }
+      : { campo, direcao: 'asc' })
+  }
 
   const itensDoDiaSelecionado = diaSelecionado ? (parcelasPorDia[diaSelecionado] ?? []) : []
 
@@ -739,8 +814,21 @@ export default function Financeiro() {
             <table className="w-full">
               <thead>
                 <tr className="bg-[#F9F9F9] border-b border-border">
-                  {['Cliente', 'Vencimento', 'Parcelas', 'Valor total', 'Status'].map(h => (
-                    <th key={h} className="px-4 py-2.5 text-left section-label font-medium whitespace-nowrap">{h}</th>
+                  {COLUNAS_ORDENAVEIS.map(({ campo, label }) => (
+                    <th
+                      key={label}
+                      onClick={() => toggleOrdenacao(campo)}
+                      className={`px-4 py-2.5 text-left section-label font-medium whitespace-nowrap ${campo ? 'cursor-pointer select-none hover:text-text-muted transition-colors duration-150' : ''}`}
+                    >
+                      <span className="inline-flex items-center gap-1">
+                        {label}
+                        {campo && ordenacao.campo === campo && (
+                          ordenacao.direcao === 'asc'
+                            ? <ChevronUp size={12} strokeWidth={2} />
+                            : <ChevronDown size={12} strokeWidth={2} />
+                        )}
+                      </span>
+                    </th>
                   ))}
                 </tr>
               </thead>

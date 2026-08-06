@@ -9,10 +9,12 @@ const path = require('path')
 const { initializeApp } = require('firebase-admin/app')
 const { getAuth } = require('firebase-admin/auth')
 const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore')
+const { getMessaging } = require('firebase-admin/messaging')
 
 initializeApp()
 const auth = getAuth()
 const db = getFirestore()
+const messaging = getMessaging()
 
 const ROLES_VALIDOS = ['master', 'admin_org', 'gestor']
 
@@ -538,37 +540,46 @@ function proximaOcorrenciaSemanal(dataBase, diaSemanaAlvo) {
 // (clampado no fim do mês quando necessário); semanal usa o dia da semana
 // escolhido no contrato (`diaVencimentoSemanal`), ou o dia da semana de
 // dataInicio como fallback pra contratos antigos sem esse campo.
+// `indice` conta os ciclos desde o INÍCIO do contrato (0-based), não desde
+// `desde` — é o que permite saber, mesmo gerando só a janela de lookahead,
+// se um ciclo ainda cai dentro dos N primeiros ciclos com valor temporário.
 function gerarCiclosContrato(dataInicio, tipoPagamento, desde, ate, diaVencimentoSemanal) {
   const ciclos = []
   if (tipoPagamento === 'semanal') {
     const diaAlvo = diaVencimentoSemanal ?? dataInicio.getDay()
     let cursor = proximaOcorrenciaSemanal(dataInicio, diaAlvo)
+    let indice = 0
     while (cursor <= ate) {
       if (cursor >= desde) {
         ciclos.push({
           competencia: cursor.toISOString().split('T')[0],
           competenciaLabel: `Semana de ${String(cursor.getDate()).padStart(2, '0')}/${String(cursor.getMonth() + 1).padStart(2, '0')}`,
           dataVencimento: new Date(cursor),
+          indice,
         })
       }
       cursor = new Date(cursor.getTime() + 7 * 86400000)
+      indice++
     }
   } else {
     const diaAncora = dataInicio.getDate()
     let ano = dataInicio.getFullYear()
     let mes = dataInicio.getMonth()
     let cursor = diaSeguroDoMes(ano, mes, diaAncora, dataInicio)
+    let indice = 0
     while (cursor <= ate) {
       if (cursor >= desde) {
         ciclos.push({
           competencia: `${ano}-${String(mes + 1).padStart(2, '0')}`,
           competenciaLabel: `${MESES_LABEL[mes]}/${ano}`,
           dataVencimento: new Date(cursor),
+          indice,
         })
       }
       mes += 1
       if (mes > 11) { mes = 0; ano += 1 }
       cursor = diaSeguroDoMes(ano, mes, diaAncora, dataInicio)
+      indice++
     }
   }
   return ciclos
@@ -595,7 +606,9 @@ async function gerarCobrancasParaContrato(contrato, contratoId, hoje) {
     const ref = db.collection('cobrancas').doc(cobrancaId)
     if ((await ref.get()).exists) continue
 
-    const valorTotal = contrato.valorTotal ?? 0
+    const temValorTemporario = contrato.valorTemporario != null && contrato.valorTemporarioCiclos > 0
+    const dentroDoPrazoTemporario = temValorTemporario && ciclo.indice < contrato.valorTemporarioCiclos
+    const valorTotal = dentroDoPrazoTemporario ? contrato.valorTemporario : (contrato.valorTotal ?? 0)
     await ref.set({
       organizacaoId:    contrato.organizacaoId,
       contratoId,
@@ -613,6 +626,7 @@ async function gerarCobrancasParaContrato(contrato, contratoId, hoje) {
         dataPagamento:  null,
       }],
       origem:  'automatica',
+      motivoAjuste: dentroDoPrazoTemporario ? 'Valor temporário do contrato' : null,
       geradaEm: FieldValue.serverTimestamp(),
     })
     criadas++
@@ -659,10 +673,11 @@ exports.sincronizarCobrancasAgora = onCall(async (request) => {
   return { criadas: totalCriadas }
 })
 
-// Callable de limpeza única — remove cobranças com vencimento no passado que
-// ainda estão 100% pendentes (nenhuma parcela paga). Existe pra corrigir o
-// efeito colateral da geração antiga, que backdatava cobranças desde o início
-// do contrato; nunca mexe numa cobrança que já teve alguma parcela paga.
+// Callable de limpeza única — remove cobranças 100% pendentes (nenhuma
+// parcela paga) que já estão no passado OU cujo contrato de origem não
+// existe mais (contrato excluído deixa a cobrança órfã, presa como ativa no
+// Financeiro). Nunca mexe numa cobrança que já teve alguma parcela paga —
+// isso é histórico financeiro real e não pode sumir.
 exports.limparCobrancasAntigasNaoPagas = onCall(async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login necessário')
   const { role, organizacaoId } = request.auth.token
@@ -675,13 +690,23 @@ exports.limparCobrancasAntigasNaoPagas = onCall(async (request) => {
   if (role !== 'master') cobrancasQuery = cobrancasQuery.where('organizacaoId', '==', organizacaoId)
   const cobrancasSnap = await cobrancasQuery.get()
 
+  const contratoIds = [...new Set(cobrancasSnap.docs.map(d => d.data().contratoId).filter(Boolean))]
+  const contratosExistentes = new Set()
+  await Promise.all(contratoIds.map(async id => {
+    const snap = await db.collection('contratos').doc(id).get()
+    if (snap.exists) contratosExistentes.add(id)
+  }))
+
   let removidas = 0
   for (const cobrancaDoc of cobrancasSnap.docs) {
     const cobranca = cobrancaDoc.data()
     const parcelas = cobranca.parcelas ?? []
-    const todasNoPassado = parcelas.length > 0 && parcelas.every(p => p.dataVencimento.toDate() < hoje)
     const nenhumaPaga = parcelas.every(p => !p.pago)
-    if (todasNoPassado && nenhumaPaga) {
+    if (!nenhumaPaga) continue
+
+    const todasNoPassado = parcelas.length > 0 && parcelas.every(p => p.dataVencimento.toDate() < hoje)
+    const contratoOrfao = cobranca.contratoId && !contratosExistentes.has(cobranca.contratoId)
+    if (todasNoPassado || contratoOrfao) {
       await cobrancaDoc.ref.delete()
       removidas++
     }
@@ -1043,4 +1068,161 @@ exports.assistenteChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 30
 
   const textBlock = response.content.find(b => b.type === 'text')
   return { reply: limparMarkdown(textBlock?.text ?? '') }
+})
+
+// ─── Notificações push (FCM) ───────────────────────────────────────────────────
+// Tarefas urgentes pendentes e cobranças vencidas viram notificação no
+// dispositivo (fixa = requireInteraction) via token salvo em users/{uid}.fcmTokens.
+
+async function getTokensParaUsuario(uid) {
+  if (!uid) return []
+  const snap = await db.collection('users').doc(uid).get()
+  return snap.exists ? (snap.data().fcmTokens ?? []) : []
+}
+
+// Todos os admins (master + admin_org) de uma organização — usado para que
+// cobranças e tarefas urgentes também alertem quem administra a org, não só
+// o gestor responsável pela loja.
+async function getTokensAdminsOrg(organizacaoId) {
+  const snap = await db.collection('users')
+    .where('organizacaoId', '==', organizacaoId ?? null)
+    .where('role', 'in', ['master', 'admin_org'])
+    .get()
+  return snap.docs.flatMap(d => d.data().fcmTokens ?? [])
+}
+
+// Envia para uma lista de tokens (deduplicada) e remove do Firestore qualquer
+// token que o FCM reporte como não registrado — sem isso, o array de tokens
+// só cresceria com dispositivos desinstalados/expirados, e o multicast ia
+// continuar tentando enviar pra eles a cada disparo.
+async function enviarPushParaTokens(tokens, { titulo, corpo, tipo, fixa, url }) {
+  const unicos = [...new Set(tokens)].filter(Boolean)
+  console.log(`[push] tipo=${tipo} tokens=${unicos.length}`)
+  if (unicos.length === 0) return
+
+  const resposta = await messaging.sendEachForMulticast({
+    tokens: unicos,
+    notification: { title: titulo, body: corpo },
+    data: { tipo, fixa: fixa ? 'true' : 'false', url: url ?? '/' },
+    webpush: { fcmOptions: { link: url ?? '/' } },
+  })
+
+  console.log(`[push] sucesso=${resposta.successCount} falha=${resposta.failureCount}`)
+  resposta.responses.forEach((r, i) => {
+    if (!r.success) console.log(`[push] falha token ${unicos[i].slice(0, 12)}…: ${r.error?.code}`)
+  })
+
+  const tokensInvalidos = []
+  resposta.responses.forEach((r, i) => {
+    if (!r.success && r.error?.code === 'messaging/registration-token-not-registered') {
+      tokensInvalidos.push(unicos[i])
+    }
+  })
+  if (tokensInvalidos.length === 0) return
+
+  const afetadosSnap = await db.collection('users').where('fcmTokens', 'array-contains-any', tokensInvalidos).get()
+  await Promise.all(afetadosSnap.docs.map(d => d.ref.update({ fcmTokens: FieldValue.arrayRemove(...tokensInvalidos) })))
+}
+
+// Dispara quando uma tarefa pendente é criada/atualizada com dataLembrete
+// vencendo hoje (mesmo critério do polling in-app em useLembretes.js) — evita
+// reenviar a cada escrita usando um campo de controle (pushEnviado).
+exports.notificarTarefaPendente = onDocumentWritten('tarefas/{tarefaId}', async (event) => {
+  const depois = event.data?.after?.data()
+  if (!depois || depois.status !== 'pendente' || depois.tipo === 'registro') return
+  if (depois.pushEnviado) return
+  if (!depois.dataLembrete) return
+
+  const hoje = new Date()
+  const dataLembrete = depois.dataLembrete.toDate()
+  const dataOnly = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  if (dataOnly(dataLembrete) > dataOnly(hoje)) return
+
+  const fixa = depois.prioridade === 'urgente'
+  const tokensGestor = await getTokensParaUsuario(depois.gestorId)
+  const tokensAdmins = await getTokensAdminsOrg(depois.organizacaoId)
+
+  await enviarPushParaTokens([...tokensGestor, ...tokensAdmins], {
+    titulo: fixa ? 'Tarefa urgente pendente' : 'Lembrete de tarefa',
+    corpo: `${depois.lojaNome ? depois.lojaNome + ': ' : ''}${depois.descricao ?? ''}`,
+    tipo: 'tarefa',
+    fixa,
+    url: '/atividades',
+  })
+
+  await event.data.after.ref.update({ pushEnviado: true })
+})
+
+// Dispara uma vez, assim que a tarefa é criada e atribuída a um gestor —
+// separado do lembrete de vencimento acima (que dispara no dia do prazo).
+// Aqui é só "você recebeu uma tarefa nova", por isso é sempre notificação
+// normal (não fixa), mesmo que a tarefa já nasça urgente.
+exports.notificarNovaTarefaAtribuida = onDocumentWritten('tarefas/{tarefaId}', async (event) => {
+  if (event.data?.before?.exists) return
+  const depois = event.data?.after?.data()
+  if (!depois || !depois.gestorId) return
+  if (depois.pushNovaTarefaEnviado) return
+
+  console.log(`[notificarNovaTarefaAtribuida] gestorId=${depois.gestorId}`)
+  const tokensGestor = await getTokensParaUsuario(depois.gestorId)
+  await enviarPushParaTokens(tokensGestor, {
+    titulo: 'Nova tarefa atribuída',
+    corpo: `${depois.lojaNome ? depois.lojaNome + ': ' : ''}${depois.descricao ?? ''}`,
+    tipo: 'tarefa-nova',
+    fixa: false,
+    url: '/atividades',
+  })
+
+  await event.data.after.ref.update({ pushNovaTarefaEnviado: true })
+})
+
+// Mesma lógica da função acima, mas para a aba Ações (checklist de melhorias
+// por loja) — coleção separada de 'tarefas', então precisa do próprio gatilho.
+exports.notificarNovaAcaoCriada = onDocumentWritten('acoes/{acaoId}', async (event) => {
+  if (event.data?.before?.exists) return
+  const depois = event.data?.after?.data()
+  if (!depois || !depois.gestorId) return
+  if (depois.pushNovaAcaoEnviado) return
+
+  const tokensGestor = await getTokensParaUsuario(depois.gestorId)
+  await enviarPushParaTokens(tokensGestor, {
+    titulo: 'Nova ação atribuída',
+    corpo: `${depois.lojaNome ? depois.lojaNome + ': ' : ''}${depois.descricao ?? ''}`,
+    tipo: 'acao-nova',
+    fixa: false,
+    url: '/atividades',
+  })
+
+  await event.data.after.ref.update({ pushNovaAcaoEnviado: true })
+})
+
+// Dispara quando uma cobrança é criada/atualizada e alguma parcela está
+// vencida e não paga — sempre fixa, pois é financeiro. Usa um array de
+// controle (parcelasNotificadas) para não reenviar a mesma parcela a cada
+// escrita do documento (ex: quando outra parcela é paga depois).
+exports.notificarCobrancaVencida = onDocumentWritten('cobrancas/{cobrancaId}', async (event) => {
+  const depois = event.data?.after?.data()
+  if (!depois) return
+
+  const hoje = new Date()
+  const jaNotificadas = new Set(depois.parcelasNotificadas ?? [])
+  const parcelasVencidas = (depois.parcelas ?? []).filter(p =>
+    !p.pago && p.dataVencimento?.toDate() < hoje && !jaNotificadas.has(p.id)
+  )
+  if (parcelasVencidas.length === 0) return
+
+  const tokensAdmins = await getTokensAdminsOrg(depois.organizacaoId)
+  if (tokensAdmins.length > 0) {
+    const valorTotal = parcelasVencidas.reduce((soma, p) => soma + (p.valor ?? 0), 0)
+    await enviarPushParaTokens(tokensAdmins, {
+      titulo: 'Cobrança vencida',
+      corpo: `${depois.competenciaLabel ?? 'Cobrança'} — R$ ${valorTotal.toFixed(2)} em atraso`,
+      tipo: 'cobranca',
+      fixa: true,
+      url: '/financeiro',
+    })
+  }
+
+  const todasNotificadas = [...jaNotificadas, ...parcelasVencidas.map(p => p.id)]
+  await event.data.after.ref.update({ parcelasNotificadas: todasNotificadas })
 })

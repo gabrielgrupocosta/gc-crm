@@ -30,9 +30,12 @@ import {
   onSnapshot,
   serverTimestamp,
   Timestamp,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore'
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { getFunctions } from 'firebase/functions'
+import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging'
 
 const firebaseConfig = {
   apiKey:            'AIzaSyBrOl8KlLBqxINgaucxDjNRTu62YqRMMYc',
@@ -50,6 +53,15 @@ export const auth      = getAuth(app)
 export const db        = getFirestore(app)
 export const storage   = getStorage(app)
 export const functions = getFunctions(app)
+
+// Messaging não é suportado em todo navegador (ex: Safari antigo, contexto não
+// seguro) — getMessaging() sozinho lança nesses casos, então só inicializa
+// depois de confirmar suporte via isSupported().
+export let messaging = null
+export const messagingPronto = isMessagingSupported().then((suportado) => {
+  if (suportado) messaging = getMessaging(app)
+  return suportado
+})
 
 const secondaryAuth = getAuth(secondaryApp)
 
@@ -144,6 +156,8 @@ export {
   onSnapshot,
   serverTimestamp,
   Timestamp,
+  arrayUnion,
+  arrayRemove,
 }
 
 // Rate limit de criação nas coleções críticas (clientes/contratos/lojas) —

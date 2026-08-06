@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
-import { Plus, Trash2, Check } from 'lucide-react'
+import { Plus, Trash2, Check, Store } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import {
   db, COLLECTIONS,
@@ -49,7 +49,7 @@ const itemVariants = {
 
 // ─── Modal de nova tarefa ─────────────────────────────────────────────────────
 
-const EMPTY_TAREFA_FORM = { lojaId: '', descricao: '', data: '', observacao: '', agendar: false, prioridade: 'normal' }
+const EMPTY_TAREFA_FORM = { lojaId: '', descricao: '', data: '', observacao: '', agendar: false, prioridade: 'normal', gestorId: '' }
 
 const PRIORIDADE_LABEL = { normal: 'Normal', urgente: 'Urgente', agendada: 'Agendada' }
 const PRIORIDADE_COLOR = {
@@ -91,7 +91,7 @@ function AgendarSwitch({ id, checked, onChange }) {
   )
 }
 
-function NovaTarefaModal({ isOpen, onClose, onSave, lojas, gestorMap }) {
+function NovaTarefaModal({ isOpen, onClose, onSave, lojas, gestorMap, gestores, isAdmin }) {
   const [form, setForm] = useState(EMPTY_TAREFA_FORM)
   const [saving, setSaving] = useState(false)
 
@@ -146,8 +146,22 @@ function NovaTarefaModal({ isOpen, onClose, onSave, lojas, gestorMap }) {
       <form id="nova-tarefa-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <label className="field-label" htmlFor="tf-loja">Loja</label>
-          <LojaSelect lojas={lojas} value={form.lojaId} onChange={id => set('lojaId', id)} gestorMap={gestorMap} />
+          <LojaSelect lojas={lojas} value={form.lojaId} onChange={id => { set('lojaId', id); set('gestorId', '') }} gestorMap={gestorMap} />
         </div>
+
+        {isAdmin && (
+          <div className="flex flex-col gap-1.5">
+            <label className="field-label" htmlFor="tf-gestor">Atribuir a</label>
+            <select id="tf-gestor" value={form.gestorId} onChange={e => set('gestorId', e.target.value)} className="select">
+              <option value="">
+                {gestorMap[lojas.find(l => l.id === form.lojaId)?.gestorId]?.nome
+                  ? `Gestor da loja (${gestorMap[lojas.find(l => l.id === form.lojaId)?.gestorId]?.nome})`
+                  : 'Atribuir a…'}
+              </option>
+              {gestores.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+            </select>
+          </div>
+        )}
 
         <div className="flex flex-col gap-1.5">
           <label className="field-label" htmlFor="tf-desc">Descrição da tarefa</label>
@@ -215,8 +229,17 @@ function TarefaRow({ tarefa: t, isLast, lojaMap, isAdmin, concluindoId, excluind
       }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] text-text-primary font-medium truncate" style={{ textDecoration: concluida ? 'line-through' : 'none' }}>
+        <div
+          className="inline-flex items-center gap-1 w-fit max-w-full"
+          style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: '#FFF7ED' }}
+        >
+          <Store size={11} strokeWidth={2} style={{ color: '#B45309' }} className="shrink-0" />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] truncate" style={{ color: '#111111' }}>
+            {lojaMap[t.lojaId]?.nome ?? t.lojaNome ?? 'Loja removida'}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap mt-1">
+          <span className="text-[14px] text-text-primary font-semibold truncate" style={{ textDecoration: concluida ? 'line-through' : 'none' }}>
             {t.descricao}
           </span>
           {isRegistro ? (
@@ -257,13 +280,17 @@ function TarefaRow({ tarefa: t, isLast, lojaMap, isAdmin, concluindoId, excluind
             </span>
           )}
         </div>
-        <p className="text-[12px] text-text-subtle mt-0.5">
-          {lojaMap[t.lojaId]?.nome ?? t.lojaNome ?? 'Loja removida'}
-          {t.dataLembrete ? ` · ${formatDate(t.dataLembrete)}` : ''}
-          {isAdmin && t.gestorNome ? ` · ${t.gestorNome}` : ''}
-        </p>
         {t.observacao && (
-          <p className="text-[12px] text-text-muted mt-1">{t.observacao}</p>
+          <p className="text-[13px] text-text-muted leading-relaxed mt-1">{t.observacao}</p>
+        )}
+        {(t.dataLembrete || t.criadoEm || (isAdmin && t.gestorNome)) && (
+          <p className="text-[11px] mt-0.5" style={{ color: '#999999' }}>
+            {[
+              t.dataLembrete ? `Lembrete: ${formatDate(t.dataLembrete)}` : null,
+              t.criadoEm ? `Criada em ${formatDate(t.criadoEm)}` : null,
+              isAdmin ? t.gestorNome : null,
+            ].filter(Boolean).join(' · ')}
+          </p>
         )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
@@ -316,6 +343,8 @@ export default function Atividades() {
   const [tarefaModalOpen,  setTarefaModalOpen]  = useState(false)
   const [concluindoId,     setConcluindoId]     = useState(null)
   const [excluindoId,      setExcluindoId]      = useState(null)
+  const [filtroLojaTarefas,   setFiltroLojaTarefas]   = useState('')
+  const [filtroGestorTarefas, setFiltroGestorTarefas] = useState('')
 
   // ─ Ações
   const [filtroGestorAcoes,   setFiltroGestorAcoes]   = useState('')
@@ -326,6 +355,7 @@ export default function Atividades() {
   const [concluindoAcaoId,    setConcluindoAcaoId]    = useState(null)
   const [novaAcaoTexto,       setNovaAcaoTexto]       = useState('')
   const [novaAcaoPlataforma,  setNovaAcaoPlataforma]  = useState('iFood')
+  const [novaAcaoGestorId,    setNovaAcaoGestorId]    = useState('')
   const [salvandoAcao,        setSalvandoAcao]        = useState(false)
 
   // ─── Load lojas + gestores ──────────────────────────────────────────────────
@@ -376,6 +406,19 @@ export default function Atividades() {
     const inicioHoje = new Date(); inicioHoje.setHours(0, 0, 0, 0)
     return tarefas.filter(t => t.status === 'concluida' && tsMillis(t.concluidoEm) < inicioHoje.getTime())
   }, [tarefas]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const tarefasPendentesFiltradas = useMemo(() => {
+    return tarefasPendentes.filter(t => {
+      if (filtroLojaTarefas && t.lojaId !== filtroLojaTarefas) return false
+      if (filtroGestorTarefas && t.gestorId !== filtroGestorTarefas) return false
+      return true
+    })
+  }, [tarefasPendentes, filtroLojaTarefas, filtroGestorTarefas])
+
+  const lojasVisiveisTarefas = useMemo(() => {
+    if (!isAdmin || !filtroGestorTarefas) return lojas
+    return lojas.filter(l => l.gestorId === filtroGestorTarefas)
+  }, [lojas, isAdmin, filtroGestorTarefas])
 
   const lojasVisiveisAcoes = useMemo(() => {
     if (!isAdmin || !filtroGestorAcoes) return lojas
@@ -473,6 +516,7 @@ export default function Atividades() {
       setAcoes(docs)
     } catch (err) {
       console.error('[Atividades] erro ao carregar ações:', err?.code, err?.message)
+      setAcoes([])
     } finally {
       setLoadingAcoes(false)
     }
@@ -492,10 +536,12 @@ export default function Atividades() {
     if (!selectedLojaIdAcoes || !novaAcaoTexto.trim()) return
     setSalvandoAcao(true)
     try {
+      const gestorAtribuido = novaAcaoGestorId || lojaMap[selectedLojaIdAcoes]?.gestorId || user.uid
       await addDoc(collection(db, COLLECTIONS.ACOES), {
         lojaId:        selectedLojaIdAcoes,
-        gestorId:      user.uid,
-        gestorNome:    user.nome ?? '',
+        lojaNome:      lojaMap[selectedLojaIdAcoes]?.nome ?? '',
+        gestorId:      gestorAtribuido,
+        gestorNome:    gestorMap[gestorAtribuido]?.nome ?? user.nome ?? '',
         organizacaoId: user.organizacaoId ?? null,
         descricao:     novaAcaoTexto.trim(),
         plataforma:    novaAcaoPlataforma,
@@ -504,6 +550,7 @@ export default function Atividades() {
         timestamp:     serverTimestamp(),
       })
       setNovaAcaoTexto('')
+      setNovaAcaoGestorId('')
       toast('Ação adicionada ao checklist.', 'success')
       loadAcoes()
     } catch (err) {
@@ -564,10 +611,33 @@ export default function Atividades() {
     setLoadingTarefas(true)
     try {
       const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
-      const snap = isAdmin
-        ? await getDocs(query(collection(db, COLLECTIONS.TAREFAS), ...escopoOrg))
-        : await getDocs(query(collection(db, COLLECTIONS.TAREFAS), ...escopoOrg, where('gestorId', '==', user.uid)))
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      let docs
+      if (isAdmin) {
+        const snap = await getDocs(query(collection(db, COLLECTIONS.TAREFAS), ...escopoOrg))
+        docs = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      } else {
+        // Gestor precisa ver tarefas atribuídas a ele OU tarefas das lojas que
+        // ele gerencia (podem divergir: uma tarefa pode ter sido criada/
+        // reatribuída pra outro gestorId mesmo sendo de uma loja dele).
+        const lojasDoGestorSnap = await getDocs(
+          query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', user.uid))
+        )
+        const lojaIds = lojasDoGestorSnap.docs.map(d => d.id)
+        const lojaIdChunks = []
+        for (let i = 0; i < lojaIds.length; i += 10) lojaIdChunks.push(lojaIds.slice(i, i + 10))
+
+        const [porGestorSnap, ...porLojaSnaps] = await Promise.all([
+          getDocs(query(collection(db, COLLECTIONS.TAREFAS), ...escopoOrg, where('gestorId', '==', user.uid))),
+          ...lojaIdChunks.map(chunk =>
+            getDocs(query(collection(db, COLLECTIONS.TAREFAS), ...escopoOrg, where('lojaId', 'in', chunk)))
+          ),
+        ])
+        const porId = new Map()
+        for (const snap of [porGestorSnap, ...porLojaSnaps]) {
+          for (const d of snap.docs) porId.set(d.id, { id: d.id, ...d.data() })
+        }
+        docs = Array.from(porId.values())
+      }
       docs.sort((a, b) => {
         if (a.status !== b.status) return a.status === 'pendente' ? -1 : 1
         return tsMillis(a.dataLembrete) - tsMillis(b.dataLembrete)
@@ -592,11 +662,13 @@ export default function Atividades() {
       dataLembrete = Timestamp.fromDate(new Date(ano, mes - 1, dia))
     }
 
+    const gestorAtribuido = form.gestorId || lojaMap[form.lojaId]?.gestorId || user.uid
+
     await addDoc(collection(db, COLLECTIONS.TAREFAS), {
       lojaId:         form.lojaId,
       lojaNome:       lojaMap[form.lojaId]?.nome ?? '', // snapshot p/ o popup de lembrete não precisar buscar a loja
-      gestorId:       user.uid,
-      gestorNome:     user.nome ?? '',
+      gestorId:       gestorAtribuido,
+      gestorNome:     gestorMap[gestorAtribuido]?.nome ?? user.nome ?? '',
       organizacaoId:  user.organizacaoId ?? null,
       descricao:    form.descricao.trim(),
       dataLembrete,
@@ -692,7 +764,7 @@ export default function Atividades() {
               <LojaSelect
                 lojas={lojasVisiveisAcoes}
                 value={selectedLojaIdAcoes}
-                onChange={setSelectedLojaIdAcoes}
+                onChange={id => { setSelectedLojaIdAcoes(id); setNovaAcaoGestorId('') }}
                 gestorMap={gestorMap}
                 className="w-64"
               />
@@ -725,6 +797,22 @@ export default function Atividades() {
                       <option value="99Food">99Food</option>
                       <option value="Keeta">Keeta</option>
                     </select>
+                    {isAdmin && (
+                      <select
+                        value={novaAcaoGestorId}
+                        onChange={e => setNovaAcaoGestorId(e.target.value)}
+                        className="select w-44 shrink-0"
+                        disabled={!selectedLojaIdAcoes}
+                        title="Atribuir a um gestor"
+                      >
+                        <option value="">
+                          {lojaMap[selectedLojaIdAcoes]?.gestorId
+                            ? `Gestor da loja (${gestorMap[lojaMap[selectedLojaIdAcoes]?.gestorId]?.nome ?? '—'})`
+                            : 'Atribuir a…'}
+                        </option>
+                        {gestores.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+                      </select>
+                    )}
                     <button
                       onClick={handleCriarAcao}
                       disabled={!selectedLojaIdAcoes || salvandoAcao || !novaAcaoTexto.trim()}
@@ -940,8 +1028,28 @@ export default function Atividades() {
       {/* ── Aba Tarefas ───────────────────────────────────────────────────── */}
       {activeTab === 'tarefas' && (
         <div className="flex flex-col gap-5">
-          <div className="flex items-center justify-end">
-            <button onClick={() => setTarefaModalOpen(true)} className="btn-primary flex items-center gap-2 h-9">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              {isAdmin && (
+                <select
+                  value={filtroGestorTarefas}
+                  onChange={e => { setFiltroGestorTarefas(e.target.value); setFiltroLojaTarefas('') }}
+                  className="select w-52"
+                >
+                  <option value="">Todos os gestores</option>
+                  {gestores.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+                </select>
+              )}
+              <LojaSelect
+                lojas={lojasVisiveisTarefas}
+                value={filtroLojaTarefas}
+                onChange={setFiltroLojaTarefas}
+                gestorMap={gestorMap}
+                placeholder="Filtrar por loja..."
+                className="w-64"
+              />
+            </div>
+            <button onClick={() => setTarefaModalOpen(true)} className="btn-primary flex items-center gap-2 h-9 shrink-0">
               <Plus size={15} strokeWidth={2} />
               Nova Tarefa
             </button>
@@ -950,17 +1058,17 @@ export default function Atividades() {
           <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
             {loadingBase || loadingTarefas ? (
               <Skeleton.Table rows={5} cols={4} />
-            ) : tarefasPendentes.length === 0 ? (
+            ) : tarefasPendentesFiltradas.length === 0 ? (
               <p className="text-[13px] text-text-subtle text-center py-10">
-                Nenhuma tarefa pendente.
+                {filtroLojaTarefas || filtroGestorTarefas ? 'Nenhuma tarefa pendente para este filtro.' : 'Nenhuma tarefa pendente.'}
               </p>
             ) : (
               <motion.div variants={listVariants} initial="initial" animate="animate">
-                {tarefasPendentes.map((t, idx) => (
+                {tarefasPendentesFiltradas.map((t, idx) => (
                   <TarefaRow
                     key={t.id}
                     tarefa={t}
-                    isLast={idx === tarefasPendentes.length - 1}
+                    isLast={idx === tarefasPendentesFiltradas.length - 1}
                     lojaMap={lojaMap}
                     isAdmin={isAdmin}
                     concluindoId={concluindoId}
@@ -981,6 +1089,8 @@ export default function Atividades() {
         onSave={handleSalvarTarefa}
         lojas={lojas}
         gestorMap={gestorMap}
+        gestores={gestores}
+        isAdmin={isAdmin}
       />
     </motion.div>
   )

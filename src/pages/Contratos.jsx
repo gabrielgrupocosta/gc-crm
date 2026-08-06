@@ -356,6 +356,8 @@ function EditarContratoModal({ isOpen, onClose, onSave, onPedirExclusao, contrat
         diaVencimentoSemanal: contrato.diaVencimentoSemanal ?? null,
         dataInicio: contrato.dataInicio?.toDate ? contrato.dataInicio.toDate().toISOString().split('T')[0] : hojeDateInput(),
         observacoes: contrato.observacoes ?? '',
+        valorTemporario: contrato.valorTemporario != null ? String(contrato.valorTemporario) : '',
+        valorTemporarioCiclos: contrato.valorTemporarioCiclos != null ? String(contrato.valorTemporarioCiclos) : '',
       })
       setCarregando(false)
     })()
@@ -379,7 +381,12 @@ function EditarContratoModal({ isOpen, onClose, onSave, onPedirExclusao, contrat
   const lojasValidas = !!form && form.lojasContrato.length > 0 && form.lojasContrato.every(item =>
     item.nome.trim().length > 0 && item.valor !== '' && !isNaN(parseFloat(String(item.valor).replace(',', '.')))
   )
-  const canSave = !!form && lojasValidas && form.dataInicio
+  const valorTemporarioPreenchido = !!form && (form.valorTemporario !== '' || form.valorTemporarioCiclos !== '')
+  const valorTemporarioValido = !valorTemporarioPreenchido || (
+    form.valorTemporario !== '' && !isNaN(parseFloat(String(form.valorTemporario).replace(',', '.')))
+    && form.valorTemporarioCiclos !== '' && Number.isInteger(Number(form.valorTemporarioCiclos)) && Number(form.valorTemporarioCiclos) > 0
+  )
+  const canSave = !!form && lojasValidas && form.dataInicio && valorTemporarioValido
 
   return (
     <Modal
@@ -441,6 +448,37 @@ function EditarContratoModal({ isOpen, onClose, onSave, onPedirExclusao, contrat
               onChange={e => set('dataInicio', e.target.value)}
               className="input"
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5 rounded-[8px] border border-border p-3">
+            <p className="section-label">Valor temporário (opcional)</p>
+            <p className="text-[12px] text-text-muted leading-snug">
+              Ex: desconto no início do contrato — vale só pelos primeiros ciclos, depois volta pro valor normal automaticamente.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <div className="flex flex-col gap-1.5 flex-1">
+                <label className="field-label" htmlFor="ect-valor-temp">Valor por ciclo</label>
+                <input
+                  id="ect-valor-temp" type="number" min="0" step="0.01"
+                  value={form.valorTemporario}
+                  onChange={e => set('valorTemporario', e.target.value)}
+                  placeholder="0,00"
+                  className="input font-mono"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5 w-36">
+                <label className="field-label" htmlFor="ect-valor-temp-ciclos">
+                  {form.tipoPagamento === 'semanal' ? 'Nº de semanas' : 'Nº de meses'}
+                </label>
+                <input
+                  id="ect-valor-temp-ciclos" type="number" min="1" step="1"
+                  value={form.valorTemporarioCiclos}
+                  onChange={e => set('valorTemporarioCiclos', e.target.value)}
+                  placeholder="1"
+                  className="input font-mono"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -706,6 +744,12 @@ export default function Contratos() {
       valorTotal,
       dataInicio: Timestamp.fromDate(parseLocalDate(form.dataInicio)),
       observacoes: form.observacoes.trim() || null,
+      valorTemporario: form.valorTemporario !== ''
+        ? parseFloat(String(form.valorTemporario).replace(',', '.'))
+        : null,
+      valorTemporarioCiclos: form.valorTemporarioCiclos !== ''
+        ? Number(form.valorTemporarioCiclos)
+        : null,
     })
 
     toast('Contrato atualizado.', 'success')
@@ -715,6 +759,22 @@ export default function Contratos() {
   async function handleExcluirContrato() {
     if (!contratoParaExcluir) return
     try {
+      // Cobranças automáticas ficam vinculadas ao contrato via contratoId.
+      // Excluir o contrato sem limpar essas cobranças as deixa órfãs, "presas"
+      // como ativas no Financeiro. Só removemos as que ainda não tiveram
+      // nenhuma parcela paga — isso é histórico financeiro real e não pode
+      // sumir junto com o contrato.
+      const cobrancasSnap = await getDocs(
+        query(collection(db, COLLECTIONS.COBRANCAS), where('contratoId', '==', contratoParaExcluir.id))
+      )
+      await Promise.all(
+        cobrancasSnap.docs.map(cobrancaDoc => {
+          const parcelas = cobrancaDoc.data().parcelas ?? []
+          const nenhumaPaga = parcelas.every(p => !p.pago)
+          return nenhumaPaga ? deleteDoc(cobrancaDoc.ref) : Promise.resolve()
+        })
+      )
+
       await deleteDoc(doc(db, COLLECTIONS.CONTRATOS, contratoParaExcluir.id))
       toast('Contrato excluído.', 'success')
       setContratoParaExcluir(null)

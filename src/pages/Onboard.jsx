@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { ListChecks } from 'lucide-react'
 import {
   db, COLLECTIONS, uploadImagem, deleteImagem,
-  collection, doc, getDoc, query, where, getDocs, updateDoc, addDoc, serverTimestamp,
+  collection, doc, getDoc, query, where, getDocs, updateDoc, setDoc, serverTimestamp,
 } from '../services/firebase'
 import { useToast } from '../components/UI/Toast'
 import { useAuth } from '../contexts/AuthContext'
@@ -237,6 +237,9 @@ function PreGestaoModal({ loja, advanceStatus, onClose, onSave }) {
     try {
       await onSave(loja, form, prints, { advanceStatus })
       onClose()
+    } catch (err) {
+      console.error('[Onboard] salvar pré-gestão:', err?.code, err?.message)
+      toast('Erro ao salvar dados. Tente novamente.', 'error')
     } finally {
       setSaving(false)
     }
@@ -334,6 +337,7 @@ function PreGestaoModal({ loja, advanceStatus, onClose, onSave }) {
 // ─── Modal: agendar onboard ─────────────────────────────────────────────────────
 
 function AgendarModal({ loja, advanceStatus, onClose, onSave }) {
+  const toast = useToast()
   const [form,   setForm]   = useState(EMPTY_AGENDAR_FORM)
   const [saving, setSaving] = useState(false)
 
@@ -355,6 +359,9 @@ function AgendarModal({ loja, advanceStatus, onClose, onSave }) {
     try {
       await onSave(loja, form, { advanceStatus })
       onClose()
+    } catch (err) {
+      console.error('[Onboard] salvar agendamento:', err?.code, err?.message)
+      toast('Erro ao salvar agendamento. Tente novamente.', 'error')
     } finally {
       setSaving(false)
     }
@@ -440,6 +447,7 @@ function YesNoField({ label, value, onChange }) {
 // ─── Modal: checklist de início de gestão ──────────────────────────────────────
 
 function ChecklistModal({ loja, onClose, onSave }) {
+  const toast = useToast()
   const [checklist,       setChecklist]       = useState({})
   const [anunciosLigados, setAnunciosLigados] = useState(null)
   const [cuponsLigados,   setCuponsLigados]   = useState(null)
@@ -465,6 +473,9 @@ function ChecklistModal({ loja, onClose, onSave }) {
     try {
       await onSave(loja, { ...checklist, anunciosLigados, cuponsLigados, cupons })
       onClose()
+    } catch (err) {
+      console.error('[Onboard] salvar checklist:', err?.code, err?.message)
+      toast('Erro ao salvar checklist. Tente novamente.', 'error')
     } finally {
       setSaving(false)
     }
@@ -544,6 +555,7 @@ function ChecklistModal({ loja, onClose, onSave }) {
 // ─── Modal: confirmar início de gestão ─────────────────────────────────────────
 
 function ConfirmIniciarModal({ loja, onClose, onConfirm }) {
+  const toast = useToast()
   const [saving, setSaving] = useState(false)
 
   async function handleConfirm() {
@@ -552,6 +564,9 @@ function ConfirmIniciarModal({ loja, onClose, onConfirm }) {
     try {
       await onConfirm(loja)
       onClose()
+    } catch (err) {
+      console.error('[Onboard] iniciar gestão:', err?.code, err?.message)
+      toast('Erro ao iniciar gestão. Tente novamente.', 'error')
     } finally {
       setSaving(false)
     }
@@ -935,22 +950,17 @@ export default function Onboard() {
     await loadAll()
   }
 
-  async function handleIniciarGestao(loja) {
-    await updateDoc(doc(db, COLLECTIONS.LOJAS, loja.id), {
-      onboardStatus:     'ativo',
-      dataInicioGestao:  serverTimestamp(),
-      status:            'Ativa',
-    })
-
-    // Transfere o checklist de início de gestão pro checklist de Ações da
-    // loja — cada item vira uma ação já concluída (se estava marcado) ou
-    // pendente (se não foi feito ainda), pra não se perder o que ficou
-    // faltando assim que a loja sai do onboard.
-    const checklist = loja.onboardChecklist ?? EMPTY_CHECKLIST
+  // Sincroniza o checklist de início de gestão com o checklist de Ações da
+  // loja — cada item vira uma ação já concluída (se estava marcado) ou
+  // pendente (se não foi feito ainda). Usa ID determinístico (lojaId_key)
+  // pra ser idempotente: pode ser chamado tanto ao salvar o checklist quanto
+  // ao iniciar a gestão, sem duplicar os itens em Ações.
+  async function syncChecklistAcoes(loja, checklistData) {
+    const checklist = checklistData ?? loja.onboardChecklist ?? EMPTY_CHECKLIST
     const gestorNome = gestorMap[loja.gestorId]?.nome ?? ''
     await Promise.all(CHECKLIST_ITENS.map(item => {
       const feito = !!checklist[item.key]
-      return addDoc(collection(db, COLLECTIONS.ACOES), {
+      return setDoc(doc(db, COLLECTIONS.ACOES, `${loja.id}_${item.key}`), {
         lojaId:        loja.id,
         gestorId:      loja.gestorId || null,
         gestorNome,
@@ -961,8 +971,18 @@ export default function Onboard() {
         status:        feito ? 'concluida' : 'pendente',
         concluidoEm:   feito ? serverTimestamp() : null,
         timestamp:     serverTimestamp(),
-      })
+      }, { merge: true })
     }))
+  }
+
+  async function handleIniciarGestao(loja) {
+    await updateDoc(doc(db, COLLECTIONS.LOJAS, loja.id), {
+      onboardStatus:     'ativo',
+      dataInicioGestao:  serverTimestamp(),
+      status:            'Ativa',
+    })
+
+    await syncChecklistAcoes(loja)
 
     toast('Gestão iniciada — loja ativa. Checklist transferido pra Ações.', 'success')
     await loadAll()
@@ -970,7 +990,8 @@ export default function Onboard() {
 
   async function handleSaveChecklist(loja, checklistData) {
     await updateDoc(doc(db, COLLECTIONS.LOJAS, loja.id), { onboardChecklist: checklistData })
-    toast('Checklist salvo.', 'success')
+    await syncChecklistAcoes(loja, checklistData)
+    toast('Checklist salvo — itens marcados já aparecem em Ações.', 'success')
     await loadAll()
   }
 

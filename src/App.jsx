@@ -8,9 +8,14 @@ import { AssistenteChatProvider } from './contexts/AssistenteChatContext'
 import { ToastProvider } from './components/UI/Toast'
 import { useLembretes } from './hooks/useLembretes'
 import { useLojasSemGestor } from './hooks/useLojasSemGestor'
+import { useNotificacoesPush } from './hooks/useNotificacoesPush'
+import { useLembreteDiarioIOS } from './hooks/useLembreteDiarioIOS'
 import usePageTitle from './hooks/usePageTitle'
 import Sidebar from './components/Layout/Sidebar'
 import AssistenteFloatingButton from './components/Layout/AssistenteFloatingButton'
+import PedirPermissaoNotificacao from './components/UI/PedirPermissaoNotificacao'
+import InstalarPWAiOS from './components/UI/InstalarPWAiOS'
+import InstalarPWAAndroid from './components/UI/InstalarPWAAndroid'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Lojas from './pages/Lojas'
@@ -206,6 +211,23 @@ function LembretesGlobais() {
   )
 }
 
+// ─── Push (FCM): pede permissão e registra o token do dispositivo ─────────────
+
+function NotificacoesPushGlobal() {
+  const { user } = useAuth()
+  const { permissao, pedirPermissao } = useNotificacoesPush()
+  useLembreteDiarioIOS()
+
+  if (!user) return null
+  return (
+    <>
+      <InstalarPWAiOS />
+      <InstalarPWAAndroid />
+      <PedirPermissaoNotificacao permissao={permissao} onPedirPermissao={pedirPermissao} />
+    </>
+  )
+}
+
 // ─── Notificação flutuante: lojas sem gestor ───────────────────────────────────
 
 function LojasSemGestorAlerta() {
@@ -366,6 +388,7 @@ export default function App() {
           <AppRoutes />
           <LembretesGlobais />
           <LojasSemGestorAlerta />
+          <NotificacoesPushGlobal />
         </ToastProvider>
       </AuthProvider>
     </BrowserRouter>

@@ -59,6 +59,22 @@
         { "fieldPath": "lojaId", "order": "ASCENDING" },
         { "fieldPath": "timestamp", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "acoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "lojaId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tarefas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "organizacaoId", "order": "ASCENDING" },
+        { "fieldPath": "lojaId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
