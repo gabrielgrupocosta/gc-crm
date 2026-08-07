@@ -61,6 +61,7 @@ export default function Login() {
   const [error,        setError]        = useState('')
   const [loading,       setLoading]       = useState(false)
   const [entrandoIntro, setEntrandoIntro] = useState(false)
+  const [giroConcluido, setGiroConcluido] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -71,6 +72,7 @@ export default function Login() {
       await login(email.trim(), password)
       setLoading(false)
       setEntrandoIntro(true)
+      setGiroConcluido(false)
       setTimeout(() => {
         finalizarIntro()
         navigate('/dashboard', { replace: true })
@@ -84,34 +86,35 @@ export default function Login() {
   if (entrandoIntro) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center px-4">
-        <motion.div
-          initial={{ scale: 0.4, opacity: 0 }}
-          animate={{
-            scale: 1,
-            opacity: 1,
-            rotate: 360,
-          }}
-          transition={{
-            scale: { duration: 0.5, ease: 'easeOut' },
-            opacity: { duration: 0.5, ease: 'easeOut' },
-            rotate: { duration: 1.2, ease: 'easeInOut' },
-          }}
-        >
+        {/* Perspective no container é o que dá profundidade ao giro em Y —
+            sem isso rotateY parece só um "achatar" 2D, não uma moeda girando. */}
+        <div style={{ perspective: '800px' }}>
           <motion.div
-            animate={{
-              filter: [
-                'drop-shadow(0 0 0px #FF7A3D)',
-                'drop-shadow(0 0 34px #FF7A3D)',
-                'drop-shadow(0 0 6px #FF7A3D)',
-                'drop-shadow(0 0 34px #FF4B2E)',
-                'drop-shadow(0 0 0px #FF4B2E)',
-              ],
+            initial={{ scale: 0.4, opacity: 0, rotateY: 0 }}
+            animate={{ scale: 1, opacity: 1, rotateY: 1080 }}
+            transition={{
+              scale:   { duration: 0.5, ease: 'easeOut' },
+              opacity: { duration: 0.5, ease: 'easeOut' },
+              rotateY: { duration: 1.3, ease: 'easeInOut' },
             }}
-            transition={{ duration: 4, ease: 'easeInOut', times: [0, 0.25, 0.5, 0.75, 1] }}
+            onAnimationComplete={() => setGiroConcluido(true)}
+            style={{ transformStyle: 'preserve-3d' }}
           >
-            <LogoMark size={140} />
+            <motion.div
+              animate={giroConcluido ? {
+                scale: [1, 1.15, 1],
+                filter: [
+                  'drop-shadow(0 0 0px #FF4B2E)',
+                  'drop-shadow(0 0 34px #FF4B2E)',
+                  'drop-shadow(0 0 0px #FF4B2E)',
+                ],
+              } : {}}
+              transition={{ duration: 0.9, ease: 'easeInOut', repeat: giroConcluido ? 2 : 0 }}
+            >
+              <LogoMark size={140} />
+            </motion.div>
           </motion.div>
-        </motion.div>
+        </div>
       </div>
     )
   }
