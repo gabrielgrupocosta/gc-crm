@@ -72,11 +72,12 @@ function SuperAdminRoute() {
   return <Outlet />
 }
 
-// Redireciona para /dashboard se já autenticado
+// Redireciona para /dashboard se já autenticado — segura o redirect enquanto
+// a animação de entrada do login está tocando (introAtiva).
 function PublicRoute() {
-  const { user, loading } = useAuth()
+  const { user, loading, introAtiva } = useAuth()
   if (loading) return <LoadingScreen />
-  if (user) return <Navigate to="/dashboard" replace />
+  if (user && !introAtiva) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
 
