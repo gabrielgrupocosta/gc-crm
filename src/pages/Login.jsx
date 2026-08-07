@@ -52,14 +52,15 @@ function parseError(err) {
 }
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, finalizarIntro } = useAuth()
   const navigate  = useNavigate()
 
-  const [email,    setEmail]    = useState('')
-  const [password, setPassword] = useState('')
-  const [showPass, setShowPass] = useState(false)
-  const [error,    setError]    = useState('')
-  const [loading,  setLoading]  = useState(false)
+  const [email,        setEmail]        = useState('')
+  const [password,     setPassword]     = useState('')
+  const [showPass,     setShowPass]     = useState(false)
+  const [error,        setError]        = useState('')
+  const [loading,       setLoading]       = useState(false)
+  const [entrandoIntro, setEntrandoIntro] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -68,12 +69,51 @@ export default function Login() {
     setLoading(true)
     try {
       await login(email.trim(), password)
-      navigate('/dashboard', { replace: true })
+      setLoading(false)
+      setEntrandoIntro(true)
+      setTimeout(() => {
+        finalizarIntro()
+        navigate('/dashboard', { replace: true })
+      }, 4000)
     } catch (err) {
       setError(parseError(err))
-    } finally {
       setLoading(false)
     }
+  }
+
+  if (entrandoIntro) {
+    return (
+      <div className="min-h-screen bg-bg flex items-center justify-center px-4">
+        <motion.div
+          initial={{ scale: 0.4, opacity: 0 }}
+          animate={{
+            scale: 1,
+            opacity: 1,
+            rotate: 360,
+          }}
+          transition={{
+            scale: { duration: 0.5, ease: 'easeOut' },
+            opacity: { duration: 0.5, ease: 'easeOut' },
+            rotate: { duration: 1.2, ease: 'easeInOut' },
+          }}
+        >
+          <motion.div
+            animate={{
+              filter: [
+                'drop-shadow(0 0 0px #FF7A3D)',
+                'drop-shadow(0 0 34px #FF7A3D)',
+                'drop-shadow(0 0 6px #FF7A3D)',
+                'drop-shadow(0 0 34px #FF4B2E)',
+                'drop-shadow(0 0 0px #FF4B2E)',
+              ],
+            }}
+            transition={{ duration: 4, ease: 'easeInOut', times: [0, 0.25, 0.5, 0.75, 1] }}
+          >
+            <LogoMark size={140} />
+          </motion.div>
+        </motion.div>
+      </div>
+    )
   }
 
   return (

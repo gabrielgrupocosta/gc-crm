@@ -9,6 +9,8 @@ import { auth, db, COLLECTIONS, doc, getDoc } from '../services/firebase'
 
 const AuthContext = createContext(null)
 
+const LIMITE_SESSAO_MS = 3 * 60 * 60 * 1000 // 3 horas
+
 // Lê o custom claim (role, organizacaoId) do token e junta com o doc em
 // users/{uid} (nome, email, status etc). O claim é sempre a fonte de verdade
 // de acesso — o doc é só dado de exibição/cadastro.
@@ -31,6 +33,9 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null)   // claims (role/organizacaoId) + dados do Firestore
   const [firebaseUser, setFirebaseUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Segura o redirect automático de /login → /dashboard enquanto a animação
+  // de entrada (logo girando) está tocando.
+  const [introAtiva, setIntroAtiva] = useState(false)
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
@@ -53,8 +58,37 @@ export function AuthProvider({ children }) {
     return unsubscribe
   }, [])
 
+  // Desloga automaticamente 3h após o login, mesmo que a aba fique aberta.
+  // Usa lastSignInTime do próprio Firebase (sobrevive a reload/refresh de token).
+  useEffect(() => {
+    if (!firebaseUser) return
+
+    const inicioSessao = new Date(firebaseUser.metadata.lastSignInTime).getTime()
+    const restante = LIMITE_SESSAO_MS - (Date.now() - inicioSessao)
+
+    if (restante <= 0) {
+      signOut(auth)
+      return
+    }
+
+    const timer = setTimeout(() => signOut(auth), restante)
+    return () => clearTimeout(timer)
+  }, [firebaseUser])
+
   async function login(email, password) {
-    const credential = await signInWithEmailAndPassword(auth, email, password)
+    // Precisa ser setado ANTES do signIn: onAuthStateChanged dispara em paralelo
+    // e pode marcar `user` como logado antes deste método terminar de carregar
+    // o perfil — introAtiva já precisa estar true nesse momento, senão o
+    // PublicRoute redireciona para /dashboard antes da animação de entrada.
+    setIntroAtiva(true)
+
+    let credential
+    try {
+      credential = await signInWithEmailAndPassword(auth, email, password)
+    } catch (err) {
+      setIntroAtiva(false)
+      throw err
+    }
 
     let perfil
     try {
@@ -63,6 +97,7 @@ export function AuthProvider({ children }) {
       perfil = await carregarPerfil(credential.user, { forcarRefresh: true })
     } catch (err) {
       await signOut(auth)
+      setIntroAtiva(false)
       if (err?.code === 'permission-denied') {
         throw new Error('Sem permissão para ler os dados. Verifique as regras do Firestore.')
       }
@@ -71,16 +106,22 @@ export function AuthProvider({ children }) {
 
     if (!perfil.role) {
       await signOut(auth)
+      setIntroAtiva(false)
       throw new Error('Perfil não encontrado. Peça ao administrador para criar seu acesso.')
     }
 
     if (perfil.status === 'inativo') {
       await signOut(auth)
+      setIntroAtiva(false)
       throw new Error('Conta desativada. Fale com o administrador.')
     }
 
     setUser(perfil)
     return perfil
+  }
+
+  function finalizarIntro() {
+    setIntroAtiva(false)
   }
 
   async function logout() {
@@ -103,6 +144,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, firebaseUser, loading, login, logout, atualizarPermissoes,
       isSuperAdmin, isAdminOrg, isGestor, isAdmin,
+      introAtiva, finalizarIntro,
     }}>
       {children}
     </AuthContext.Provider>
