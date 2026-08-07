@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, Trash2, Check, Store } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -323,7 +324,14 @@ export default function Atividades() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
   const toast = useToast()
 
-  const [activeTab, setActiveTab] = useState('tarefas')
+  // Suporta chegar aqui já filtrado via link externo (ex: card do gestor no
+  // Dashboard usa /atividades?tab=acoes&gestor=<id>) — só lido na montagem,
+  // não fica sincronizado com a URL depois disso.
+  const [searchParams] = useSearchParams()
+  const tabInicial     = searchParams.get('tab') === 'acoes' ? 'acoes' : 'tarefas'
+  const gestorInicial  = searchParams.get('gestor') ?? ''
+
+  const [activeTab, setActiveTab] = useState(tabInicial)
 
   const [lojas,      setLojas]      = useState([])
   const [gestores,   setGestores]   = useState([])
@@ -347,7 +355,7 @@ export default function Atividades() {
   const [filtroGestorTarefas, setFiltroGestorTarefas] = useState('')
 
   // ─ Ações
-  const [filtroGestorAcoes,   setFiltroGestorAcoes]   = useState('')
+  const [filtroGestorAcoes,   setFiltroGestorAcoes]   = useState(gestorInicial)
   const [selectedLojaIdAcoes, setSelectedLojaIdAcoes] = useState('')
   const [acoes,               setAcoes]               = useState([])
   const [loadingAcoes,        setLoadingAcoes]        = useState(false)

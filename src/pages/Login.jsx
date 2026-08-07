@@ -3,30 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import LogoMark from '../components/UI/LogoMark'
+import CoinSpinIntro from '../components/UI/CoinSpinIntro'
 
 const pageVariants = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
-}
-
-// ─── Marca (hexágono + pin/gráfico) — mesma marca usada na Sidebar ─────────────
-
-function LogoMark({ size = 32 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <defs>
-        <linearGradient id="ihubGradLogin" x1="4" y1="2" x2="20" y2="22" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#FF7A3D" />
-          <stop offset="1" stopColor="#FF4B2E" />
-        </linearGradient>
-      </defs>
-      <polygon points="12,2 20.66,7 20.66,17 12,22 3.34,17 3.34,7" fill="url(#ihubGradLogin)" stroke="url(#ihubGradLogin)" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M12 7.5c-2.21 0-4 1.7-4 3.8 0 2.62 4 6.7 4 6.7s4-4.08 4-6.7c0-2.1-1.79-3.8-4-3.8Z" fill="#FFFFFF" />
-      <rect x="10.1" y="10.6" width="1.15" height="2.3" rx="0.3" fill="url(#ihubGradLogin)" />
-      <rect x="11.8" y="9.4" width="1.15" height="3.5" rx="0.3" fill="url(#ihubGradLogin)" />
-      <rect x="13.5" y="10.1" width="1.15" height="2.8" rx="0.3" fill="url(#ihubGradLogin)" />
-    </svg>
-  )
 }
 
 const ERROR_MESSAGES = {
@@ -61,7 +43,6 @@ export default function Login() {
   const [error,        setError]        = useState('')
   const [loading,       setLoading]       = useState(false)
   const [entrandoIntro, setEntrandoIntro] = useState(false)
-  const [giroConcluido, setGiroConcluido] = useState(false)
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -72,7 +53,6 @@ export default function Login() {
       await login(email.trim(), password)
       setLoading(false)
       setEntrandoIntro(true)
-      setGiroConcluido(false)
       setTimeout(() => {
         finalizarIntro()
         navigate('/dashboard', { replace: true })
@@ -86,35 +66,7 @@ export default function Login() {
   if (entrandoIntro) {
     return (
       <div className="min-h-screen bg-bg flex items-center justify-center px-4">
-        {/* Perspective no container é o que dá profundidade ao giro em Y —
-            sem isso rotateY parece só um "achatar" 2D, não uma moeda girando. */}
-        <div style={{ perspective: '800px' }}>
-          <motion.div
-            initial={{ scale: 0.4, opacity: 0, rotateY: 0 }}
-            animate={{ scale: 1, opacity: 1, rotateY: 1080 }}
-            transition={{
-              scale:   { duration: 0.5, ease: 'easeOut' },
-              opacity: { duration: 0.5, ease: 'easeOut' },
-              rotateY: { duration: 1.3, ease: 'easeInOut' },
-            }}
-            onAnimationComplete={() => setGiroConcluido(true)}
-            style={{ transformStyle: 'preserve-3d' }}
-          >
-            <motion.div
-              animate={giroConcluido ? {
-                scale: [1, 1.15, 1],
-                filter: [
-                  'drop-shadow(0 0 0px #FF4B2E)',
-                  'drop-shadow(0 0 34px #FF4B2E)',
-                  'drop-shadow(0 0 0px #FF4B2E)',
-                ],
-              } : {}}
-              transition={{ duration: 0.9, ease: 'easeInOut', repeat: giroConcluido ? 2 : 0 }}
-            >
-              <LogoMark size={140} />
-            </motion.div>
-          </motion.div>
-        </div>
+        <CoinSpinIntro size={140} />
       </div>
     )
   }

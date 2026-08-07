@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowUp, ArrowDown } from 'lucide-react'
+import { ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { db, COLLECTIONS, collection, query, where, getDocs } from '../services/firebase'
 import Skeleton from '../components/UI/Skeleton'
@@ -153,6 +154,7 @@ function GestorMobileCard({ item, index }) {
 
 export default function Ranking() {
   const { user, isSuperAdmin } = useAuth()
+  const navigate = useNavigate()
 
   const [tab,    setTab]    = useState('lojas')
   const [period, setPeriod] = useState('semana_ant')
@@ -443,7 +445,7 @@ export default function Ranking() {
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         {/* Tab selector */}
-        <div className="flex gap-1 mr-auto">
+        <div className="flex items-center gap-1 mr-auto">
           {[['lojas', 'Lojas'], ['gestores', 'Gestores']].map(([v, l]) => (
             <button
               key={v}
@@ -458,6 +460,19 @@ export default function Ranking() {
               {l}
             </button>
           ))}
+
+          {/* Comparativo não é uma view desta página (dado/filtros próprios) —
+              é uma tela derivada, então fica como botão de navegação separado
+              por uma divisória, não misturado com as tabs Lojas/Gestores. */}
+          <div style={{ width: '1px', height: '20px', backgroundColor: '#E8E8E8', margin: '0 4px' }} />
+          <button
+            type="button"
+            onClick={() => navigate('/comparativo')}
+            className="flex items-center gap-1.5 px-4 py-1.5 text-[13px] rounded border border-border-hover text-text-muted hover:text-text-primary hover:border-[#DDDDDD] transition-colors duration-150"
+          >
+            <TrendingUp size={14} strokeWidth={2} />
+            Comparativo
+          </button>
         </div>
 
         {/* Period filter */}

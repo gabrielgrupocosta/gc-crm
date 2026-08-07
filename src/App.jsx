@@ -16,6 +16,7 @@ import AssistenteFloatingButton from './components/Layout/AssistenteFloatingButt
 import PedirPermissaoNotificacao from './components/UI/PedirPermissaoNotificacao'
 import InstalarPWAiOS from './components/UI/InstalarPWAiOS'
 import InstalarPWAAndroid from './components/UI/InstalarPWAAndroid'
+import AppIntroSplash from './components/UI/AppIntroSplash'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Lojas from './pages/Lojas'
@@ -29,6 +30,7 @@ import CRM from './pages/CRM'
 import ControleSemanal from './pages/ControleSemanal'
 import Ranking from './pages/Ranking'
 import Comparativo from './pages/Comparativo'
+import Metricas from './pages/Metricas'
 import Feedback from './pages/Feedback'
 import Carteira from './pages/Carteira'
 import Atividades from './pages/Atividades'
@@ -368,6 +370,7 @@ function AppRoutes() {
             <Route path="/contratos" element={<Contratos />} />
             <Route path="/financeiro" element={<Financeiro />} />
             <Route path="/gestores"  element={<Gestores />} />
+            <Route path="/metricas"  element={<Metricas />} />
           </Route>
 
           <Route element={<SuperAdminRoute />}>
@@ -381,7 +384,19 @@ function AppRoutes() {
   )
 }
 
+// Viewport mobile no momento do mount (sem listener de resize — é uma
+// checagem de "abriu no celular", não algo que deva reagir a redimensionar
+// a janela do navegador em desktop). Mesmo breakpoint sm do Tailwind (640px)
+// usado no resto do produto.
+function isMobileViewport() {
+  return typeof window !== 'undefined' && window.innerWidth <= 640
+}
+
 export default function App() {
+  // Toca sempre que o app é aberto no celular — sessão ativa ou não, antes
+  // de qualquer coisa terminar de carregar por baixo (ver AppIntroSplash).
+  const [showIntro, setShowIntro] = useState(isMobileViewport)
+
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -392,6 +407,9 @@ export default function App() {
           <NotificacoesPushGlobal />
         </ToastProvider>
       </AuthProvider>
+      <AnimatePresence>
+        {showIntro && <AppIntroSplash onFinish={() => setShowIntro(false)} />}
+      </AnimatePresence>
     </BrowserRouter>
   )
 }

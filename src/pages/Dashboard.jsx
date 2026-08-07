@@ -9,18 +9,19 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import {
   db, COLLECTIONS, collection, query, where, getDocs, getDoc,
-  addDoc, setDoc, updateDoc, doc, serverTimestamp, orderBy, limit,
+  addDoc, setDoc, updateDoc, doc, serverTimestamp, orderBy, limit, startAfter,
 } from '../services/firebase'
 import Skeleton from '../components/UI/Skeleton'
 import Modal from '../components/UI/Modal'
 import PlatformBadge from '../components/UI/PlatformBadge'
 import LojaSelect from '../components/UI/LojaSelect'
 import GestorPerformanceCard from '../components/UI/GestorPerformanceCard'
+import GestorSummaryCard from '../components/UI/GestorSummaryCard'
 import {
   getISOWeekStr, getLast8Weeks, weekLabel, MONTH_NAMES,
   getLast26WeekOptions, getDashboardWeekOptions, getLast12MonthOptions,
   getWeeksInMonth, getWeeksInRange, getPrevMonthStr, getPrevWeekStr, weekToMonth,
-  formatWeekPeriod, formatWeekPeriodFull, fetchByWeeksBatched,
+  formatWeekPeriod, formatWeekPeriodFull, fetchByWeeksBatched, getPeriodoComparativo,
 } from '../utils/semanas'
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -182,7 +183,7 @@ function SectionCard({ title, subtitle, headerRight, children, style }) {
   )
 }
 
-function RankingList({ items, showGestor, onSelectLoja }) {
+function RankingList({ items, showGestor, onSelectLoja, onSelectGestor }) {
   if (!items.length) return (
     <p style={{ fontSize: '12px', color: '#999999', textAlign: 'center', padding: '24px 0' }}>
       Nenhum resultado lançado esta semana.
@@ -215,9 +216,16 @@ function RankingList({ items, showGestor, onSelectLoja }) {
             </button>
             <PlatformBadge plataforma={item.plataforma} />
             {showGestor && (
-              <span className="font-sans" style={{ fontSize: '12px', fontWeight: 500, color: '#777777', width: '120px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right' }}>
+              <button
+                type="button"
+                onClick={() => item.gestorId && onSelectGestor?.({ gestorId: item.gestorId, nome: item.gestorNome })}
+                className="font-sans"
+                style={{ fontSize: '12px', fontWeight: 500, color: '#777777', width: '120px', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'right', background: 'none', border: 'none', padding: 0, cursor: item.gestorId ? 'pointer' : 'default' }}
+                onMouseEnter={e => { if (item.gestorId) e.currentTarget.style.textDecoration = 'underline' }}
+                onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+              >
                 {item.gestorNome}
-              </span>
+              </button>
             )}
             <span className="font-mono" style={{ fontSize: '12px', fontWeight: 500, width: '84px', flexShrink: 0, textAlign: 'right', color: '#666666', fontVariantNumeric: 'tabular-nums' }}>
               {formatBRL(item.faturamento)}
@@ -252,7 +260,7 @@ function PerformanceBadge({ value }) {
   )
 }
 
-function RankingRow({ item, index, isLast, onSelectLoja }) {
+function RankingRow({ item, index, isLast, onSelectItem }) {
   const isFirst = index === 0
   const posBg    = isFirst ? '#FFF3CD' : '#F1F5F9'
   const posColor = isFirst ? '#C97800' : '#64748B'
@@ -296,7 +304,7 @@ function RankingRow({ item, index, isLast, onSelectLoja }) {
       <button
         type="button"
         title={item.nome}
-        onClick={() => onSelectLoja?.(item)}
+        onClick={() => onSelectItem?.(item)}
         className="font-sans"
         style={{ fontSize: '14px', fontWeight: 600, color: '#0F172A', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
         onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
@@ -311,7 +319,7 @@ function RankingRow({ item, index, isLast, onSelectLoja }) {
   )
 }
 
-function RankingCard({ icon: Icon, title, periodLabel, items, loading = false, onSelectLoja }) {
+function RankingCard({ icon: Icon, title, periodLabel, items, loading = false, onSelectItem }) {
   const [hovered, setHovered] = useState(false)
 
   return (
@@ -364,7 +372,7 @@ function RankingCard({ icon: Icon, title, periodLabel, items, loading = false, o
       ) : (
         <div>
           {items.map((item, i) => (
-            <RankingRow key={i} item={item} index={i} isLast={i === items.length - 1} onSelectLoja={onSelectLoja} />
+            <RankingRow key={i} item={item} index={i} isLast={i === items.length - 1} onSelectItem={onSelectItem} />
           ))}
         </div>
       )}
@@ -915,6 +923,18 @@ export default function Dashboard() {
   const [performanceCliente,  setPerformanceCliente]  = useState(null) // { id, nome, plataformas }
   const [performanceData,     setPerformanceData]     = useState(null) // { weeklyPerformance, managerActions, totalActionsCount, baseline }
   const [loadingPerformance,  setLoadingPerformance]  = useState(false)
+
+  // ── Card resumo do gestor (aberto ao clicar no nome do gestor no ranking) ──
+  const [gestorCard,          setGestorCard]          = useState(null) // { id, nome }
+  const [gestorCardLojas,     setGestorCardLojas]      = useState([])
+  const [gestorCardKpis,      setGestorCardKpis]       = useState(null) // { platformBreakdown, platformGrowth, faturamentoTotal, topLojas }
+  const [loadingGestorCard,   setLoadingGestorCard]    = useState(false)
+  const [periodoGestorCard,   setPeriodoGestorCard]    = useState('4semanas') // '1semana' | '4semanas' | '3meses'
+  const [gestorAcoes,         setGestorAcoes]          = useState([])
+  const [gestorAcoesCursor,   setGestorAcoesCursor]    = useState(null)
+  const [gestorAcoesHasMore,  setGestorAcoesHasMore]   = useState(false)
+  const [loadingGestorAcoes,  setLoadingGestorAcoes]   = useState(false)
+  const [loadingMaisAcoes,    setLoadingMaisAcoes]     = useState(false)
   const [filtroGestor,             setFiltroGestor]             = useState('')
   const [rankingSort,              setRankingSort]              = useState('variacao_desc')
   const [gestoresMap,              setGestoresMap]              = useState({})
@@ -1237,6 +1257,7 @@ export default function Dashboard() {
           lojaId:      r.lojaId,
           nome:        loja?.nome ?? '—',
           plataforma:  loja?.plataforma ?? '',
+          gestorId:    loja?.gestorId ?? null,
           gestorNome:  gestoresMap[loja?.gestorId]?.nome ?? '—',
           clienteId:   loja?.clienteId ?? null,
           clienteNome: loja?.clienteNome ?? null,
@@ -1397,6 +1418,187 @@ export default function Dashboard() {
     setPerformanceCliente(null)
     setPerformanceData(null)
   }, [])
+
+  // ── Card resumo do gestor ────────────────────────────────────────────────
+
+  // Nº de semanas ISO fechadas que cada opção do seletor de período cobre —
+  // "3 meses" usa 13 semanas (~91 dias) por ser a unidade nativa dos dados
+  // (resultados são lançados por semana, não por dia).
+  const N_SEMANAS_POR_PERIODO = { '1semana': 1, '4semanas': 4, '3meses': 13 }
+
+  const carregarKpisGestorCard = useCallback(async (gestorId, lojasGestor, periodo) => {
+    const n = N_SEMANAS_POR_PERIODO[periodo] ?? 4
+    const refWeek = last8Weeks[1] // última semana fechada, mesmo padrão do resto do dashboard
+    const { atual, anterior } = getPeriodoComparativo(refWeek, n)
+    const orgId = isSuperAdmin ? null : (user?.organizacaoId ?? null)
+
+    const [resAtual, resAnterior] = await Promise.all([
+      fetchByWeeksBatched(atual, orgId),
+      fetchByWeeksBatched(anterior, orgId),
+    ])
+
+    const lojaIds = new Set(lojasGestor.map(l => l.id))
+    const lojaMap = Object.fromEntries(lojasGestor.map(l => [l.id, l]))
+    const doGestorAtual    = resAtual.filter(r => r.gestorId === gestorId && lojaIds.has(r.lojaId))
+    const doGestorAnterior = resAnterior.filter(r => r.gestorId === gestorId && lojaIds.has(r.lojaId))
+
+    // 1. Proporção de lojas por plataforma — cada plataforma de cada loja
+    // conta como uma "unidade" (loja com 2 plataformas entra nas duas).
+    const contagemPlataforma = {}
+    lojasGestor.forEach(l => {
+      const plats = l.plataformas?.length ? l.plataformas : (l.plataforma ? [l.plataforma] : [])
+      plats.forEach(p => { contagemPlataforma[p] = (contagemPlataforma[p] ?? 0) + 1 })
+    })
+    const totalSlots = Object.values(contagemPlataforma).reduce((s, v) => s + v, 0)
+    const platformBreakdown = Object.entries(contagemPlataforma)
+      .map(([plataforma, count]) => ({ plataforma, count, pct: totalSlots > 0 ? (count / totalSlots) * 100 : 0 }))
+      .sort((a, b) => b.count - a.count)
+
+    // 2. Crescimento da carteira por plataforma — faturamento do período atual
+    // vs período anterior equivalente, agrupado por plataforma.
+    const fatAtualPorPlat = {}, fatAnteriorPorPlat = {}
+    doGestorAtual.forEach(r => { fatAtualPorPlat[r.plataforma] = (fatAtualPorPlat[r.plataforma] ?? 0) + (r.faturamento ?? 0) })
+    doGestorAnterior.forEach(r => { fatAnteriorPorPlat[r.plataforma] = (fatAnteriorPorPlat[r.plataforma] ?? 0) + (r.faturamento ?? 0) })
+    const platformGrowth = Object.keys(fatAtualPorPlat)
+      .map(plataforma => {
+        const atualVal    = fatAtualPorPlat[plataforma] ?? 0
+        const anteriorVal = fatAnteriorPorPlat[plataforma] ?? null
+        const growthPct   = anteriorVal ? ((atualVal - anteriorVal) / Math.abs(anteriorVal)) * 100 : null
+        return { plataforma, faturamentoAtual: atualVal, growthPct }
+      })
+      .sort((a, b) => b.faturamentoAtual - a.faturamentoAtual)
+
+    // 3. Faturamento de toda a carteira no período selecionado.
+    const faturamentoTotal = Object.values(fatAtualPorPlat).reduce((s, v) => s + v, 0)
+
+    // 4. Top 5 lojas que mais cresceram — ranking por variação da última
+    // semana lançada dentro do período; "vs linha de base" compara com o
+    // dado mais antigo disponível na janela carregada (atual + anterior).
+    const porLoja = {}
+    ;[...doGestorAnterior, ...doGestorAtual].forEach(r => {
+      (porLoja[r.lojaId] ??= []).push(r)
+    })
+    const topLojas = Object.entries(porLoja)
+      .map(([lojaId, docs]) => {
+        const ordenados  = [...docs].sort((a, b) => a.semana < b.semana ? -1 : 1)
+        const maisRecente = ordenados[ordenados.length - 1]
+        const maisAntigo  = ordenados[0]
+        const growthBaseline = maisAntigo && maisAntigo !== maisRecente && maisAntigo.faturamento
+          ? ((maisRecente.faturamento - maisAntigo.faturamento) / Math.abs(maisAntigo.faturamento)) * 100
+          : null
+        return {
+          lojaId,
+          nome:           lojaMap[lojaId]?.nome ?? '—',
+          plataforma:     lojaMap[lojaId]?.plataforma ?? maisRecente?.plataforma ?? null,
+          growthSemana:   maisRecente?.variacao ?? null,
+          growthBaseline,
+        }
+      })
+      .filter(l => l.growthSemana != null)
+      .sort((a, b) => b.growthSemana - a.growthSemana)
+      .slice(0, 5)
+
+    return { platformBreakdown, platformGrowth, faturamentoTotal, topLojas }
+  }, [last8Weeks, isSuperAdmin, user])
+
+  const carregarAcoesGestorCard = useCallback(async (gestorId, resetar) => {
+    const orgId = isSuperAdmin ? [] : [where('organizacaoId', '==', user?.organizacaoId ?? null)]
+    const cursor = resetar ? null : gestorAcoesCursor
+    const constraints = [
+      collection(db, COLLECTIONS.ACOES),
+      ...orgId,
+      where('gestorId', '==', gestorId),
+      orderBy('timestamp', 'desc'),
+      ...(cursor ? [startAfter(cursor)] : []),
+      limit(5),
+    ]
+    const snap = await getDocs(query(...constraints))
+    const novas = snap.docs.map(d => {
+      const a = d.data()
+      return {
+        id:          d.id,
+        date:        a.timestamp ?? null,
+        category:    a.plataforma ?? null,
+        description: a.descricao ?? '',
+        impact:      a.status === 'concluida' ? 'Concluída' : null,
+      }
+    })
+    setGestorAcoes(prev => resetar ? novas : [...prev, ...novas])
+    setGestorAcoesCursor(snap.docs[snap.docs.length - 1] ?? null)
+    setGestorAcoesHasMore(snap.docs.length === 5)
+  }, [isSuperAdmin, user, gestorAcoesCursor])
+
+  const abrirGestorCard = useCallback(async (gestor) => {
+    if (!gestor?.gestorId) return
+    setGestorCard({ id: gestor.gestorId, nome: gestor.nome })
+    setGestorCardKpis(null)
+    setGestorCardLojas([])
+    setGestorAcoes([])
+    setGestorAcoesCursor(null)
+    setGestorAcoesHasMore(false)
+    setLoadingGestorCard(true)
+    setLoadingGestorAcoes(true)
+    try {
+      const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user?.organizacaoId ?? null)]
+      const lojasSnap = await getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', gestor.gestorId)))
+      const lojasGestor = lojasSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(lojaAtiva)
+      setGestorCardLojas(lojasGestor)
+
+      const kpis = await carregarKpisGestorCard(gestor.gestorId, lojasGestor, periodoGestorCard)
+      setGestorCardKpis(kpis)
+    } catch (err) {
+      console.error('[Dashboard] erro ao carregar card do gestor:', err?.code, err?.message)
+      setGestorCardKpis({ platformBreakdown: [], platformGrowth: [], faturamentoTotal: 0, topLojas: [] })
+    } finally {
+      setLoadingGestorCard(false)
+    }
+
+    try {
+      await carregarAcoesGestorCard(gestor.gestorId, true)
+    } catch (err) {
+      console.error('[Dashboard] erro ao carregar ações do gestor:', err?.code, err?.message)
+    } finally {
+      setLoadingGestorAcoes(false)
+    }
+  }, [isSuperAdmin, user, periodoGestorCard, carregarKpisGestorCard, carregarAcoesGestorCard])
+
+  const fecharGestorCard = useCallback(() => {
+    setGestorCard(null)
+    setGestorCardKpis(null)
+    setGestorCardLojas([])
+    setGestorAcoes([])
+  }, [])
+
+  const handlePeriodoGestorCard = useCallback(async (novoPeriodo) => {
+    setPeriodoGestorCard(novoPeriodo)
+    if (!gestorCard) return
+    setLoadingGestorCard(true)
+    try {
+      const kpis = await carregarKpisGestorCard(gestorCard.id, gestorCardLojas, novoPeriodo)
+      setGestorCardKpis(kpis)
+    } catch (err) {
+      console.error('[Dashboard] erro ao recarregar período do gestor:', err?.code, err?.message)
+    } finally {
+      setLoadingGestorCard(false)
+    }
+  }, [gestorCard, gestorCardLojas, carregarKpisGestorCard])
+
+  const handleCarregarMaisAcoesGestor = useCallback(async () => {
+    if (!gestorCard || gestorAcoes.length >= 15) return
+    setLoadingMaisAcoes(true)
+    try {
+      await carregarAcoesGestorCard(gestorCard.id, false)
+    } catch (err) {
+      console.error('[Dashboard] erro ao carregar mais ações do gestor:', err?.code, err?.message)
+    } finally {
+      setLoadingMaisAcoes(false)
+    }
+  }, [gestorCard, gestorAcoes.length, carregarAcoesGestorCard])
+
+  const handleVerTodasAcoesGestor = useCallback(() => {
+    if (!gestorCard) return
+    navigate(`/atividades?tab=acoes&gestor=${gestorCard.id}`)
+  }, [gestorCard, navigate])
 
   const topGestores = useMemo(() => {
     const varW = {}, fatW = {}
@@ -1702,8 +1904,8 @@ export default function Dashboard() {
 
       {/* Top Lojas + Top Gestores */}
       <div className="grid grid-cols-1 sm:grid-cols-2 items-start" style={{ gap: '16px', marginBottom: '16px' }}>
-        <RankingCard icon={Store} title="Top Lojas"    items={topLojas}    periodLabel={selectedWeekMeta?.fullLabel} onSelectLoja={abrirPerformanceCard} />
-        <RankingCard icon={Users} title="Top Gestores" items={topGestores} periodLabel={selectedWeekMeta?.fullLabel} />
+        <RankingCard icon={Store} title="Top Lojas"    items={topLojas}    periodLabel={selectedWeekMeta?.fullLabel} onSelectItem={abrirPerformanceCard} />
+        <RankingCard icon={Users} title="Top Gestores" items={topGestores} periodLabel={selectedWeekMeta?.fullLabel} onSelectItem={item => abrirGestorCard({ gestorId: item.gestorId, nome: item.nome })} />
       </div>
 
       {/* KPIs */}
@@ -1760,7 +1962,12 @@ export default function Dashboard() {
           }
         >
           <div className="overflow-x-auto">
-            <RankingList items={ranking} showGestor={isAdmin} onSelectLoja={abrirPerformanceCard} />
+            <RankingList
+              items={ranking}
+              showGestor={isAdmin}
+              onSelectLoja={abrirPerformanceCard}
+              onSelectGestor={g => abrirGestorCard(g)}
+            />
           </div>
           <div style={{ padding: '12px 16px', borderTop: '1px solid #F3F3F3', display: 'flex', justifyContent: 'flex-end' }}>
             <button
@@ -2052,6 +2259,30 @@ export default function Dashboard() {
             managerActions={performanceData.managerActions}
             totalActionsCount={performanceData.totalActionsCount}
             baseline={performanceData.baseline}
+          />
+        )}
+      </Modal>
+
+      <Modal isOpen={!!gestorCard} onClose={fecharGestorCard} title="Resumo do gestor" width="max-w-3xl">
+        {loadingGestorCard || !gestorCardKpis ? (
+          <div className="flex flex-col gap-3 py-4">
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : (
+          <GestorSummaryCard
+            gestor={gestorCard}
+            kpis={gestorCardKpis}
+            loadingKpis={loadingGestorCard}
+            periodo={periodoGestorCard}
+            onPeriodoChange={handlePeriodoGestorCard}
+            managerActions={gestorAcoes}
+            loadingActions={loadingGestorAcoes}
+            hasMoreActions={gestorAcoesHasMore}
+            loadingMoreActions={loadingMaisAcoes}
+            onLoadMoreActions={handleCarregarMaisAcoesGestor}
+            onVerTodasActions={handleVerTodasAcoesGestor}
           />
         )}
       </Modal>

@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp, ArrowLeft } from 'lucide-react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
@@ -131,6 +132,7 @@ function ChartTooltip({ active, payload, label }) {
 
 export default function Comparativo() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const navigate = useNavigate()
 
   const [lojas,           setLojas]           = useState([])
   const [loadingLojas,    setLoadingLojas]    = useState(true)
@@ -321,6 +323,14 @@ export default function Comparativo() {
       animate="animate"
     >
       {/* Header */}
+      <button
+        type="button"
+        onClick={() => navigate('/ranking')}
+        className="flex items-center gap-1.5 text-[13px] text-text-muted hover:text-text-primary transition-colors duration-150 mb-3"
+      >
+        <ArrowLeft size={14} strokeWidth={2} />
+        Voltar pro Ranking
+      </button>
       <div className="page-header flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="page-title" style={{ marginBottom: 0 }}>
           Comparativo de Desempenho

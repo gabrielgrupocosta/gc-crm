@@ -7,7 +7,7 @@ import {
   ClipboardList,
   CheckSquare,
   Trophy,
-  TrendingUp,
+  BarChart3,
   Store,
   Users,
   UserCog,
@@ -33,10 +33,18 @@ import { useSidebar } from '../../contexts/SidebarContext'
 import { db, COLLECTIONS, collection, doc, query, where, onSnapshot } from '../../services/firebase'
 import AlterarSenhaModal from '../UI/AlterarSenhaModal'
 
+// Comparativo não é mais item de topo — vive como botão dentro da página
+// de Ranking (ver Ranking.jsx), já que é uma visão derivada do mesmo dado.
 const NAV_MAIN = [
   { to: '/dashboard',   label: 'Dashboard',    icon: LayoutDashboard },
   { to: '/ranking',     label: 'Ranking',      icon: Trophy          },
-  { to: '/comparativo', label: 'Comparativo',  icon: TrendingUp      },
+]
+
+// Métricas compara gestor a gestor — só faz sentido pra quem enxerga todos
+// os gestores (admin). Rota já é gated por AdminRoute; aqui só evita mostrar
+// o item pra quem não vai conseguir acessá-lo.
+const NAV_MAIN_ADMIN = [
+  { to: '/metricas', label: 'Métricas', icon: BarChart3 },
 ]
 
 // CRM de prospecção — visível pra quem pertence a uma organização (admin_org
@@ -345,6 +353,7 @@ function NavSection({ sectionKey, label, collapsedSections, onToggle, sidebarCol
 
 export default function Sidebar() {
   const { user, isAdmin, isSuperAdmin, isAdminOrg, logout } = useAuth()
+  const navResultado = isAdmin ? [...NAV_MAIN, ...NAV_MAIN_ADMIN] : NAV_MAIN
   const pertenceOrg = !!user?.organizacaoId
   const navigate = useNavigate()
   const location = useLocation()
@@ -388,7 +397,7 @@ export default function Sidebar() {
   // permanente que travaria o clique enquanto a rota estivesse ativa).
   useEffect(() => {
     const sectionItemsMap = {
-      resultado: NAV_MAIN,
+      resultado: navResultado,
       gestao:    NAV_GESTAO,
       carteira:  [...(pertenceOrg ? NAV_CRM : []), ...(isAdmin ? NAV_CARTEIRA_ADMIN : []), ...NAV_CARTEIRA_TODOS],
       perfil:    isAdmin ? NAV_PERFIL : [],
@@ -631,12 +640,12 @@ export default function Sidebar() {
         <NavSection
           sectionKey="resultado"
           label="Resultado"
-          pendingDots={pendingDotsFor(NAV_MAIN)}
+          pendingDots={pendingDotsFor(navResultado)}
           collapsedSections={collapsedSections}
           onToggle={toggleSection}
           sidebarCollapsed={effectiveCollapsed}
         >
-          {NAV_MAIN.map(({ to, label, icon: Icon }) => (
+          {navResultado.map(({ to, label, icon: Icon }) => (
             <NavItem key={to} to={to} label={label} Icon={Icon} highlight={HIGHLIGHTS[to]} collapsed={effectiveCollapsed} />
           ))}
         </NavSection>
@@ -779,19 +788,36 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Botão hambúrguer — só mobile, sempre acessível independente do estado do drawer */}
-      <button
-        type="button"
-        onClick={() => setMobileOpen(true)}
-        aria-label="Abrir menu"
-        className="md:hidden fixed flex items-center justify-center"
+      {/* Top bar mobile — barra inteira (não só um botão flutuante no canto),
+          pra cobrir de ponta a ponta qualquer conteúdo que role por baixo dela
+          e dar a sensação de app nativo em vez de um elemento solto por cima
+          da página. O botão sozinho só tapava um quadrado de 44px; qualquer
+          título que rolasse até essa faixa ficava cortado ao lado dele. */}
+      <div
+        className="md:hidden fixed top-0 left-0 right-0 flex items-center gap-2.5"
         style={{
-          top: '10px', left: '10px', zIndex: 30, width: '44px', height: '44px',
-          backgroundColor: '#0E1116', color: '#FFFFFF', border: '1px solid #1C2128', borderRadius: '8px',
+          height: '56px', padding: '0 12px', zIndex: 30,
+          backgroundColor: '#FFFFFF', borderBottom: '1px solid #E8E8E8',
         }}
       >
-        <Menu size={20} strokeWidth={1.75} />
-      </button>
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          aria-label="Abrir menu"
+          className="flex items-center justify-center shrink-0"
+          style={{
+            width: '36px', height: '36px',
+            backgroundColor: '#0E1116', color: '#FFFFFF', borderRadius: '8px',
+          }}
+        >
+          <Menu size={18} strokeWidth={1.75} />
+        </button>
+        <LogoMark size={20} />
+        <span className="select-none font-sans" style={{ fontSize: '15px', letterSpacing: '-0.02em', fontWeight: 800 }}>
+          <span style={{ color: '#111111' }}>iHub</span>
+          <span style={{ color: '#FF4B2E' }}>Food</span>
+        </span>
+      </div>
 
       {/* Backdrop — só mobile, só quando o drawer está aberto */}
       {mobileOpen && (
