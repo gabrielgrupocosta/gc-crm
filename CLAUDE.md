@@ -15,7 +15,7 @@ Gestores cadastram resultados semanais das lojas que gerenciam. Admin visualiza 
 - **Recharts** — gráficos
 - **Framer Motion** — animações
 - **Lucide React** — ícones
-- **Fontes:** Inter (corpo) + Geist Mono (números) via Google Fonts
+- **Fonte:** Manrope (única família, corpo e números) via Google Fonts
 
 ---
 
@@ -122,7 +122,7 @@ Regra crítica: o campo `gestorId` no documento da loja no Firestore determina o
 1. Gestor só acessa lojas onde `gestorId === auth.currentUser.uid`
 2. Semana segue padrão ISO: segunda a domingo
 3. Variação % armazenada como número: -12.5 ou 8.3 (não como string)
-4. Variação positiva → cor #16A34A com prefixo "+". Negativa → #DC2626 com prefixo "−"
+4. Variação positiva → cor #00C896 com prefixo "▲". Negativa → #DC2626 com prefixo "▼"
 5. "Relatório enviado" é por loja por semana — campo booleano no documento do resultado
 6. Nunca deletar dados — usar campo `status: 'inativo'` para arquivar
 7. Admin edita tudo; gestor só edita resultados das suas lojas
@@ -144,66 +144,71 @@ resultados/     {lojaId, gestorId, semana, dataInicio, dataFim, faturamento, var
 
 ## Design system — regras obrigatórias
 
+> Guia detalhado (motivo do hub, padrões de dashboard, hierarquia visual,
+> checklist pré-entrega): skill `ihubfood-design` em
+> `.claude/skills/ihubfood-design/SKILL.md`. Esta seção documenta só os
+> tokens e valores exatos usados no código (fonte da verdade:
+> `tailwind.config.js` + `src/index.css`).
+
 ### Filosofia
-Minimalismo funcional **light mode**, inspirado em Super Avaliações, Eno Studio e Cardápio Web. Fundo claro, cards brancos com sombra sutil, espaço em branco como elemento de design. Zero decoração desnecessária. Dados falam por si.
+Dashboard B2B enterprise, de baixo ruído — layout híbrido **sidebar escura +
+conteúdo claro**. Cards brancos com sombra sutil sobre fundo cinza-claro,
+dados falam por si. Nada de decoração, gradiente ou animação chamativa.
 
 ### Paleta de cores
 ```
---bg:             #F7F7F8   fundo principal (body)
---surface:        #FFFFFF   sidebar, cards, modais, tabelas
---border:         #E8E8E8   bordas padrão (1px)
---border-subtle:  #F3F3F3   divisores internos (linhas de tabela)
---border-hover:   #DDDDDD   bordas em hover
---text-primary:   #111111   texto principal
---text-muted:     #666666   texto secundário
---text-subtle:    #999999   texto terciário / labels
---text-faint:     #BBBBBB   labels de seção em uppercase, placeholders
---accent:         #E5322D   vermelho Delivery Elite — CTAs e destaques (máx. 2 cores por tela)
---accent-hover:   #C42B26   hover do botão primário
---accent-soft:    #FFF5F5   fundo de item ativo / alerta crítico
---positive:       #16A34A   variação positiva
---negative:       #DC2626   variação negativa
---warning:        #CA8A04   atenção / pendências
+--bg:               #F7F7F8   fundo do conteúdo (body)
+--surface:          #FFFFFF   cards, modais, tabelas (lado claro)
+--border:           #E8E8E8   bordas padrão (1px)
+--border-subtle:    #F3F3F3   divisores internos (linhas de tabela)
+--border-hover:     #DDDDDD   bordas em hover
+--text-primary:     #111111   texto principal
+--text-muted:       #666666   texto secundário
+--text-subtle:      #999999   texto terciário / labels
+--text-faint:       #BBBBBB   labels de seção em uppercase, placeholders
+
+--accent:           #FF4B2E   vermelho-laranja iHubFood — CTAs, nav ativo, destaques
+--accent-hover:     #E63E1F   hover do botão primário
+--accent-soft:      #FFF1ED   fundo de item ativo / alerta crítico (lado claro)
+--positive:         #00C896   variação positiva, sucesso, "em dia"
+--negative:         #DC2626   variação negativa, alerta
+--warning:          #CA8A04   atenção / pendências (texto #B45309, fundo #FFFBEB, borda #FDE68A)
+
+--brand-dark:       #0E1116   fundo da sidebar — superfície mais escura do produto
+--brand-dark-hover: #1C2128   hover/divisores sobre a sidebar escura
+--brand-blue:       #2563EB   accent secundário — links, estados informativos
 ```
 
-Badges de plataforma:
+Badges de plataforma (não migrar pra paleta de marca — mantêm identidade própria):
 ```
-iFood:  bg #FFF0F0 | texto #E5322D | borda #FECACA
+iFood:  bg #FFF0F0 | texto #EA1D2C | borda #FECACA
 99Food: bg #FFFBEB | texto #B45309 | borda #FDE68A
-Keeta:  bg #EFF6FF | texto #1D4ED8 | borda #BFDBFE
+Keeta:  bg #EFF6FF | texto #1D4ED8 | borda #BFDBFE (ou hue distinto — nunca reaproveitar accent/positive)
 ```
 
 ### Tipografia
+Uma família só, para tudo — inclusive números (sem monospace dedicado):
 ```css
-/* Headings */
-font-family: 'Inter', sans-serif;
-font-weight: 500;
-letter-spacing: -0.02em;
-
-/* Corpo */
-font-family: 'Inter', sans-serif;
-font-weight: 400;
-line-height: 1.6;
-
-/* Números e dados */
-font-family: 'Geist Mono', 'JetBrains Mono', monospace;
-font-variant-numeric: tabular-nums;
+font-family: 'Manrope', system-ui, -apple-system, sans-serif;
 ```
+- Peso 800 (ExtraBold) para título, KPI e qualquer coisa que precise ser escaneada primeiro
+- Peso 400-500 pro resto (corpo, labels, tabela)
+- Números usam `font-variant-numeric: tabular-nums` (não uma fonte separada)
 
-Hierarquia:
-- Título de página: 15-24px, weight 500, tracking -0.02em, cor #111111
-- Label de seção: 11px, uppercase, letter-spacing 0.06-0.08em, cor #999999 (ou #BBBBBB nos labels de sidebar)
-- Label de campo: 13px, weight 400, cor #666666
-- Dados em tabela: 13px, monospace onde for número
-- Número KPI: 28px, weight 700, monospace, cor #111111
+Escala modular (base 16px × ~1.25), não usar tamanhos fora dela:
+- Label de seção / eyebrow: 11-12px, uppercase, tracking 0.06-0.08em, `#999999` (ou `#BBBBBB` em fundo escuro/sidebar)
+- Corpo / dado de tabela: 13-14px, weight 400-500
+- Título de card/seção: 16-20px, weight 800
+- Título de página: 24-27px, weight 800, tracking -0.02 a -0.035em
+- Número KPI: 28-34px, weight 800 — o maior elemento do card, sempre
 
 ### Layout
 - Padding de página: `28px 32px`
 - Gap entre cards: 16px
 - Altura mínima de linha em tabelas: 44-48px
-- Sidebar: 220px, fundo #FFFFFF, borda-direita 1px #EBEBEB
-- Conteúdo: `max-w-6xl mx-auto`
-- Border-radius padrão: 10px nos cards, 6-8px nos elementos menores, 12px em modais
+- Sidebar: 220px, fundo `#0E1116` (escura), item ativo com pílula tintada de accent
+- Conteúdo: fundo `#F7F7F8`, cards brancos
+- Border-radius: 10-12px nos cards, 6-8px nos elementos menores, 12px em modais
 
 ### Componentes
 
@@ -212,10 +217,10 @@ Hierarquia:
 fundo #FFFFFF | borda 1px #E8E8E8 | radius 10px | padding 20px 24px
 box-shadow: 0 1px 4px rgba(0,0,0,0.06)
 label: 11px uppercase #999999 tracking 0.06em
-valor: 28px weight 700 monospace #111111
-variação positiva: 12px #16A34A prefixo "▲" | negativa: 12px #DC2626 prefixo "▼"
+valor: 28-34px weight 800 #111111 (maior elemento do card)
+variação positiva: #00C896 prefixo "▲" | negativa: #DC2626 prefixo "▼" — nunca só cor, sempre com seta
 hover: box-shadow aumenta para 0 4px 12px rgba(0,0,0,0.08)
-SEM ícones decorativos
+Um foco visual primário por card (número + 1 elemento de apoio: sparkline, delta ou ícone) — nunca gráfico + tabela empilhados
 ```
 
 **Tabelas**
@@ -242,14 +247,14 @@ animação: scale(0.96)→(1) + opacity 0→1, ~150ms ease-out via Framer Motion
 ```
 fundo #FFFFFF | borda 1px #E8E8E8 | radius 6px | height 36px | font 13px
 hover: borda #DDDDDD
-focus: borda #E5322D (sem box-shadow colorido)
+focus: borda #FF4B2E (sem box-shadow colorido)
 placeholder: #BBBBBB
 ```
 
 **Botão primário**
 ```
-fundo #E5322D | texto branco | radius 6px | padding 8px 16px | font 13px weight 500
-hover: fundo #C42B26
+fundo #FF4B2E | texto branco | radius 6px | padding 8px 16px | font 13px weight 500
+hover: fundo #E63E1F
 active: scale(0.98)
 SEM gradiente | SEM sombra
 ```
@@ -260,19 +265,19 @@ fundo #FFFFFF | borda 1px #E8E8E8 | texto #666666
 hover: fundo #F9F9F9 | borda #DDDDDD | texto #333333
 ```
 
-**Sidebar — itens de nav**
+**Sidebar — itens de nav** (fundo `#0E1116`)
 ```
-altura 32px | padding 0 12px | ícone Lucide 16px cor #999999 (ativo #E5322D)
-texto 13px, ativo weight 500 cor #E5322D
-ativo: fundo #FFF5F5, borda esquerda 3px #E5322D, radius 0 6px 6px 0
-hover: fundo #F9F9F9
+altura 32px | padding 0 12px | ícone Lucide 16px cor #999999 (ativo #FF4B2E)
+texto 13px, ativo weight 500 cor #FF4B2E
+ativo: fundo rgba(255,75,46,0.15), pílula/destaque — não é só troca de cor
+hover: fundo #1C2128
 labels de seção: 10px uppercase #BBBBBB tracking 0.08em
-footer: separador 1px #EBEBEB no topo
+footer: separador 1px #1C2128 no topo
 ```
 
 **Badges de status**
 ```
-Ativo:        bg rgba(22,163,74,0.1) | texto #16A34A | borda rgba(22,163,74,0.2)
+Ativo:        bg rgba(0,200,150,0.1) | texto #00C896 | borda rgba(0,200,150,0.2)
 Inativo:      bg rgba(153,153,153,0.1) | texto #999999 | borda rgba(153,153,153,0.2)
 Inadimplente: bg rgba(220,38,38,0.1) | texto #DC2626 | borda rgba(220,38,38,0.2)
 font: 11px weight 500 uppercase letter-spacing 0.04em
@@ -283,28 +288,29 @@ SEM fundo sólido
 **Ranking / Top Lojas — Top Gestores**
 ```
 NÃO usar emojis de medalha
-posição 1: "01" monospace #111111 weight 500 (destaque em card: fundo #FFFBEB, borda #FDE68A, número #B45309 weight 700, troféu #D97706)
-posição 2: "02" #666666
-posição 3: "03" #999999
-variação positiva: +8.3% em #16A34A weight 600 | negativa: −5.1% em #DC2626
+posição 1: destaque em card (fundo #FFFBEB, borda #FDE68A, número #B45309 weight 700, troféu #D97706)
+posição 2/3: "02"/"03" monospace, #666666 / #999999
+variação positiva: +8.3% em #00C896 weight 600 | negativa: −5.1% em #DC2626
 SEM fundos coloridos nas linhas (exceto card de destaque da posição 1)
 ```
 
 **Alertas**
 ```
-Atrasado (crítico): fundo #FFF5F5 | borda 1px #FECACA | borda-esquerda 3px #E5322D | texto #DC2626
+Atrasado (crítico): fundo #FFF1ED | borda 1px #FECACA | borda-esquerda 3px #FF4B2E | texto #DC2626
 Pendente (atenção):  fundo #FFFBEB | borda 1px #FDE68A | borda-esquerda 3px #CA8A04 | texto #92400E
 radius 6px | padding 10px 14px
+Padrão fixo pra status persistente (não trocar por toast/modal)
 ```
 
 **Gráficos Recharts**
 ```
 fundo transparente
 grid: apenas linhas horizontais, cor #F3F3F3, strokeDasharray
-linha/barra principal: #E5322D | comparação: #93C5FD
-tooltip: fundo #FFFFFF | borda 1px #E8E8E8 | radius 6px | fonte monospace | sombra leve
+linha/barra principal: #FF4B2E | comparação: #93C5FD ou #2563EB
+tooltip: fundo #FFFFFF | borda 1px #E8E8E8 | radius 6px | sombra leve
 eixos: cor #999999 (ou #BBBBBB) | font 12px
 SEM legenda decorativa
+Escolher o gráfico pela pergunta que ele responde (ver skill ihubfood-design) — nunca decorar
 ```
 
 ### Animações Framer Motion
@@ -342,17 +348,20 @@ Regras:
 - Zero bounce, zero spring, zero efeitos chamativos
 
 ### PROIBIDO — nunca fazer isso
-- ❌ Fundos escuros (dark mode) em qualquer elemento
-- ❌ Gradientes em qualquer elemento
+- ❌ Inverter o split sidebar-escura/conteúdo-claro (nunca deixar a sidebar clara nem o conteúdo escuro — dark mode geral não existe, só a sidebar)
+- ❌ Gradientes em qualquer elemento (fora do escopo hero/marketing, que não existe hoje no produto)
 - ❌ Glassmorphism (backdrop-blur em cards ou modais — permitido só no overlay do modal)
 - ❌ box-shadow colorido (sempre `rgba(0,0,0,x)`)
 - ❌ border-radius > 12px
-- ❌ Mais de 2 cores de destaque por tela
+- ❌ Mais de 2-3 cores fazendo trabalho semântico por tela (status verde/vermelho/âmbar + no máx. 1-2 categóricas)
 - ❌ Ícones decorativos dentro de cards KPI
 - ❌ Animações com duration > 300ms
 - ❌ Zebra striping em tabelas
 - ❌ text-shadow em qualquer elemento
 - ❌ Spinners grandes — usar Skeleton com pulse sutil
+- ❌ Sinalizar estado só por cor (delta negativo sempre com seta, não só texto vermelho)
+- ❌ Motivo hub (rede de nós conectados) usado como decoração genérica — só em telas sobre conexão/agregação (CRM, mapa, carteira, onboarding)
+- ❌ Borda colorida só no lado esquerdo (`border-left: 3px solid ...`) como recurso genérico de destaque/hierarquia/"item recente" — é um tique visual raso, tem cara de IA. A única exceção é o padrão já estabelecido de banner de alerta/aviso persistente (ver seção **Alertas** acima) — não estender esse recurso pra cards, linhas de lista, itens de timeline ou qualquer outro contexto novo. Pra destacar um item, usar fundo tintado (accent-soft), peso de fonte, ou borda completa (todos os 4 lados)
 
 ---
 
