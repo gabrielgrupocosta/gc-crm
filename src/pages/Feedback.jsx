@@ -1,6 +1,7 @@
 import { useState, useEffect, Fragment } from 'react'
 import { motion } from 'framer-motion'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS,
   collection, addDoc, getDocs, updateDoc, doc, serverTimestamp, query, orderBy, where,
@@ -51,6 +52,7 @@ const itemVariants = {
 
 export default function Feedback() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const toast = useToast()
 
   const [activeTab, setActiveTab] = useState('enviar')
@@ -118,7 +120,9 @@ export default function Feedback() {
   async function loadFeedbacks() {
     setLoadingList(true)
     try {
-      const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
       const snap = await getDocs(query(collection(db, COLLECTIONS.FEEDBACKS), ...escopoOrg, orderBy('timestamp', 'desc')))
       setFeedbacks(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     } catch (err) {

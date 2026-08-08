@@ -7,6 +7,7 @@ import {
   collection, doc, query, where, getDocs, updateDoc, Timestamp,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
 import ConfirmModal from '../components/UI/ConfirmModal'
@@ -482,6 +483,7 @@ function CalendarioPagamentos({ mesRef, onMudarMes, parcelasPorDia, hoje, diaSel
 
 export default function Financeiro() {
   const { user, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const toast = useToast()
 
   const [cobrancas, setCobrancas] = useState([])
@@ -506,7 +508,9 @@ export default function Financeiro() {
     setLoading(true)
     try {
       const orgId  = user?.organizacaoId ?? null
-      const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+      const escopo = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
       const [cobrancasSnap, clientesSnap, contratosSnap] = await Promise.all([
         getDocs(query(collection(db, COLLECTIONS.COBRANCAS), ...escopo)),
         getDocs(query(collection(db, COLLECTIONS.CLIENTES), ...escopo)),

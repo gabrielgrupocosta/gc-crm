@@ -7,6 +7,7 @@ import {
   criarComRateLimit,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
 import Badge from '../components/UI/Badge'
@@ -639,6 +640,7 @@ function ClienteModal({ isOpen, onClose, onSave, cliente, gestores, lojas, lojas
 export default function Clientes() {
   const toast = useToast()
   const { user, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [clientes,     setClientes]     = useState([])
   const [lojas,        setLojas]        = useState([])
@@ -663,7 +665,9 @@ export default function Clientes() {
       // organização — sem esse filtro a consulta nem passa pelas regras
       // do Firestore pra quem não é master.
       const orgId = user?.organizacaoId ?? null
-      const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+      const escopo = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
       // Contas usam o campo `role` — nenhuma conta atual tem o `perfil` legado.
       // Antes, o branch de master buscava por `perfil` e nunca achava ninguém.

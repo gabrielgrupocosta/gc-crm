@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocatio
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, AlertTriangle, X } from 'lucide-react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { ModoTesteProvider } from './contexts/ModoTesteContext'
 import { SidebarProvider, useSidebar } from './contexts/SidebarContext'
 import { AssistenteChatProvider } from './contexts/AssistenteChatContext'
 import { ToastProvider } from './components/UI/Toast'
@@ -400,12 +401,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ToastProvider>
-          <AppRoutes />
-          <LembretesGlobais />
-          <LojasSemGestorAlerta />
-          <NotificacoesPushGlobal />
-        </ToastProvider>
+        <ModoTesteProvider>
+          <ToastProvider>
+            <AppRoutes />
+            <LembretesGlobais />
+            <LojasSemGestorAlerta />
+            <NotificacoesPushGlobal />
+          </ToastProvider>
+        </ModoTesteProvider>
       </AuthProvider>
       <AnimatePresence>
         {showIntro && <AppIntroSplash onFinish={() => setShowIntro(false)} />}

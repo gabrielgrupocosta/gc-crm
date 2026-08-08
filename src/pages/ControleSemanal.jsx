@@ -6,6 +6,7 @@ import { AlertTriangle, Loader2, Copy, Check, X as XIcon, Download, Pencil, Spar
 import { jsPDF } from 'jspdf'
 import { httpsCallable } from 'firebase/functions'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, functions, COLLECTIONS, uploadImagem,
   collection, doc, query, where,
@@ -526,7 +527,10 @@ function HistoricoLista({ itens, loadingHistDoc, onDownload }) {
 function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
   const toast = useToast()
   const { user, isSuperAdmin } = useAuth()
-  const escopoOrgModal = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
+  const escopoOrgModal = modoTesteAtivo
+    ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+    : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
 
   // ─ Lojas com mais de uma plataforma exigem escolher qual plataforma será
   // lançada antes de mostrar o formulário — cada plataforma tem seu próprio
@@ -1927,6 +1931,7 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
 
 export default function ControleSemanal() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const toast = useToast()
 
   // A semana de referência pra badges/lançamentos é sempre a semana anterior
@@ -1950,7 +1955,9 @@ export default function ControleSemanal() {
 
     async function load() {
       try {
-        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+        const escopoOrg = modoTesteAtivo
+          ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+          : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
         const [lojasSnap, gestoresSnap] = await Promise.all([
           isAdmin
             ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))

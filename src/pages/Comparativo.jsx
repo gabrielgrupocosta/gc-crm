@@ -7,6 +7,7 @@ import {
   Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS,
   collection, query, where, getDocs,
@@ -133,6 +134,7 @@ function ChartTooltip({ active, payload, label }) {
 export default function Comparativo() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [lojas,           setLojas]           = useState([])
   const [loadingLojas,    setLoadingLojas]    = useState(true)
@@ -148,7 +150,9 @@ export default function Comparativo() {
     if (!user) return
     let cancelled = false
     setLoadingLojas(true)
-    const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+    const escopoOrg = modoTesteAtivo
+      ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+      : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
     const qLojas = isAdmin
       ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))
       : getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', user.uid)))
@@ -206,7 +210,9 @@ export default function Comparativo() {
     setLoadingRes(true)
     ;(async () => {
       try {
-        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+        const escopoOrg = modoTesteAtivo
+      ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+      : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
         const todos = []
         for (let i = 0; i < lojaIdsAlvo.length; i += 30) {
           const snap = await getDocs(query(

@@ -1,15 +1,20 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { httpsCallable } from 'firebase/functions'
-import { Plus, UserPlus, Pencil, Eye, EyeOff } from 'lucide-react'
+import { Plus, UserPlus, Pencil, Eye, EyeOff, FlaskConical } from 'lucide-react'
 import {
   db, functions, COLLECTIONS,
   collection, doc, getDocs, addDoc, updateDoc, query, where, serverTimestamp,
 } from '../services/firebase'
 import { useToast } from '../components/UI/Toast'
+import { useAuth } from '../contexts/AuthContext'
 import Modal from '../components/UI/Modal'
 import Badge from '../components/UI/Badge'
 import Skeleton from '../components/UI/Skeleton'
+
+// E-mail com permissão exclusiva para ativar/desativar o "modo teste" (filtro
+// global que restringe todas as telas às organizações marcadas com a flag).
+const EMAIL_MODO_TESTE = 'luiz@ihubfood.com.br'
 
 const criarAdminOrg = httpsCallable(functions, 'criarAdminOrg')
 
@@ -318,6 +323,8 @@ function EditarOrgModal({ isOpen, onClose, onSave, organizacao }) {
 
 export default function Organizacoes() {
   const toast = useToast()
+  const { user, firebaseUser } = useAuth()
+  const podeAlternarModoTeste = (user?.email ?? firebaseUser?.email) === EMAIL_MODO_TESTE
 
   const [organizacoes, setOrganizacoes] = useState([])
   const [lojas,        setLojas]        = useState([])
@@ -384,6 +391,24 @@ export default function Organizacoes() {
     await loadAll()
   }
 
+  async function handleAlternarFlagTeste(org) {
+    if (!podeAlternarModoTeste) return
+    const novoValor = !org.flagTeste
+    setOrganizacoes(prev => prev.map(o => o.id === org.id ? { ...o, flagTeste: novoValor } : o))
+    try {
+      await updateDoc(doc(db, COLLECTIONS.ORGANIZACOES, org.id), { flagTeste: novoValor })
+      toast(
+        novoValor
+          ? `Modo teste ativado para "${org.nome}" — os dados de outras organizações ficarão ocultos em todo o sistema.`
+          : `Modo teste desativado para "${org.nome}".`,
+        'success'
+      )
+    } catch (err) {
+      setOrganizacoes(prev => prev.map(o => o.id === org.id ? { ...o, flagTeste: org.flagTeste } : o))
+      toast('Erro ao atualizar a flag de teste.', 'error')
+    }
+  }
+
   async function handleCriarAdminOrg(form) {
     if (!criandoAdminPara) return
     try {
@@ -429,7 +454,11 @@ export default function Organizacoes() {
           <table className="w-full min-w-[600px]">
             <thead>
               <tr className="bg-[#F9F9F9] border-b border-border">
-                {['Nome', 'Admin', 'Status', 'Lojas', 'Valor por loja', ''].map(h => (
+                {[
+                  'Nome', 'Admin', 'Status', 'Lojas', 'Valor por loja',
+                  ...(podeAlternarModoTeste ? ['Modo teste'] : []),
+                  '',
+                ].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left section-label font-medium whitespace-nowrap">
                     {h}
                   </th>
@@ -460,6 +489,22 @@ export default function Organizacoes() {
                     <td className="px-4 h-12 font-mono text-[13px] text-text-muted whitespace-nowrap">
                       {formatBRL(org.valorPorLoja)}
                     </td>
+                    {podeAlternarModoTeste && (
+                      <td className="px-4 h-12">
+                        <button
+                          onClick={() => handleAlternarFlagTeste(org)}
+                          title={org.flagTeste ? 'Desativar modo teste desta organização' : 'Ativar modo teste — restringe todas as telas a organizações com a flag ativa'}
+                          className="inline-flex items-center gap-1.5 text-[12px] px-2 py-1 rounded border transition-colors duration-150"
+                          style={org.flagTeste
+                            ? { background: '#FFF5F5', borderColor: '#FECACA', color: '#E5322D' }
+                            : { background: '#FFFFFF', borderColor: '#E8E8E8', color: '#999999' }
+                          }
+                        >
+                          <FlaskConical size={13} strokeWidth={1.5} />
+                          {org.flagTeste ? 'Ativo' : 'Inativo'}
+                        </button>
+                      </td>
+                    )}
                     <td className="px-4 h-12 text-right whitespace-nowrap">
                       <button
                         onClick={() => setEditandoOrg(org)}

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowUp, ArrowDown, TrendingUp } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import { db, COLLECTIONS, collection, query, where, getDocs } from '../services/firebase'
 import Skeleton from '../components/UI/Skeleton'
 import PlatformBadge from '../components/UI/PlatformBadge'
@@ -155,6 +156,7 @@ function GestorMobileCard({ item, index }) {
 export default function Ranking() {
   const { user, isSuperAdmin } = useAuth()
   const navigate = useNavigate()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [tab,    setTab]    = useState('lojas')
   const [period, setPeriod] = useState('semana_ant')
@@ -220,7 +222,9 @@ export default function Ranking() {
         // Leitura de lojas/users/resultados exige mesmaOrg() nas regras — sem
         // esse filtro o Firestore rejeita a query inteira pra admin_org/gestor.
         const orgId = user.organizacaoId ?? null
-        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+        const escopoOrg = modoTesteAtivo
+          ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+          : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
         const [lojasSnap, gestoresSnap] = await Promise.all([
           getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg)),

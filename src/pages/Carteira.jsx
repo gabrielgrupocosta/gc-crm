@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { ArrowUp, ArrowDown } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS,
   collection, doc, getDoc, query, where, getDocs,
@@ -171,6 +172,7 @@ function DistribuicaoTooltip({ active, payload }) {
 
 export default function Carteira() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [loading,  setLoading]  = useState(true)
   const [clientes, setClientes] = useState([])
@@ -197,7 +199,9 @@ export default function Carteira() {
       // quem não é master (mesmo padrão de Clientes.jsx/Lojas.jsx). Gestor
       // continua vendo só as próprias lojas, como já era.
       const orgId   = user?.organizacaoId ?? null
-      const escopo  = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+      const escopo  = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
       // Contas usam o campo `role` — nenhuma conta atual tem o `perfil` legado
       // (mesmo padrão de Clientes.jsx/Lojas.jsx/Contratos.jsx). Antes, o

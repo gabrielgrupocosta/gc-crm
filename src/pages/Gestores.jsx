@@ -8,6 +8,7 @@ import {
   createAuthUser, updateGestorEmail, updateGestorPassword, getAuthUid,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
 import Badge from '../components/UI/Badge'
@@ -757,6 +758,7 @@ function DeleteGestorModal({ isOpen, onClose, onExcluir, onDesativarSemSenha, ge
 export default function Gestores() {
   const toast = useToast()
   const { user, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [gestores,     setGestores]     = useState([])
   const [lojas,        setLojas]        = useState([])
@@ -777,10 +779,14 @@ export default function Gestores() {
       // própria — sem esse filtro a consulta nem passa pelas regras do
       // Firestore pra quem não é master (mesmo padrão de Clientes/Lojas).
       const orgId = user?.organizacaoId ?? null
-      const escopoLojas = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
-      const usuariosQuery = isSuperAdmin
-        ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
-        : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
+      const escopoLojas = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+      const usuariosQuery = modoTesteAtivo
+        ? query(collection(db, COLLECTIONS.USERS), where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10)), where('role', '==', 'gestor'))
+        : isSuperAdmin
+          ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
+          : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
 
       const [usuariosSnap, lojasSnap] = await Promise.all([
         getDocs(usuariosQuery),

@@ -81,8 +81,8 @@ export default function Login() {
       <div className="w-full max-w-[360px]">
         {/* Logo */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <LogoMark size={40} />
-          <span className="select-none font-sans mt-3" style={{ fontSize: '20px', letterSpacing: '-0.02em', fontWeight: 800 }}>
+          <LogoMark size={64} />
+          <span className="select-none font-sans mt-3" style={{ fontSize: '24px', letterSpacing: '-0.02em', fontWeight: 800 }}>
             <span style={{ color: '#111111' }}>iHub</span>
             <span style={{ color: '#FF4B2E' }}>Food</span>
           </span>

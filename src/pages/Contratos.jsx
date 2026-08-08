@@ -7,6 +7,7 @@ import {
   criarComRateLimit,
 } from '../services/firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
 import ConfirmModal from '../components/UI/ConfirmModal'
@@ -501,6 +502,7 @@ function EditarContratoModal({ isOpen, onClose, onSave, onPedirExclusao, contrat
 export default function Contratos() {
   const toast = useToast()
   const { user, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [contratos,    setContratos]    = useState([])
   const [clientes,     setClientes]     = useState([])
@@ -519,7 +521,9 @@ export default function Contratos() {
     setLoading(true)
     try {
       const orgId  = user?.organizacaoId ?? null
-      const escopo = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+      const escopo = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
 
       // Contas usam o campo `role` — nenhuma conta atual tem o `perfil` legado
       // (mesmo padrão de Clientes.jsx/Lojas.jsx). Antes, o branch de master

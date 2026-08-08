@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Plus, Trash2, Check, Store } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS,
   collection, doc, addDoc, updateDoc, deleteDoc, getDocs, query, where, orderBy, limit, startAfter, serverTimestamp, Timestamp,
@@ -322,6 +323,7 @@ function TarefaRow({ tarefa: t, isLast, lojaMap, isAdmin, concluindoId, excluind
 
 export default function Atividades() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const toast = useToast()
 
   // Suporta chegar aqui já filtrado via link externo (ex: card do gestor no
@@ -376,7 +378,9 @@ export default function Atividades() {
       setLoadingBase(true)
       try {
         const orgId = user.organizacaoId ?? null
-        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+        const escopoOrg = modoTesteAtivo
+          ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+          : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
         const [lojasSnap, gestoresSnap] = await Promise.all([
           isAdmin
             ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))
@@ -618,7 +622,9 @@ export default function Atividades() {
   async function loadTarefas() {
     setLoadingTarefas(true)
     try {
-      const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
       let docs
       if (isAdmin) {
         const snap = await getDocs(query(collection(db, COLLECTIONS.TAREFAS), ...escopoOrg))

@@ -7,6 +7,7 @@ import {
 } from '../services/firebase'
 import { useToast } from '../components/UI/Toast'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import Modal from '../components/UI/Modal'
 import Skeleton from '../components/UI/Skeleton'
 import ImageUpload from '../components/UI/ImageUpload'
@@ -839,6 +840,7 @@ function KanbanColumn({ title, count, headerBg, headerColor, children }) {
 export default function Onboard() {
   const toast = useToast()
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [lojas,    setLojas]    = useState([])
   const [gestores, setGestores] = useState([])
@@ -870,7 +872,9 @@ export default function Onboard() {
   async function loadAll() {
     setLoading(true)
     try {
-      const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
       const [lojasSnap, gestoresSnap] = await Promise.all([
         isAdmin
           ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))
