@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bell, AlertTriangle, X } from 'lucide-react'
@@ -18,24 +18,27 @@ import PedirPermissaoNotificacao from './components/UI/PedirPermissaoNotificacao
 import InstalarPWAiOS from './components/UI/InstalarPWAiOS'
 import InstalarPWAAndroid from './components/UI/InstalarPWAAndroid'
 import AppIntroSplash from './components/UI/AppIntroSplash'
+// Login carrega direto (é a primeira tela que qualquer usuário deslogado vê).
+// O resto é lazy — cada rota vira um chunk próprio, baixado só quando navegada,
+// em vez de inflar o bundle inicial com todas as 18 páginas de uma vez.
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Lojas from './pages/Lojas'
-import Clientes from './pages/Clientes'
-import Contratos from './pages/Contratos'
-import Financeiro from './pages/Financeiro'
-import AssistenteDelivery from './pages/AssistenteDelivery'
-import Gestores from './pages/Gestores'
-import Organizacoes from './pages/Organizacoes'
-import CRM from './pages/CRM'
-import ControleSemanal from './pages/ControleSemanal'
-import Ranking from './pages/Ranking'
-import Comparativo from './pages/Comparativo'
-import Metricas from './pages/Metricas'
-import Feedback from './pages/Feedback'
-import Carteira from './pages/Carteira'
-import Atividades from './pages/Atividades'
-import Onboard from './pages/Onboard'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Lojas = lazy(() => import('./pages/Lojas'))
+const Clientes = lazy(() => import('./pages/Clientes'))
+const Contratos = lazy(() => import('./pages/Contratos'))
+const Financeiro = lazy(() => import('./pages/Financeiro'))
+const AssistenteDelivery = lazy(() => import('./pages/AssistenteDelivery'))
+const Gestores = lazy(() => import('./pages/Gestores'))
+const Organizacoes = lazy(() => import('./pages/Organizacoes'))
+const CRM = lazy(() => import('./pages/CRM'))
+const ControleSemanal = lazy(() => import('./pages/ControleSemanal'))
+const Ranking = lazy(() => import('./pages/Ranking'))
+const Comparativo = lazy(() => import('./pages/Comparativo'))
+const Metricas = lazy(() => import('./pages/Metricas'))
+const Feedback = lazy(() => import('./pages/Feedback'))
+const Carteira = lazy(() => import('./pages/Carteira'))
+const Atividades = lazy(() => import('./pages/Atividades'))
+const Onboard = lazy(() => import('./pages/Onboard'))
 
 function LoadingScreen() {
   return (
@@ -325,7 +328,9 @@ function MainContent() {
       ref={mainRef}
       className={`h-screen overflow-y-auto ml-0 pt-14 md:pt-0 transition-[margin-left] duration-200 ease-out ${collapsed ? 'md:ml-[52px]' : 'md:ml-[220px]'}`}
     >
-      <Outlet />
+      <Suspense fallback={<LoadingScreen />}>
+        <Outlet />
+      </Suspense>
     </main>
   )
 }
