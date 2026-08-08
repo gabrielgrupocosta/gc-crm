@@ -34,6 +34,14 @@ scripts/data
 graphify-out/cost.json
 graphify-out/cache/
 
+# Agent Skills genéricas do Firebase instaladas pelo `firebase init` — guias de
+# referência pro assistente, não fazem parte do código do app
+.agents/
+.claude/skills/firebase-*/
+.claude/skills/extension-to-functions-codebase/
+.claude/skills/xcode-project-setup/
+skills-lock.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
