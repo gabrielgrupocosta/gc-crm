@@ -30,6 +30,10 @@ scripts/data
 # Lock de sessão do Claude Code — estado transitório local, não é config do projeto
 .claude/scheduled_tasks.lock
 
+# graphify — cache local, não precisa versionar (graph.json/GRAPH_REPORT.md/graph.html ficam)
+graphify-out/cost.json
+graphify-out/cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
