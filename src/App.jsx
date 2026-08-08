@@ -192,6 +192,7 @@ function LembreteModal({ lembretes, onConcluir, onAdiar, onVerTodas, onFechar })
 
 function LembretesGlobais() {
   const navigate = useNavigate()
+  const { introAtiva } = useAuth()
   const { lembretes, concluirTarefa, adiarAmanha, fechar } = useLembretes()
 
   function handleVerTodas() {
@@ -201,7 +202,7 @@ function LembretesGlobais() {
 
   return (
     <AnimatePresence>
-      {lembretes.length > 0 && (
+      {!introAtiva && lembretes.length > 0 && (
         <LembreteModal
           key="lembretes-popup"
           lembretes={lembretes}
