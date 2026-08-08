@@ -184,9 +184,13 @@ export function getPeriodoComparativo(refWeek, n) {
 
 // `orgId`: passe a organizacaoId do usuário logado quando ele NÃO for master —
 // sem isso a regra mesmaOrg() do Firestore rejeita a query inteira pra admin_org.
+// Aceita também um array de ids (ex.: organizacaoIdsPermitidos do modo teste,
+// limitado a 10 pelo operador `in` do Firestore).
 export async function fetchByWeeksBatched(allWeeks, orgId = null) {
   const results = []
-  const escopo = orgId ? [where('organizacaoId', '==', orgId)] : []
+  const escopo = Array.isArray(orgId)
+    ? [where('organizacaoId', 'in', orgId.slice(0, 10))]
+    : orgId ? [where('organizacaoId', '==', orgId)] : []
   for (let i = 0; i < allWeeks.length; i += 30) {
     const batch = allWeeks.slice(i, i + 30)
     const snap  = await getDocs(query(

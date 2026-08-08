@@ -7,6 +7,7 @@ import {
 import { CheckCircle2, Circle, ArrowRight, Trophy, AlertTriangle, AlertCircle, Store, Users, Inbox } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS, collection, query, where, getDocs, getDoc,
   addDoc, setDoc, updateDoc, doc, serverTimestamp, orderBy, limit, startAfter,
@@ -905,6 +906,7 @@ function ModalRelatorio({ loja, semana, periodoLabel, lojaStatus, onClose, onSav
 
 export default function Dashboard() {
   const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const navigate = useNavigate()
 
   const currentWeek = useMemo(() => getISOWeekStr(), [])
@@ -1014,9 +1016,13 @@ export default function Dashboard() {
       try {
         // Regra de leitura dessas coleções é só mesmaOrg() (sem exigir gestorId) —
         // então basta filtrar por organizacaoId pra admin_org e gestor lerem tudo
-        // da própria org; master (isSuperAdmin) não precisa do filtro.
-        const orgId = user.organizacaoId ?? null
-        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+        // da própria org. Master (isSuperAdmin): restrito às orgs permitidas
+        // quando o filtro global de organização estiver ativo (flag de teste ou
+        // seleção manual na aba Organizações) — mesma regra usada em todas as
+        // outras telas (ver ModoTesteContext). Sem filtro, master vê todas.
+        const escopoOrg = modoTesteAtivo
+          ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+          : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
 
         const [lojasSnap, resultadosSnap] = await Promise.all([
           getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg)),
@@ -1077,7 +1083,7 @@ export default function Dashboard() {
 
     load()
     return () => { cancelled = true }
-  }, [user, isAdmin, isSuperAdmin, currentWeek, last8Weeks])
+  }, [user, isAdmin, isSuperAdmin, currentWeek, last8Weeks, modoTesteAtivo, organizacaoIdsPermitidos])
 
   // ─── Consolidado fetch ───────────────────────────────────────────────────────
 
@@ -1126,7 +1132,10 @@ export default function Dashboard() {
     try {
       let allDocs
       if (isAdmin) {
-        allDocs = await fetchByWeeksBatched(allWeeks, isSuperAdmin ? null : (user.organizacaoId ?? null))
+        allDocs = await fetchByWeeksBatched(
+          allWeeks,
+          modoTesteAtivo ? organizacaoIdsPermitidos : isSuperAdmin ? null : (user.organizacaoId ?? null)
+        )
       } else {
         const snap = await getDocs(query(
           collection(db, COLLECTIONS.RESULTADOS),
@@ -1357,7 +1366,9 @@ export default function Dashboard() {
     setPerformanceData(null)
     setLoadingPerformance(true)
     try {
-      const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
       const [resultadosSnap, acoesSnap] = await Promise.all([
         getDocs(query(collection(db, COLLECTIONS.RESULTADOS), ...escopoOrg, where('lojaId', '==', item.lojaId), orderBy('semana', 'desc'))),
         getDocs(query(collection(db, COLLECTIONS.ACOES), ...escopoOrg, where('lojaId', '==', item.lojaId), orderBy('timestamp', 'desc'), limit(20))),
@@ -1412,7 +1423,7 @@ export default function Dashboard() {
     } finally {
       setLoadingPerformance(false)
     }
-  }, [user, isSuperAdmin])
+  }, [user, isSuperAdmin, modoTesteAtivo, organizacaoIdsPermitidos])
 
   const fecharPerformanceCard = useCallback(() => {
     setPerformanceCliente(null)
@@ -1430,7 +1441,7 @@ export default function Dashboard() {
     const n = N_SEMANAS_POR_PERIODO[periodo] ?? 4
     const refWeek = last8Weeks[1] // última semana fechada, mesmo padrão do resto do dashboard
     const { atual, anterior } = getPeriodoComparativo(refWeek, n)
-    const orgId = isSuperAdmin ? null : (user?.organizacaoId ?? null)
+    const orgId = modoTesteAtivo ? organizacaoIdsPermitidos : isSuperAdmin ? null : (user?.organizacaoId ?? null)
 
     const [resAtual, resAnterior] = await Promise.all([
       fetchByWeeksBatched(atual, orgId),
@@ -1502,7 +1513,9 @@ export default function Dashboard() {
   }, [last8Weeks, isSuperAdmin, user])
 
   const carregarAcoesGestorCard = useCallback(async (gestorId, resetar) => {
-    const orgId = isSuperAdmin ? [] : [where('organizacaoId', '==', user?.organizacaoId ?? null)]
+    const orgId = modoTesteAtivo
+      ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+      : isSuperAdmin ? [] : [where('organizacaoId', '==', user?.organizacaoId ?? null)]
     const cursor = resetar ? null : gestorAcoesCursor
     const constraints = [
       collection(db, COLLECTIONS.ACOES),
@@ -1526,7 +1539,7 @@ export default function Dashboard() {
     setGestorAcoes(prev => resetar ? novas : [...prev, ...novas])
     setGestorAcoesCursor(snap.docs[snap.docs.length - 1] ?? null)
     setGestorAcoesHasMore(snap.docs.length === 5)
-  }, [isSuperAdmin, user, gestorAcoesCursor])
+  }, [isSuperAdmin, user, gestorAcoesCursor, modoTesteAtivo, organizacaoIdsPermitidos])
 
   const abrirGestorCard = useCallback(async (gestor) => {
     if (!gestor?.gestorId) return
@@ -1539,7 +1552,9 @@ export default function Dashboard() {
     setLoadingGestorCard(true)
     setLoadingGestorAcoes(true)
     try {
-      const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user?.organizacaoId ?? null)]
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user?.organizacaoId ?? null)]
       const lojasSnap = await getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', gestor.gestorId)))
       const lojasGestor = lojasSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(lojaAtiva)
       setGestorCardLojas(lojasGestor)

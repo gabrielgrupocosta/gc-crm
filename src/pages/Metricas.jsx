@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowUp, ArrowDown, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS, collection, query, where, getDocs,
 } from '../services/firebase'
@@ -256,6 +257,7 @@ function NichoSection({ nichos, filtro }) {
 
 export default function Metricas() {
   const { user, isSuperAdmin } = useAuth()
+  const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [loading,  setLoading]  = useState(true)
   const [lojas,    setLojas]    = useState([])
@@ -273,11 +275,10 @@ export default function Metricas() {
     async function load() {
       setLoading(true)
       try {
-        const orgId  = isSuperAdmin ? null : (user.organizacaoId ?? null)
-        const escopo = orgId ? [where('organizacaoId', '==', orgId)] : []
-        const gestoresQuery = orgId
-          ? query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
-          : query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
+        const escopo = modoTesteAtivo
+          ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+          : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+        const gestoresQuery = query(collection(db, COLLECTIONS.USERS), ...escopo, where('role', '==', 'gestor'))
 
         const [lojasSnap, gestoresSnap] = await Promise.all([
           getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopo)),
@@ -294,7 +295,7 @@ export default function Metricas() {
     }
     load()
     return () => { cancelled = true }
-  }, [user, isSuperAdmin])
+  }, [user, isSuperAdmin, modoTesteAtivo, organizacaoIdsPermitidos])
 
   // ── Resultados do período selecionado (atual + anterior equivalente) ──────
   useEffect(() => {
@@ -306,7 +307,7 @@ export default function Metricas() {
         const n = N_SEMANAS_POR_PERIODO[periodo] ?? 4
         const refWeek = getPrevWeekStr(getISOWeekStr())
         const { atual, anterior } = getPeriodoComparativo(refWeek, n)
-        const orgId = isSuperAdmin ? null : (user.organizacaoId ?? null)
+        const orgId = modoTesteAtivo ? organizacaoIdsPermitidos : isSuperAdmin ? null : (user.organizacaoId ?? null)
         const [resAtual, resAnterior] = await Promise.all([
           fetchByWeeksBatched(atual, orgId),
           fetchByWeeksBatched(anterior, orgId),
@@ -322,7 +323,7 @@ export default function Metricas() {
     }
     load()
     return () => { cancelled = true }
-  }, [user, isSuperAdmin, periodo])
+  }, [user, isSuperAdmin, periodo, modoTesteAtivo, organizacaoIdsPermitidos])
 
   const lojaMap = useMemo(() => Object.fromEntries(lojas.map(l => [l.id, l])), [lojas])
   const lojaIds = useMemo(() => new Set(lojas.map(l => l.id)), [lojas])

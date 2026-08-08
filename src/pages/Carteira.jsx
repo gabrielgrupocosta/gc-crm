@@ -279,7 +279,10 @@ export default function Carteira() {
         const weeks24 = getLastNWeeks(semanaRef, 24)
         let docs
         if (isAdmin) {
-          docs = await fetchByWeeksBatched(weeks24, isSuperAdmin ? null : (user.organizacaoId ?? null))
+          docs = await fetchByWeeksBatched(
+            weeks24,
+            modoTesteAtivo ? organizacaoIdsPermitidos : isSuperAdmin ? null : (user.organizacaoId ?? null)
+          )
         } else {
           const snap = await getDocs(query(
             collection(db, COLLECTIONS.RESULTADOS),
@@ -298,7 +301,7 @@ export default function Carteira() {
     }
     loadResultados()
     return () => { cancelled = true }
-  }, [user, isAdmin, isSuperAdmin, semanaRef])
+  }, [user, isAdmin, isSuperAdmin, semanaRef, modoTesteAtivo, organizacaoIdsPermitidos])
 
   const lojaMap = useMemo(() => Object.fromEntries(lojas.map(l => [l.id, l])), [lojas])
 

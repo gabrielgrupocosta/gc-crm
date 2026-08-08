@@ -8,6 +8,7 @@ import {
 } from '../services/firebase'
 import { useToast } from '../components/UI/Toast'
 import { useAuth } from '../contexts/AuthContext'
+import { useModoTeste } from '../contexts/ModoTesteContext'
 import Modal from '../components/UI/Modal'
 import Badge from '../components/UI/Badge'
 import Skeleton from '../components/UI/Skeleton'
@@ -325,6 +326,7 @@ export default function Organizacoes() {
   const toast = useToast()
   const { user, firebaseUser } = useAuth()
   const podeAlternarModoTeste = (user?.email ?? firebaseUser?.email) === EMAIL_MODO_TESTE
+  const { filtroOrganizacaoId, setFiltroOrganizacaoId } = useModoTeste()
 
   const [organizacoes, setOrganizacoes] = useState([])
   const [lojas,        setLojas]        = useState([])
@@ -435,10 +437,24 @@ export default function Organizacoes() {
       {/* Header */}
       <div className="page-header flex items-center justify-between">
         <h1 className="page-title" style={{ marginBottom: 0 }}>Organizações</h1>
-        <button onClick={() => setNovaOrgOpen(true)} className="btn-primary flex items-center gap-2 h-9">
-          <Plus size={15} strokeWidth={2} />
-          Nova organização
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={filtroOrganizacaoId}
+            onChange={e => setFiltroOrganizacaoId(e.target.value)}
+            className="h-9 px-3 bg-surface border border-border rounded-md text-[13px] text-text-primary"
+            style={{ minWidth: 220 }}
+            title="Filtra todas as telas do sistema (Dashboard, Contratos, Lojas, Clientes, Financeiro, Carteira etc) só pra essa organização"
+          >
+            <option value="">Ver todas as organizações</option>
+            {organizacoes.map(org => (
+              <option key={org.id} value={org.id}>Ver como: {org.nome}</option>
+            ))}
+          </select>
+          <button onClick={() => setNovaOrgOpen(true)} className="btn-primary flex items-center gap-2 h-9">
+            <Plus size={15} strokeWidth={2} />
+            Nova organização
+          </button>
+        </div>
       </div>
 
       {/* Tabela */}
