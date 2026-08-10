@@ -844,6 +844,117 @@ function DeleteGestorModal({ isOpen, onClose, onExcluir, onDesativarSemSenha, ge
   )
 }
 
+// ─── Tabela de gestores/supervisores (reaproveitada pra ambas as seções) ────
+
+function GestoresTableCard({ titulo, itens, totalRole, ativosRole, loading, isSuperAdmin, organizacaoMap, lojasCountMap, mensagemVazio, openEdit, onDelete }) {
+  return (
+    <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
+      <div className="px-4 pt-4 pb-1">
+        <h2 className="section-title" style={{ marginBottom: 0 }}>{titulo}</h2>
+      </div>
+      {loading ? (
+        <Skeleton.Table rows={4} cols={isSuperAdmin ? 6 : 5} />
+      ) : itens.length === 0 ? (
+        <div className="flex items-center justify-center py-16">
+          <p className="text-[13px] text-text-subtle">{mensagemVazio}</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px]">
+          <thead>
+            <tr className="bg-[#F9F9F9] border-b border-border">
+              {[...(isSuperAdmin ? ['Nome', 'E-mail', 'Organização', 'Status', 'Lojas', ''] : ['Nome', 'E-mail', 'Status', 'Lojas', ''])].map(h => (
+                <th key={h} className="px-4 py-2.5 text-left section-label font-medium whitespace-nowrap">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <motion.tbody variants={listVariants} initial="initial" animate="animate">
+            {itens.map(g => {
+              const count = lojasCountMap[g.id] ?? 0
+              return (
+                <motion.tr key={g.id} variants={itemVariants} className="table-row-base">
+                  <td className="px-4 h-12 text-[14px] text-text-primary font-medium">
+                    <span className="inline-flex items-center gap-2">
+                      {g.nome}
+                      {g.status === 'inativo' && (
+                        <span
+                          className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
+                          style={{
+                            padding: '1px 6px', borderRadius: '4px',
+                            color: '#DC2626', backgroundColor: 'rgba(220,38,38,0.1)',
+                            border: '1px solid rgba(220,38,38,0.2)',
+                          }}
+                        >
+                          Inativo
+                        </span>
+                      )}
+                    </span>
+                  </td>
+                  <td className="px-4 h-12 text-[14px] text-text-muted font-mono">
+                    {g.email}
+                  </td>
+                  {isSuperAdmin && (
+                    <td className="px-4 h-12 text-[13px] text-text-muted">
+                      {organizacaoMap[g.organizacaoId] ?? '—'}
+                    </td>
+                  )}
+                  <td className="px-4 h-12">
+                    <Badge
+                      status={g.status}
+                      label={g.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                    />
+                  </td>
+                  <td className="px-4 h-12">
+                    <span className={`font-mono text-[14px] ${
+                      count === 0 ? 'text-text-subtle' : 'text-text-muted'
+                    }`}>
+                      {count}
+                      <span className="text-[12px] text-text-subtle ml-1">
+                        {count === 1 ? 'loja' : 'lojas'}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-4 h-12 text-right whitespace-nowrap">
+                    <button
+                      onClick={() => openEdit(g)}
+                      className="inline-flex items-center gap-1.5 text-[12px] text-text-subtle hover:text-text-primary transition-colors duration-150 px-2 py-1 rounded hover:bg-black/[0.04]"
+                    >
+                      <Pencil size={13} strokeWidth={1.5} />
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => onDelete(g)}
+                      className="inline-flex items-center gap-1.5 text-[12px] text-negative hover:opacity-75 transition-opacity duration-150 px-2 py-1 rounded ml-1"
+                    >
+                      <Trash2 size={13} strokeWidth={1.5} />
+                      Excluir
+                    </button>
+                  </td>
+                </motion.tr>
+              )
+            })}
+          </motion.tbody>
+        </table>
+        </div>
+      )}
+
+      {/* Footer */}
+      {!loading && totalRole > 0 && (
+        <div className="px-4 py-3 border-t border-border flex items-center justify-between">
+          <span className="text-[12px] text-text-subtle">
+            {itens.length} de {totalRole} {titulo.toLowerCase()}
+          </span>
+          <span className="text-[12px] text-text-subtle">
+            {ativosRole} ativos
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Gestores() {
@@ -925,6 +1036,13 @@ export default function Gestores() {
       g.nome?.toLowerCase().includes(term) || g.email?.toLowerCase().includes(term)
     )
   }, [gestores, search])
+
+  // Gestores e supervisores são exibidos em cards separados — mesmo estilo,
+  // seções distintas — em vez de misturados numa única tabela.
+  const apenasGestores = useMemo(() => gestores.filter(g => g.role !== 'supervisor'), [gestores])
+  const apenasSupervisores = useMemo(() => gestores.filter(g => g.role === 'supervisor'), [gestores])
+  const gestoresFiltradosLista = useMemo(() => gestoresFiltrados.filter(g => g.role !== 'supervisor'), [gestoresFiltrados])
+  const supervisoresFiltradosLista = useMemo(() => gestoresFiltrados.filter(g => g.role === 'supervisor'), [gestoresFiltrados])
 
   const lojasNaoAtribuidas = useMemo(
     () => lojas.filter(l => l.status?.toLowerCase() !== 'cancelada'),
@@ -1139,122 +1257,39 @@ export default function Gestores() {
         )}
       </div>
 
-      {/* Tabela */}
-      <div className="bg-surface border border-border rounded-lg shadow-card overflow-hidden">
-        {loading ? (
-          <Skeleton.Table rows={6} cols={isSuperAdmin ? 6 : 5} />
-        ) : gestoresFiltrados.length === 0 ? (
-          <div className="flex items-center justify-center py-16">
-            <p className="text-[13px] text-text-subtle">
-              {gestores.length === 0 ? 'Nenhum gestor cadastrado.' : 'Nenhum gestor encontrado.'}
-            </p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px]">
-            <thead>
-              <tr className="bg-[#F9F9F9] border-b border-border">
-                {[...(isSuperAdmin ? ['Nome', 'E-mail', 'Organização', 'Status', 'Lojas', ''] : ['Nome', 'E-mail', 'Status', 'Lojas', ''])].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left section-label font-medium whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <motion.tbody variants={listVariants} initial="initial" animate="animate">
-              {gestoresFiltrados.map(g => {
-                const count = lojasCountMap[g.id] ?? 0
-                return (
-                  <motion.tr key={g.id} variants={itemVariants} className="table-row-base">
-                    <td className="px-4 h-12 text-[14px] text-text-primary font-medium">
-                      <span className="inline-flex items-center gap-2">
-                        {g.nome}
-                        {g.role === 'supervisor' && (
-                          <span
-                            className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
-                            style={{
-                              padding: '1px 6px', borderRadius: '4px',
-                              color: '#2563EB', backgroundColor: '#EFF6FF',
-                              border: '1px solid #BFDBFE',
-                            }}
-                          >
-                            Supervisor
-                          </span>
-                        )}
-                        {g.status === 'inativo' && (
-                          <span
-                            className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
-                            style={{
-                              padding: '1px 6px', borderRadius: '4px',
-                              color: '#DC2626', backgroundColor: 'rgba(220,38,38,0.1)',
-                              border: '1px solid rgba(220,38,38,0.2)',
-                            }}
-                          >
-                            Inativo
-                          </span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 h-12 text-[14px] text-text-muted font-mono">
-                      {g.email}
-                    </td>
-                    {isSuperAdmin && (
-                      <td className="px-4 h-12 text-[13px] text-text-muted">
-                        {organizacaoMap[g.organizacaoId] ?? '—'}
-                      </td>
-                    )}
-                    <td className="px-4 h-12">
-                      <Badge
-                        status={g.status}
-                        label={g.status === 'ativo' ? 'Ativo' : 'Inativo'}
-                      />
-                    </td>
-                    <td className="px-4 h-12">
-                      <span className={`font-mono text-[14px] ${
-                        count === 0 ? 'text-text-subtle' : 'text-text-muted'
-                      }`}>
-                        {count}
-                        <span className="text-[12px] text-text-subtle ml-1">
-                          {count === 1 ? 'loja' : 'lojas'}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-4 h-12 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => openEdit(g)}
-                        className="inline-flex items-center gap-1.5 text-[12px] text-text-subtle hover:text-text-primary transition-colors duration-150 px-2 py-1 rounded hover:bg-black/[0.04]"
-                      >
-                        <Pencil size={13} strokeWidth={1.5} />
-                        Editar
-                      </button>
-                      <button
-                        onClick={() => setDeletingGestor(g)}
-                        className="inline-flex items-center gap-1.5 text-[12px] text-negative hover:opacity-75 transition-opacity duration-150 px-2 py-1 rounded ml-1"
-                      >
-                        <Trash2 size={13} strokeWidth={1.5} />
-                        Excluir
-                      </button>
-                    </td>
-                  </motion.tr>
-                )
-              })}
-            </motion.tbody>
-          </table>
-          </div>
-        )}
+      {/* Gestores */}
+      <GestoresTableCard
+        titulo="Gestores"
+        itens={gestoresFiltradosLista}
+        totalRole={apenasGestores.length}
+        ativosRole={apenasGestores.filter(g => g.status === 'ativo').length}
+        loading={loading}
+        isSuperAdmin={isSuperAdmin}
+        organizacaoMap={organizacaoMap}
+        lojasCountMap={lojasCountMap}
+        mensagemVazio={apenasGestores.length === 0 ? 'Nenhum gestor cadastrado.' : 'Nenhum gestor encontrado.'}
+        openEdit={openEdit}
+        onDelete={setDeletingGestor}
+      />
 
-        {/* Footer */}
-        {!loading && gestores.length > 0 && (
-          <div className="px-4 py-3 border-t border-border flex items-center justify-between">
-            <span className="text-[12px] text-text-subtle">
-              {gestoresFiltrados.length} de {gestores.length} gestores
-            </span>
-            <span className="text-[12px] text-text-subtle">
-              {gestores.filter(g => g.status === 'ativo').length} ativos
-            </span>
-          </div>
-        )}
-      </div>
+      {/* Supervisores — seção separada, mesmo estilo, logo abaixo do card de gestores */}
+      {(isAdmin || apenasSupervisores.length > 0) && (
+        <div className="mt-6">
+          <GestoresTableCard
+            titulo="Supervisores"
+            itens={supervisoresFiltradosLista}
+            totalRole={apenasSupervisores.length}
+            ativosRole={apenasSupervisores.filter(g => g.status === 'ativo').length}
+            loading={loading}
+            isSuperAdmin={isSuperAdmin}
+            organizacaoMap={organizacaoMap}
+            lojasCountMap={lojasCountMap}
+            mensagemVazio={apenasSupervisores.length === 0 ? 'Nenhum supervisor cadastrado.' : 'Nenhum supervisor encontrado.'}
+            openEdit={openEdit}
+            onDelete={setDeletingGestor}
+          />
+        </div>
+      )}
 
       <GestorModal
         isOpen={modalOpen}
