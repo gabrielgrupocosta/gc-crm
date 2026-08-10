@@ -178,6 +178,22 @@ async function urlParaDataURL(url) {
   })
 }
 
+// ─── Máscara de moeda (BRL) ─────────────────────────────────────────────────
+
+// Converte o texto digitado (com ou sem formatação) para número puro em string,
+// tratando os dígitos como centavos — ex: "1234" digitado vira "12.34".
+function maskCurrencyInput(rawText) {
+  const digits = (rawText ?? '').replace(/\D/g, '')
+  if (!digits) return ''
+  return (parseInt(digits, 10) / 100).toFixed(2)
+}
+
+// Formata o número puro ("1234.56") para exibição "R$ 1.234,56".
+function formatCurrencyDisplay(value) {
+  if (value === '' || value == null || isNaN(Number(value))) return ''
+  return `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 // ─── Resumo IA via Firebase Function (Gemini Vision) ───────────────────────────
 
 const gerarResumoRelatorio = httpsCallable(functions, 'gerarResumoRelatorio')
@@ -1222,9 +1238,10 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
                       <Field label="Faturamento Bruto (R$)">
                         <input
                           style={{ ...INPUT_STYLE, borderColor: camposAuto.faturamento ? '#16A34A' : '#E8E8E8' }}
-                          value={faturamento}
-                          onChange={e => { setFaturamento(e.target.value); setCamposAuto(c => c.faturamento ? { ...c, faturamento: false } : c) }}
-                          placeholder="0.00"
+                          value={formatCurrencyDisplay(faturamento)}
+                          onChange={e => { setFaturamento(maskCurrencyInput(e.target.value)); setCamposAuto(c => c.faturamento ? { ...c, faturamento: false } : c) }}
+                          inputMode="numeric"
+                          placeholder="R$ 0,00"
                           onFocus={e => e.target.style.borderColor = '#E5322D'}
                           onBlur={e => e.target.style.borderColor = camposAuto.faturamento ? '#16A34A' : '#E8E8E8'}
                         />
