@@ -455,10 +455,15 @@ function SectionTitle({ label }) {
 }
 
 function PercentInput({ value, onChange, borderColor, placeholder }) {
+  // Largura acompanha o texto REALMENTE exibido — valor digitado quando tem
+  // um, senão o placeholder. Usar sempre o maior dos dois (valor antigo)
+  // deixava o campo largo mesmo com um valor curto digitado (ex: "2"),
+  // empurrando o "%" pra longe do número.
+  const textoExibido = (value !== '' && value != null) ? String(value) : String(placeholder ?? '')
   return (
     <div style={{ ...INPUT_STYLE, display: 'flex', alignItems: 'center', gap: '4px', borderColor }}>
       <input
-        style={{ border: 'none', outline: 'none', background: 'transparent', flex: '0 1 auto', width: `${Math.max(String(value ?? '').length, String(placeholder ?? '').length, 1) + 1}ch`, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
+        style={{ border: 'none', outline: 'none', background: 'transparent', flex: '0 1 auto', width: `${Math.max(textoExibido.length, 1) + 1}ch`, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
@@ -470,9 +475,14 @@ function PercentInput({ value, onChange, borderColor, placeholder }) {
   )
 }
 
-function WarnBadge({ val, threshold }) {
+// `abaixo`: por padrão o alerta dispara quando `val` passa do threshold PRA
+// CIMA (cancelamento, chamados). Tempo de loja aberta é o oposto — alerta
+// quando cai ABAIXO do threshold — por isso o modo invertido.
+function WarnBadge({ val, threshold, abaixo = false }) {
   const n = parseFloat(val)
-  if (isNaN(n) || n <= threshold) return null
+  if (isNaN(n)) return null
+  const emAlerta = abaixo ? n < threshold : n > threshold
+  if (!emAlerta) return null
   return (
     <span style={{ fontSize: '10px', fontWeight: 500, color: '#DC2626', backgroundColor: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: '3px', padding: '1px 5px', letterSpacing: '0.04em', textTransform: 'uppercase', flexShrink: 0 }}>
       ATENÇÃO
@@ -584,10 +594,10 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
   const [resultadoSalvo,      setResultadoSalvo]      = useState(false)
   const [loadingEnviar,       setLoadingEnviar]       = useState(false)
   // `botaoEditar` controla só o rótulo do botão do rodapé ("Enviar Dados" →
-  // "Editar Dados") — fica true quando já existia um resultado salvo ao
+  // "Atualizar Dados") — fica true quando já existia um resultado salvo ao
   // carregar (dado genuinamente enviado antes) ou quando o gestor clica no
   // botão. NÃO é setado pelo autosave silencioso: sem essa separação, o botão
-  // virava "Editar Dados" assim que o gestor começava a digitar, antes de
+  // trocava de rótulo assim que o gestor começava a digitar, antes de
   // qualquer clique — o autosave continua rodando igual, só o rótulo não
   // acompanha ele.
   const [botaoEditar,         setBotaoEditar]         = useState(false)
@@ -1245,12 +1255,15 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                       </div>
                     </Field>
                     <Field label="Tempo de Loja Aberta (%)">
-                      <PercentInput
-                        value={tempoAberto}
-                        onChange={e => { setTempoAberto(e.target.value); setCamposAuto(c => c.tempoAberto ? { ...c, tempoAberto: false } : c) }}
-                        placeholder="0.0"
-                        borderColor={camposAuto.tempoAberto ? '#16A34A' : '#E8E8E8'}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <PercentInput
+                          value={tempoAberto}
+                          onChange={e => { setTempoAberto(e.target.value); setCamposAuto(c => c.tempoAberto ? { ...c, tempoAberto: false } : c) }}
+                          placeholder="0.0"
+                          borderColor={camposAuto.tempoAberto ? '#16A34A' : '#E8E8E8'}
+                        />
+                        <WarnBadge val={tempoAberto} threshold={95} abaixo />
+                      </div>
                     </Field>
                   </div>
                 </div>
@@ -1427,7 +1440,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
               {loadingEnviar ? (
                 <><Loader2 size={13} className="animate-spin" /> {botaoEditar ? 'Salvando…' : 'Enviando…'}</>
               ) : botaoEditar ? (
-                <><Pencil size={13} strokeWidth={1.75} /> Editar Dados</>
+                <><Pencil size={13} strokeWidth={1.75} /> Atualizar Dados</>
               ) : <><Download size={13}/> Enviar Dados</>}
             </button>
           </div>
