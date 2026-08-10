@@ -20,7 +20,7 @@ const ROLES_VALIDOS = ['master', 'admin_org', 'gestor', 'supervisor']
 
 // Espelha src/constants/menuPermissions.js — Cloud Functions não importam de src/,
 // então a lista de chaves válidas é duplicada aqui pra validar o array recebido.
-const MENU_PERMISSIONS_VALIDAS = ['metricas', 'clientes', 'lojas', 'contratos', 'financeiro', 'gestores']
+const MENU_PERMISSIONS_VALIDAS = ['metricas', 'insights', 'clientes', 'lojas', 'contratos', 'financeiro', 'gestores']
 
 // Garante que quem chama é master — usado nas funções de administração
 // de contas, que só fazem sentido para quem gerencia a plataforma inteira.

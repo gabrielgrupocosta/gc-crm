@@ -35,6 +35,7 @@ const ControleSemanal = lazy(() => import('./pages/ControleSemanal'))
 const Ranking = lazy(() => import('./pages/Ranking'))
 const Comparativo = lazy(() => import('./pages/Comparativo'))
 const Metricas = lazy(() => import('./pages/Metricas'))
+const Insights = lazy(() => import('./pages/Insights'))
 const Feedback = lazy(() => import('./pages/Feedback'))
 const Carteira = lazy(() => import('./pages/Carteira'))
 const Atividades = lazy(() => import('./pages/Atividades'))
@@ -400,6 +401,9 @@ function AppRoutes() {
           </Route>
           <Route element={<MenuRoute menuKey="metricas" />}>
             <Route path="/metricas" element={<Metricas />} />
+          </Route>
+          <Route element={<MenuRoute menuKey="insights" />}>
+            <Route path="/insights" element={<Insights />} />
           </Route>
 
           <Route element={<SuperAdminRoute />}>

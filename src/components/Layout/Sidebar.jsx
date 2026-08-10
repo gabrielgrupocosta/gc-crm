@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Trophy,
   BarChart3,
+  Lightbulb,
   Store,
   Users,
   UserCog,
@@ -45,6 +46,7 @@ const NAV_MAIN = [
 // o item pra quem não vai conseguir acessá-lo.
 const NAV_MAIN_ADMIN = [
   { to: '/metricas', label: 'Métricas', icon: BarChart3, menuKey: 'metricas' },
+  { to: '/insights', label: 'Insights', icon: Lightbulb, menuKey: 'insights' },
 ]
 
 // CRM de prospecção — visível pra quem pertence a uma organização (admin_org
