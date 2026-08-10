@@ -204,7 +204,7 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
   const toast = useToast()
 
   const [form, setForm] = useState({
-    nome: '', email: '', senha: '', status: 'ativo', organizacaoId: '', lojasIds: [], role: 'gestor', menuPermissions: [],
+    nome: '', email: '', senha: '', status: 'ativo', organizacaoId: '', lojasIds: [], role: 'gestor', menuPermissions: [], supervisorId: '',
   })
   const [showPass, setShowPass] = useState(false)
   const [saving,   setSaving]   = useState(false)
@@ -238,9 +238,9 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
     setShowPass(false)
     if (gestor) {
       const atribuidas = lojas.filter(l => l.gestorId === gestor.id).map(l => l.id)
-      setForm({ nome: gestor.nome ?? '', email: gestor.email ?? '', senha: '', status: gestor.status ?? 'ativo', organizacaoId: gestor.organizacaoId ?? '', lojasIds: atribuidas, role: gestor.role ?? 'gestor', menuPermissions: gestor.menuPermissions ?? [] })
+      setForm({ nome: gestor.nome ?? '', email: gestor.email ?? '', senha: '', status: gestor.status ?? 'ativo', organizacaoId: gestor.organizacaoId ?? '', lojasIds: atribuidas, role: gestor.role ?? 'gestor', menuPermissions: gestor.menuPermissions ?? [], supervisorId: gestor.supervisorId ?? '' })
     } else {
-      setForm({ nome: '', email: '', senha: '', status: 'ativo', organizacaoId: !isSuperAdmin ? (organizacoes[0]?.id ?? '') : '', lojasIds: [], role: 'gestor', menuPermissions: [] })
+      setForm({ nome: '', email: '', senha: '', status: 'ativo', organizacaoId: !isSuperAdmin ? (organizacoes[0]?.id ?? '') : '', lojasIds: [], role: 'gestor', menuPermissions: [], supervisorId: '' })
     }
     setEmailAtualConhecido(gestor?.email ?? '')
     setNovoEmailAcesso('')
@@ -358,6 +358,15 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
     (isEditing || (form.senha.length >= 6 && form.organizacaoId))
 
   const isSupervisorForm = form.role === 'supervisor'
+
+  // Supervisores da mesma organização do gestor (exclui o próprio registro,
+  // relevante ao editar um supervisor pra ele não aparecer na própria lista).
+  const supervisoresDisponiveis = gestores.filter(g =>
+    g.role === 'supervisor' &&
+    g.status === 'ativo' &&
+    g.id !== gestor?.id &&
+    (!form.organizacaoId || g.organizacaoId === form.organizacaoId)
+  )
 
   const modalTitle = isEditing
     ? (isSupervisorForm ? 'Editar supervisor' : 'Editar gestor')
@@ -747,6 +756,24 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
           </div>
         )}
 
+        {/* Supervisor vinculado (só faz sentido pra gestor) */}
+        {!isSupervisorForm && (
+          <div className="flex flex-col gap-1.5">
+            <label className="field-label" htmlFor="g-supervisor">Supervisor vinculado</label>
+            <select
+              id="g-supervisor"
+              value={form.supervisorId}
+              onChange={e => set('supervisorId', e.target.value)}
+              className="select"
+            >
+              <option value="">Nenhum</option>
+              {supervisoresDisponiveis.map(s => (
+                <option key={s.id} value={s.id}>{s.nome}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         {/* Erro */}
         {error && (
           <p className="text-[13px] text-negative leading-snug">{error}</p>
@@ -922,6 +949,12 @@ export default function Gestores() {
         // atualiza o doc e o trigger sincronizarClaimsUsuario cuida do claim.
         await atualizarPermissoesSupervisorFn({ uid: editingGestor.id, menuPermissions: form.menuPermissions })
       } else {
+        // Vínculo gestor → supervisor é só informativo (relatório futuro por
+        // supervisor), não afeta acesso — grava direto no doc, sem Cloud Function.
+        await updateDoc(doc(db, COLLECTIONS.USERS, editingGestor.id), {
+          supervisorId: form.supervisorId || null,
+        })
+
         // Recalcula atribuição de lojas
         const anteriores = lojas.filter(l => l.gestorId === editingGestor.id).map(l => l.id)
         const adicionadas = form.lojasIds.filter(id => !anteriores.includes(id))
@@ -966,8 +999,11 @@ export default function Gestores() {
         })
         const uid = data.uid
 
-        if (form.status === 'inativo') {
-          await updateDoc(doc(db, COLLECTIONS.USERS, uid), { status: 'inativo' })
+        if (form.status === 'inativo' || form.supervisorId) {
+          await updateDoc(doc(db, COLLECTIONS.USERS, uid), {
+            ...(form.status === 'inativo' ? { status: 'inativo' } : {}),
+            ...(form.supervisorId ? { supervisorId: form.supervisorId } : {}),
+          })
         }
 
         // Atribui lojas selecionadas (gestorNome junto — ver comentário acima sobre o cache)
@@ -1024,7 +1060,11 @@ export default function Gestores() {
     const gestor = deletingGestor
     if (!gestor) return
     try {
-      const lojasSnap = await getDocs(query(collection(db, COLLECTIONS.LOJAS), where('gestorId', '==', gestor.id)))
+      const lojasSnap = await getDocs(query(
+        collection(db, COLLECTIONS.LOJAS),
+        where('organizacaoId', '==', gestor.organizacaoId),
+        where('gestorId', '==', gestor.id)
+      ))
       await Promise.all(
         lojasSnap.docs.map(d => updateDoc(doc(db, COLLECTIONS.LOJAS, d.id), { gestorId: null, gestorNome: '' }))
       )
