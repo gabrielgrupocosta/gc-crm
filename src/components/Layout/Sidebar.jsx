@@ -352,9 +352,10 @@ function NavSection({ sectionKey, label, collapsedSections, onToggle, sidebarCol
 }
 
 export default function Sidebar() {
-  const { user, isAdmin, isSuperAdmin, isAdminOrg, isSupervisor, podeVerMenu, logout } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isAdminOrg, isGestor, isSupervisor, podeVerMenu, logout } = useAuth()
   const navResultado = [...NAV_MAIN, ...NAV_MAIN_ADMIN.filter(i => podeVerMenu(i.menuKey))]
-  const pertenceOrg = !!user?.organizacaoId
+  // CRM não é visível pro gestor — só admin/supervisor dentro da própria org
+  const pertenceOrg = !!user?.organizacaoId && !isGestor
   const navigate = useNavigate()
   const location = useLocation()
   const { collapsed, toggle } = useSidebar()

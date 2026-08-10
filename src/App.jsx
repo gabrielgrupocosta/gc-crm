@@ -69,6 +69,15 @@ function MenuRoute({ menuKey }) {
   return <Outlet />
 }
 
+// Bloqueia rotas que não devem aparecer pro gestor (ex: CRM de prospecção)
+function NaoGestorRoute() {
+  const { user, loading, isGestor } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!user) return <Navigate to="/login" replace />
+  if (isGestor) return <Navigate to="/dashboard" replace />
+  return <Outlet />
+}
+
 // Bloqueia rotas exclusivas de master (gestão da plataforma como um todo)
 function SuperAdminRoute() {
   const { user, loading, isSuperAdmin } = useAuth()
@@ -365,7 +374,9 @@ function AppRoutes() {
           <Route path="/controle"    element={<ControleSemanal />} />
           <Route path="/assistente"  element={<AssistenteDelivery />} />
           <Route path="/comparativo" element={<Comparativo />} />
-          <Route path="/crm"         element={<CRM />} />
+          <Route element={<NaoGestorRoute />}>
+            <Route path="/crm" element={<CRM />} />
+          </Route>
           <Route path="/carteira"    element={<Carteira />} />
           <Route path="/atividades"  element={<Atividades />} />
           <Route path="/feedback"    element={<Feedback />} />

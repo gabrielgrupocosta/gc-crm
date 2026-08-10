@@ -171,7 +171,7 @@ function DistribuicaoTooltip({ active, payload }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Carteira() {
-  const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isGestor } = useAuth()
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [loading,  setLoading]  = useState(true)
@@ -684,7 +684,7 @@ export default function Carteira() {
           {/* ── Visão Geral ─────────────────────────────────────────────── */}
           <section>
             <p className="section-label mb-3">Visão Geral</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className={`grid grid-cols-2 gap-4 ${isGestor ? '' : 'sm:grid-cols-4'}`}>
               <div className="card-kpi">
                 <p className="section-label mb-3">Clientes ativos</p>
                 <p className="kpi-value">{kpis.clientesAtivos}</p>
@@ -693,14 +693,18 @@ export default function Carteira() {
                 <p className="section-label mb-3">Lojas ativas</p>
                 <p className="kpi-value">{kpis.lojasAtivas}</p>
               </div>
-              <div className="card-kpi">
-                <p className="section-label mb-3">Gestores</p>
-                <p className="kpi-value">{kpis.totalGestores}</p>
-              </div>
-              <div className="card-kpi">
-                <p className="section-label mb-3">Média de lojas / gestor</p>
-                <p className="kpi-value">{kpis.mediaLojasPorGestor.toFixed(1)}</p>
-              </div>
+              {!isGestor && (
+                <>
+                  <div className="card-kpi">
+                    <p className="section-label mb-3">Gestores</p>
+                    <p className="kpi-value">{kpis.totalGestores}</p>
+                  </div>
+                  <div className="card-kpi">
+                    <p className="section-label mb-3">Média de lojas / gestor</p>
+                    <p className="kpi-value">{kpis.mediaLojasPorGestor.toFixed(1)}</p>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
@@ -740,7 +744,8 @@ export default function Carteira() {
             </section>
           )}
 
-          {/* ── Métricas de Clientes ────────────────────────────────────── */}
+          {/* ── Métricas de Clientes (fora do escopo do gestor — ver Carteira) ── */}
+          {!isGestor && (
           <section>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
               <p className="section-label">Métricas de Clientes</p>
@@ -831,6 +836,7 @@ export default function Carteira() {
               </div>
             )}
           </section>
+          )}
 
           {/* ── Distribuição por Plataforma + Crescimento da Carteira ───────── */}
           <section>
@@ -927,7 +933,8 @@ export default function Carteira() {
             </div>
           </section>
 
-          {/* ── Por Gestor e Plataforma ──────────────────────────────────── */}
+          {/* ── Por Gestor e Plataforma (fora do escopo do gestor — ver Carteira) ── */}
+          {!isGestor && (
           <section>
             <p className="section-label mb-3">Por Gestor e Plataforma</p>
             {loadingResultados ? (
@@ -973,6 +980,7 @@ export default function Carteira() {
               </div>
             )}
           </section>
+          )}
 
           {/* ── Distribuição por Gestor ─────────────────────────────────── */}
           {isAdmin && (
