@@ -1451,27 +1451,27 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
+              onClick={handleGerarSalvarPDF}
+              disabled={loadingPDF}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#666666', background: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '5px', cursor: loadingPDF ? 'not-allowed' : 'pointer', opacity: loadingPDF ? 0.6 : 1, transition: 'border-color 150ms, color 150ms' }}
+              onMouseEnter={e => { if (!loadingPDF) { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.color = '#111111' } }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.color = '#666666' }}
+            >
+              {loadingPDF ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><Download size={13}/> Gerar e Salvar PDF</>}
+            </button>
+
+            <button
               onClick={handleEnviarDados}
               disabled={loadingEnviar}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#666666', background: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '5px', cursor: loadingEnviar ? 'not-allowed' : 'pointer', opacity: loadingEnviar ? 0.6 : 1, transition: 'border-color 150ms, color 150ms' }}
-              onMouseEnter={e => { if (!loadingEnviar) { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.color = '#111111' } }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.color = '#666666' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 18px', fontSize: '13px', fontWeight: 500, color: '#fff', background: loadingEnviar ? '#C42B26' : '#E5322D', border: 'none', borderRadius: '5px', cursor: loadingEnviar ? 'not-allowed' : 'pointer', transition: 'filter 100ms' }}
+              onMouseEnter={e => { if (!loadingEnviar) e.currentTarget.style.filter = 'brightness(1.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
             >
               {loadingEnviar ? (
                 <><Loader2 size={13} className="animate-spin" /> {resultadoSalvo ? 'Salvando…' : 'Enviando…'}</>
               ) : resultadoSalvo ? (
                 <><Pencil size={13} strokeWidth={1.75} /> Editar Dados</>
-              ) : 'Enviar Dados'}
-            </button>
-
-            <button
-              onClick={handleGerarSalvarPDF}
-              disabled={loadingPDF}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 18px', fontSize: '13px', fontWeight: 500, color: '#fff', background: loadingPDF ? '#C42B26' : '#E5322D', border: 'none', borderRadius: '5px', cursor: loadingPDF ? 'not-allowed' : 'pointer', transition: 'filter 100ms' }}
-              onMouseEnter={e => { if (!loadingPDF) e.currentTarget.style.filter = 'brightness(1.1)' }}
-              onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
-            >
-              {loadingPDF ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><Download size={13}/> Gerar e Salvar PDF</>}
+              ) : <><Download size={13}/> Enviar Dados</>}
             </button>
           </div>
         </div>
