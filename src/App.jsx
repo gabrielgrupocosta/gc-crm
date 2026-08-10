@@ -15,6 +15,7 @@ import usePageTitle from './hooks/usePageTitle'
 import Sidebar from './components/Layout/Sidebar'
 import AssistenteFloatingButton from './components/Layout/AssistenteFloatingButton'
 import PedirPermissaoNotificacao from './components/UI/PedirPermissaoNotificacao'
+import AvisoNovaVersao from './components/UI/AvisoNovaVersao'
 import InstalarPWAiOS from './components/UI/InstalarPWAiOS'
 import InstalarPWAAndroid from './components/UI/InstalarPWAAndroid'
 // Login carrega direto (é a primeira tela que qualquer usuário deslogado vê).
@@ -418,6 +419,7 @@ export default function App() {
       <AuthProvider>
         <ModoTesteProvider>
           <ToastProvider>
+            <AvisoNovaVersao />
             <AppRoutes />
             <LembretesGlobais />
             <LojasSemGestorAlerta />

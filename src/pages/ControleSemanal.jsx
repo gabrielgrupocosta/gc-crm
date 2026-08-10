@@ -471,6 +471,22 @@ function SectionTitle({ label }) {
   )
 }
 
+function PercentInput({ value, onChange, borderColor, placeholder }) {
+  return (
+    <div style={{ ...INPUT_STYLE, display: 'flex', alignItems: 'center', gap: '4px', borderColor }}>
+      <input
+        style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        onFocus={e => { e.target.parentElement.style.borderColor = '#E5322D' }}
+        onBlur={e => { e.target.parentElement.style.borderColor = borderColor }}
+      />
+      <span style={{ fontSize: '13px', color: '#999999', flexShrink: 0 }}>%</span>
+    </div>
+  )
+}
+
 function WarnBadge({ val, threshold }) {
   const n = parseFloat(val)
   if (isNaN(n) || n <= threshold) return null
@@ -1247,13 +1263,11 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
                         />
                       </Field>
                       <Field label="Variação % vs Semana Anterior">
-                        <input
-                          style={{ ...INPUT_STYLE, borderColor: camposAuto.variacao ? '#16A34A' : '#E8E8E8' }}
+                        <PercentInput
                           value={variacao}
                           onChange={e => { setVariacao(e.target.value); setCamposAuto(c => c.variacao ? { ...c, variacao: false } : c) }}
                           placeholder="-12.5 ou 8.3"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
-                          onBlur={e => e.target.style.borderColor = camposAuto.variacao ? '#16A34A' : '#E8E8E8'}
+                          borderColor={camposAuto.variacao ? '#16A34A' : '#E8E8E8'}
                         />
                       </Field>
                     </div>
@@ -1326,38 +1340,32 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                     <Field label="Cancelamento (%)">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input
-                          style={{ ...INPUT_STYLE, borderColor: camposAuto.cancelamento ? '#16A34A' : '#E8E8E8' }}
+                        <PercentInput
                           value={cancelamento}
                           onChange={e => { setCancelamento(e.target.value); setCamposAuto(c => c.cancelamento ? { ...c, cancelamento: false } : c) }}
                           placeholder="0.0"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
-                          onBlur={e => e.target.style.borderColor = camposAuto.cancelamento ? '#16A34A' : '#E8E8E8'}
+                          borderColor={camposAuto.cancelamento ? '#16A34A' : '#E8E8E8'}
                         />
                         <WarnBadge val={cancelamento} threshold={1} />
                       </div>
                     </Field>
                     <Field label="Chamados (%)">
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <input
-                          style={{ ...INPUT_STYLE, borderColor: camposAuto.chamados ? '#16A34A' : '#E8E8E8' }}
+                        <PercentInput
                           value={chamados}
                           onChange={e => { setChamados(e.target.value); setCamposAuto(c => c.chamados ? { ...c, chamados: false } : c) }}
                           placeholder="0.0"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
-                          onBlur={e => e.target.style.borderColor = camposAuto.chamados ? '#16A34A' : '#E8E8E8'}
+                          borderColor={camposAuto.chamados ? '#16A34A' : '#E8E8E8'}
                         />
                         <WarnBadge val={chamados} threshold={2.5} />
                       </div>
                     </Field>
                     <Field label="Tempo de Loja Aberta (%)">
-                      <input
-                        style={{ ...INPUT_STYLE, borderColor: camposAuto.tempoAberto ? '#16A34A' : '#E8E8E8' }}
+                      <PercentInput
                         value={tempoAberto}
                         onChange={e => { setTempoAberto(e.target.value); setCamposAuto(c => c.tempoAberto ? { ...c, tempoAberto: false } : c) }}
                         placeholder="0.0"
-                        onFocus={e => e.target.style.borderColor = '#E5322D'}
-                        onBlur={e => e.target.style.borderColor = camposAuto.tempoAberto ? '#16A34A' : '#E8E8E8'}
+                        borderColor={camposAuto.tempoAberto ? '#16A34A' : '#E8E8E8'}
                       />
                     </Field>
                   </div>
