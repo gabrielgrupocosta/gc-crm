@@ -10,7 +10,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
   db, COLLECTIONS, collection, query, where, getDocs, getDoc,
-  addDoc, setDoc, updateDoc, doc, serverTimestamp, orderBy, limit, startAfter,
+  setDoc, updateDoc, doc, orderBy, limit, startAfter,
 } from '../services/firebase'
 import Skeleton from '../components/UI/Skeleton'
 import Modal from '../components/UI/Modal'
@@ -18,6 +18,7 @@ import PlatformBadge from '../components/UI/PlatformBadge'
 import LojaSelect from '../components/UI/LojaSelect'
 import GestorPerformanceCard from '../components/UI/GestorPerformanceCard'
 import GestorSummaryCard from '../components/UI/GestorSummaryCard'
+import { LojaModal } from './ControleSemanal'
 import {
   getISOWeekStr, getLast8Weeks, weekLabel, MONTH_NAMES,
   getLast26WeekOptions, getDashboardWeekOptions, getLast12MonthOptions,
@@ -679,154 +680,6 @@ function GestorStatusCard({ title, periodoLabel, items, onClickPending, hideComp
   )
 }
 
-// ─── Modal: lançamento rápido de resultado ────────────────────────────────────
-
-function ModalLancamentoRapido({ loja, semana, periodoLabel, onClose, onSaved }) {
-  const { user } = useAuth()
-
-  // ─ Lojas com mais de uma plataforma exigem escolher qual plataforma será
-  // lançada antes de mostrar o formulário — mesmo padrão do LojaModal em
-  // ControleSemanal.jsx.
-  const plataformasLoja = loja.plataformas?.length ? loja.plataformas : (loja.plataforma ? [loja.plataforma] : [])
-  const multiplasPlataformas = plataformasLoja.length > 1
-  const [plataformaSelecionada, setPlataformaSelecionada] = useState(
-    () => multiplasPlataformas ? null : (plataformasLoja[0] ?? null)
-  )
-
-  const [faturamento, setFaturamento] = useState('')
-  const [variacao,    setVariacao]    = useState('')
-  const [observacoes, setObservacoes] = useState('')
-  const [saving,      setSaving]      = useState(false)
-  const [error,       setError]       = useState('')
-
-  async function handleSave() {
-    const fat = parseFloat(String(faturamento).replace(',', '.'))
-    if (!faturamento || isNaN(fat)) { setError('Informe o faturamento bruto.'); return }
-    setSaving(true)
-    setError('')
-    try {
-      const varStr = String(variacao).replace(',', '.')
-      const varNum = variacao !== '' && !isNaN(parseFloat(varStr)) ? parseFloat(varStr) : null
-      const payload = {
-        lojaId:           loja.id,
-        gestorId:         loja.gestorId,
-        organizacaoId:    loja.organizacaoId ?? user.organizacaoId ?? null,
-        plataforma:       plataformaSelecionada,
-        semana,
-        faturamento:      fat,
-        variacao:         varNum,
-        observacoes:      observacoes.trim() || null,
-        relatorioEnviado: true,
-        criadoEm:         serverTimestamp(),
-      }
-      const ref = await addDoc(collection(db, COLLECTIONS.RESULTADOS), payload)
-      onSaved({ id: ref.id, ...payload, criadoEm: new Date() })
-    } catch (err) {
-      console.error('[ModalResultado] save:', err?.code, err?.message)
-      setError('Erro ao salvar. Tente novamente.')
-      setSaving(false)
-    }
-  }
-
-  const precisaEscolherPlataforma = multiplasPlataformas && !plataformaSelecionada
-
-  return (
-    <Modal
-      isOpen
-      onClose={onClose}
-      title="Lançar Resultado"
-      footer={precisaEscolherPlataforma ? (
-        <button onClick={onClose} className="btn-secondary">Cancelar</button>
-      ) : (
-        <>
-          <button onClick={onClose} className="btn-secondary" disabled={saving}>Cancelar</button>
-          <button onClick={handleSave} className="btn-primary" disabled={saving}>
-            {saving ? 'Salvando…' : 'Salvar'}
-          </button>
-        </>
-      )}
-    >
-      <div style={{ marginBottom: '16px', paddingBottom: '16px', borderBottom: '1px solid #E8E8E8' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <p style={{ fontSize: '13px', color: '#111111', fontWeight: 500 }}>{loja.nome}</p>
-          {multiplasPlataformas && plataformaSelecionada && (
-            <>
-              <PlatformBadge plataforma={plataformaSelecionada} />
-              <button
-                type="button"
-                onClick={() => setPlataformaSelecionada(null)}
-                style={{ fontSize: '11px', color: '#999999', background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-              >
-                Trocar
-              </button>
-            </>
-          )}
-        </div>
-        <p style={{ fontSize: '11px', color: '#999999', marginTop: '2px' }}>{periodoLabel}</p>
-      </div>
-
-      {precisaEscolherPlataforma ? (
-        <div>
-          <p style={{ fontSize: '13px', color: '#666666', marginBottom: '14px' }}>
-            Esta loja tem múltiplas plataformas. Selecione qual plataforma deseja lançar:
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-            {plataformasLoja.map(p => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPlataformaSelecionada(p)}
-                style={{ background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '8px', padding: '10px 14px', cursor: 'pointer', transition: 'border-color 150ms, background-color 150ms' }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.backgroundColor = '#F9F9F9' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.backgroundColor = 'transparent' }}
-              >
-                <PlatformBadge plataforma={p} />
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="field-label">Faturamento bruto (R$)</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={faturamento}
-              onChange={e => setFaturamento(e.target.value)}
-              className="input w-full mt-1"
-              placeholder="0,00"
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="field-label">Variação % vs semana anterior</label>
-            <input
-              type="number"
-              step="0.1"
-              value={variacao}
-              onChange={e => setVariacao(e.target.value)}
-              className="input w-full mt-1"
-              placeholder="ex: 8.3 ou -5.1"
-            />
-          </div>
-          <div>
-            <label className="field-label">Observações</label>
-            <textarea
-              value={observacoes}
-              onChange={e => setObservacoes(e.target.value)}
-              className="input w-full mt-1 h-20 resize-none py-2"
-              placeholder="Opcional…"
-            />
-          </div>
-          {error && <p style={{ fontSize: '12px', color: '#DC2626' }}>{error}</p>}
-        </div>
-      )}
-    </Modal>
-  )
-}
-
 // ─── Modal: status de relatório ───────────────────────────────────────────────
 
 function ModalRelatorio({ loja, semana, periodoLabel, lojaStatus, onClose, onSaved }) {
@@ -1316,7 +1169,7 @@ export default function Dashboard() {
     const comResultado = new Set(resultadosSemanaAnterior.map(r => r.lojaId))
     return lojasAtivas
       .map(l => ({ id: l.id, nome: l.nome, done: comResultado.has(l.id) }))
-      .sort((a, b) => Number(a.done) - Number(b.done))
+      .sort((a, b) => Number(a.done) - Number(b.done) || a.nome.localeCompare(b.nome, 'pt-BR'))
   }, [lojasAtivas, resultadosSemanaAnterior, isAdmin])
 
   const checklistRelatorios = useMemo(() => {
@@ -1775,9 +1628,17 @@ export default function Dashboard() {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  function handleResultadoSaved(newDoc) {
-    setResultadosSemanaAnterior(prev => [...prev, newDoc])
+  async function handleResultadoSaved() {
     setModalResultado(null)
+    try {
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+      const snap = await getDocs(query(collection(db, COLLECTIONS.RESULTADOS), ...escopoOrg, where('semana', '==', prevWeek)))
+      setResultadosSemanaAnterior(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    } catch (err) {
+      console.error('[Dashboard] resultado salvo, refetch:', err?.code, err?.message)
+    }
   }
 
   function handleRelatorioSaved(lojaId, statusObj) {
@@ -2241,15 +2102,16 @@ export default function Dashboard() {
       )}
 
       {/* Modais */}
-      {modalResultado && (
-        <ModalLancamentoRapido
-          loja={modalResultado}
-          semana={prevWeek}
-          periodoLabel={formatWeekPeriod(prevWeek)}
-          onClose={() => setModalResultado(null)}
-          onSaved={handleResultadoSaved}
-        />
-      )}
+      <AnimatePresence>
+        {modalResultado && (
+          <LojaModal
+            key={modalResultado.id}
+            loja={modalResultado}
+            onClose={() => setModalResultado(null)}
+            onSaved={handleResultadoSaved}
+          />
+        )}
+      </AnimatePresence>
       {modalRelatorio && (
         <ModalRelatorio
           loja={modalRelatorio.loja}

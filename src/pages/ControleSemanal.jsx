@@ -556,7 +556,7 @@ function HistoricoLista({ itens, loadingHistDoc, onDownload }) {
 
 // ─── LojaModal ────────────────────────────────────────────────────────────────
 
-function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
+export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
   const toast = useToast()
   const { user, isSuperAdmin } = useAuth()
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
