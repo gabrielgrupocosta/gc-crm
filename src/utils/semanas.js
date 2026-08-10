@@ -51,7 +51,7 @@ export function getDashboardWeekOptions() {
     const periodo = formatWeekPeriod(w)
     return {
       value:     w,
-      label:     i === 0 ? 'Semana passada' : `Semana ${num} — ${periodo}`,
+      label:     i === 0 ? `Semana passada — ${periodo}` : `Semana ${num} — ${periodo}`,
       fullLabel: `Semana ${num} — ${periodo}`,
     }
   })

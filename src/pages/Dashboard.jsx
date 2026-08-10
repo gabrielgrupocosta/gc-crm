@@ -55,6 +55,17 @@ function formatVar(v) {
   return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}%`
 }
 
+// Crescimento agregado (soma de faturamento no período atual vs período
+// anterior) — mais robusto que média de `variacao` individuais, já que nem
+// todo doc de resultado tem esse campo preenchido. Mesmo padrão usado em
+// Carteira.jsx e Metricas.jsx.
+function crescimentoAgregado(atualDocs, anteriorDocs) {
+  const somaAtual    = atualDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
+  const somaAnterior = anteriorDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
+  if (somaAnterior <= 0) return null
+  return ((somaAtual - somaAnterior) / somaAnterior) * 100
+}
+
 // Tolerante a variações de grafia salvas no Firestore ('Ativa', 'ativa', 'ativo'...)
 function lojaAtiva(l) {
   return ['ativa', 'ativo'].includes(l.status?.toLowerCase())
@@ -772,6 +783,12 @@ export default function Dashboard() {
   const [gestores,                 setGestores]                 = useState([])
   const [resultadosSemanaAnterior, setResultadosSemanaAnterior] = useState([])
   const [resultadosHistorico,      setResultadosHistorico]      = useState([])
+  // 4 semanas anteriores às já cobertas por `resultadosHistorico` (que só vai
+  // até last8Weeks[7]) — necessário pra "Variação Média · 30 dias" comparar
+  // as últimas 4 semanas fechadas contra as 4 semanas fechadas anteriores a
+  // elas, calculado pelo próprio sistema em vez de depender do campo
+  // `variacao` digitado manualmente.
+  const [resultadosPeriodoAnterior30, setResultadosPeriodoAnterior30] = useState([])
   const [relatoriosSemanais,       setRelatoriosSemanais]       = useState({})
   const [relatoriosSemanaisAdmin,  setRelatoriosSemanaisAdmin]  = useState({})
 
@@ -816,7 +833,8 @@ export default function Dashboard() {
     let cancelled = false
     async function loadSelectedWeek() {
       try {
-        const snap = await getDocs(query(collection(db, COLLECTIONS.RESULTADOS), where('semana', '==', selectedWeek)))
+        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+        const snap = await getDocs(query(collection(db, COLLECTIONS.RESULTADOS), ...escopoOrg, where('semana', '==', selectedWeek)))
         if (!cancelled) setResultadosSemanaSelecionada(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       } catch (err) {
         console.error('[Dashboard] semana selecionada:', err?.code, err?.message)
@@ -824,7 +842,7 @@ export default function Dashboard() {
     }
     loadSelectedWeek()
     return () => { cancelled = true }
-  }, [user, selectedWeek, prevWeek, resultadosSemanaAnterior])
+  }, [user, isSuperAdmin, selectedWeek, prevWeek, resultadosSemanaAnterior])
 
   const semanaAnteriorASelecionada = useMemo(() => getPrevWeekStr(selectedWeek), [selectedWeek])
   const [resultadosSemanaAnteriorASelecionada, setResultadosSemanaAnteriorASelecionada] = useState([])
@@ -838,7 +856,8 @@ export default function Dashboard() {
     let cancelled = false
     async function loadPrevOfSelected() {
       try {
-        const snap = await getDocs(query(collection(db, COLLECTIONS.RESULTADOS), where('semana', '==', semanaAnteriorASelecionada)))
+        const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+        const snap = await getDocs(query(collection(db, COLLECTIONS.RESULTADOS), ...escopoOrg, where('semana', '==', semanaAnteriorASelecionada)))
         if (!cancelled) setResultadosSemanaAnteriorASelecionada(snap.docs.map(d => ({ id: d.id, ...d.data() })))
       } catch (err) {
         console.error('[Dashboard] semana anterior à selecionada:', err?.code, err?.message)
@@ -846,7 +865,7 @@ export default function Dashboard() {
     }
     loadPrevOfSelected()
     return () => { cancelled = true }
-  }, [user, semanaAnteriorASelecionada, prevWeek, resultadosSemanaAnterior])
+  }, [user, isSuperAdmin, semanaAnteriorASelecionada, prevWeek, resultadosSemanaAnterior])
 
   const WEEK_OPTIONS  = useMemo(() => getLast26WeekOptions(),  [])
   const MONTH_OPTIONS = useMemo(() => getLast12MonthOptions(), [])
@@ -893,6 +912,16 @@ export default function Dashboard() {
             if (!cancelled) setResultadosHistorico(snap.docs.map(d => ({ id: d.id, ...d.data() })))
           })
           .catch(err => console.error('[Dashboard] historico:', err?.code, err?.message))
+
+        // 4 semanas fechadas anteriores às de `last8Weeks` (índices 5-8 a
+        // partir da semana atual) — janela de comparação pra "Variação Média
+        // · 30 dias" ser calculada pelo sistema.
+        const semanas30Anterior = getPeriodoComparativo(last8Weeks[1], 4).anterior
+        getDocs(query(collection(db, COLLECTIONS.RESULTADOS), ...escopoOrg, where('semana', 'in', semanas30Anterior)))
+          .then(snap => {
+            if (!cancelled) setResultadosPeriodoAnterior30(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+          })
+          .catch(err => console.error('[Dashboard] histórico anterior (30 dias):', err?.code, err?.message))
 
         getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor')))
           .then(snap => {
@@ -1050,14 +1079,16 @@ export default function Dashboard() {
     const ativasIds  = new Set(lojasAtivasGlobal.map(l => l.id))
     const resSemana  = resultadosSemanaSelecionadaFiltrados.filter(r => ativasIds.has(r.lojaId))
     const resSemanaAnterior = resultadosSemanaAnteriorASelecionadaFiltrados.filter(r => ativasIds.has(r.lojaId))
-    const mediaVar   = resSemana.length
-      ? resSemana.reduce((s, r) => s + (r.variacao ?? 0), 0) / resSemana.length
-      : null
     const faturamentoCarteira = resSemana.reduce((s, r) => s + (r.faturamento ?? 0), 0)
     const faturamentoCarteiraAnterior = resSemanaAnterior.reduce((s, r) => s + (r.faturamento ?? 0), 0)
     const faturamentoVariacao = faturamentoCarteiraAnterior > 0
       ? ((faturamentoCarteira - faturamentoCarteiraAnterior) / faturamentoCarteiraAnterior) * 100
       : null
+    // "Variação Média — 7 dias" é calculada pelo próprio sistema (faturamento
+    // agregado da semana selecionada vs a semana anterior) em vez de depender
+    // do campo `variacao` digitado manualmente pelo gestor — mesmo número do
+    // badge de "Faturamento da Carteira", já que é a mesma comparação.
+    const mediaVar = faturamentoVariacao
     return { mediaVar, faturamentoCarteira, faturamentoVariacao }
   }, [lojasAtivasGlobal, resultadosSemanaSelecionadaFiltrados, resultadosSemanaAnteriorASelecionadaFiltrados])
 
@@ -1084,27 +1115,25 @@ export default function Dashboard() {
     }
   }, [lojasAtivas, isAdmin, relatoriosSemanaisAdmin, relatoriosSemanais])
 
-  // Média ponderada pelo faturamento das últimas 4 semanas completas (últimas 30 dias) —
-  // last8Weeks[0] é a semana atual (ainda em andamento), então as 4 semanas fechadas
-  // mais recentes são os índices 1 a 4.
+  // "Variação Média · 30 dias" — calculada pelo próprio sistema: faturamento
+  // agregado das últimas 4 semanas fechadas (last8Weeks[1..4]) vs faturamento
+  // agregado das 4 semanas fechadas anteriores a essas, em vez de depender do
+  // campo `variacao` digitado manualmente pelo gestor. last8Weeks[0] é a
+  // semana atual (ainda em andamento), por isso o corte começa no índice 1.
   const media30dias = useMemo(() => {
     const ativasIds = new Set(lojasAtivasGlobal.map(l => l.id))
-    const semanas4   = new Set(last8Weeks.slice(1, 5))
-    const base = isAdmin && filtroGestor
-      ? resultadosHistorico.filter(r => r.gestorId === filtroGestor)
-      : resultadosHistorico
+    const semanas4Atual    = new Set(last8Weeks.slice(1, 5))
+    const semanas4Anterior = new Set(getPeriodoComparativo(last8Weeks[1], 4).anterior)
 
-    let varFat = 0, fatTotal = 0
-    base.forEach(r => {
-      if (!ativasIds.has(r.lojaId) || !semanas4.has(r.semana)) return
-      const fat = r.faturamento ?? 0
-      if (r.variacao != null && fat > 0) {
-        varFat   += r.variacao * fat
-        fatTotal += fat
-      }
-    })
-    return fatTotal > 0 ? varFat / fatTotal : null
-  }, [resultadosHistorico, lojasAtivasGlobal, last8Weeks, isAdmin, filtroGestor])
+    const filtrar = lista => lista.filter(r =>
+      ativasIds.has(r.lojaId) && (!isAdmin || !filtroGestor || r.gestorId === filtroGestor)
+    )
+
+    const atual    = filtrar(resultadosHistorico).filter(r => semanas4Atual.has(r.semana))
+    const anterior = filtrar(resultadosPeriodoAnterior30).filter(r => semanas4Anterior.has(r.semana))
+
+    return crescimentoAgregado(atual, anterior)
+  }, [resultadosHistorico, resultadosPeriodoAnterior30, lojasAtivasGlobal, last8Weeks, isAdmin, filtroGestor])
 
   const ranking = useMemo(() => {
     const lojaMap   = Object.fromEntries(lojas.map(l => [l.id, l]))
@@ -1676,7 +1705,7 @@ export default function Dashboard() {
           <select
             value={selectedWeek}
             onChange={e => setSelectedWeek(e.target.value)}
-            className="select font-sans w-full sm:w-[220px] h-11 sm:h-[30px]"
+            className="select font-sans w-full sm:w-[260px] h-11 sm:h-[30px]"
             style={{ fontSize: '13px', fontWeight: 500, color: '#333333' }}
           >
             {weekOptions12.map(o => (
@@ -1791,12 +1820,6 @@ export default function Dashboard() {
           label="Faturamento da Carteira"
           value={formatBRLDecimal(kpis.faturamentoCarteira)}
           currency
-          badge={kpis.faturamentoVariacao != null ? {
-            text: `${kpis.faturamentoVariacao >= 0 ? '▲' : '▼'} ${kpis.faturamentoVariacao >= 0 ? '+' : '−'}${Math.abs(kpis.faturamentoVariacao).toFixed(1).replace('.', ',')}%`,
-            color: kpis.faturamentoVariacao >= 0 ? '#16A34A' : '#DC2626',
-          } : null}
-          sub="vs semana anterior"
-          subColor="#BBBBBB"
         />
         <VariacaoMediaCard media7dias={kpis.mediaVar} media30dias={media30dias} />
         <KPICard

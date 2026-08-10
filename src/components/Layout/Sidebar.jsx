@@ -146,22 +146,19 @@ function useIsMobile(breakpointPx = 768) {
 }
 
 // ─── Marca (hexágono + pin/gráfico) — usada no logo da Sidebar ────────────────
+// Usa o asset oficial (public/logo.png) em vez de um SVG desenhado à mão —
+// a versão aproximada divergia do desenho real (proporção do pin, posição
+// das barras).
 
 function LogoMark({ size = 22 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <defs>
-        <linearGradient id="ihubGradSidebar" x1="4" y1="2" x2="20" y2="22" gradientUnits="userSpaceOnUse">
-          <stop offset="0" stopColor="#FF7A3D" />
-          <stop offset="1" stopColor="#FF4B2E" />
-        </linearGradient>
-      </defs>
-      <polygon points="12,2 20.66,7 20.66,17 12,22 3.34,17 3.34,7" fill="url(#ihubGradSidebar)" stroke="url(#ihubGradSidebar)" strokeWidth="1.6" strokeLinejoin="round" />
-      <path d="M12 7.5c-2.21 0-4 1.7-4 3.8 0 2.62 4 6.7 4 6.7s4-4.08 4-6.7c0-2.1-1.79-3.8-4-3.8Z" fill="#FFFFFF" />
-      <rect x="10.1" y="10.6" width="1.15" height="2.3" rx="0.3" fill="url(#ihubGradSidebar)" />
-      <rect x="11.8" y="9.4" width="1.15" height="3.5" rx="0.3" fill="url(#ihubGradSidebar)" />
-      <rect x="13.5" y="10.1" width="1.15" height="2.8" rx="0.3" fill="url(#ihubGradSidebar)" />
-    </svg>
+    <img
+      src="/logo-mark.png"
+      alt="iHubFood"
+      width={size}
+      height={size}
+      style={{ flexShrink: 0, objectFit: 'contain' }}
+    />
   )
 }
 
@@ -628,9 +625,9 @@ export default function Sidebar() {
         onMouseEnter={e => { e.currentTarget.style.opacity = '0.8' }}
         onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
       >
-        <LogoMark size={effectiveCollapsed ? 24 : 22} />
+        <LogoMark size={effectiveCollapsed ? 30 : 28} />
         {!effectiveCollapsed && (
-          <span className="select-none font-sans" style={{ fontSize: '15px', letterSpacing: '-0.02em', fontWeight: 800 }}>
+          <span className="select-none font-sans" style={{ fontSize: '19px', letterSpacing: '-0.02em', fontWeight: 800 }}>
             <span style={{ color: '#FFFFFF' }}>iHub</span>
             <span style={{ color: '#FF4B2E' }}>Food</span>
           </span>
