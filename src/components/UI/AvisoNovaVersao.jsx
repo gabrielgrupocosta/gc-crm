@@ -22,7 +22,8 @@ export default function AvisoNovaVersao() {
             height: '40px',
             backgroundColor: '#FFFBEB',
             borderBottom: '1px solid #FDE68A',
-            fontFamily: "'Segoe UI', system-ui, sans-serif",
+            borderLeft: '3px solid #CA8A04',
+            fontFamily: "'Manrope', system-ui, -apple-system, sans-serif",
           }}
         >
           <RefreshCw size={14} strokeWidth={2} color="#92400E" />
@@ -35,6 +36,7 @@ export default function AvisoNovaVersao() {
               height: '26px', padding: '0 12px', fontSize: '12px', fontWeight: 600,
               color: '#FFFFFF', backgroundColor: '#CA8A04', border: 'none',
               borderRadius: '6px', cursor: 'pointer', transition: 'opacity 150ms',
+              fontFamily: "'Manrope', system-ui, -apple-system, sans-serif",
             }}
             onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
             onMouseLeave={e => e.currentTarget.style.opacity = '1'}
