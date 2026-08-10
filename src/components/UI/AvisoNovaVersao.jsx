@@ -20,21 +20,20 @@ export default function AvisoNovaVersao() {
           className="fixed top-0 left-0 right-0 z-[300] flex items-center justify-center gap-3"
           style={{
             height: '40px',
-            backgroundColor: '#FFFBEB',
-            borderBottom: '1px solid #FDE68A',
-            borderLeft: '3px solid #CA8A04',
+            backgroundColor: '#FF4B2E',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             fontFamily: "'Manrope', system-ui, -apple-system, sans-serif",
           }}
         >
-          <RefreshCw size={14} strokeWidth={2} color="#92400E" />
-          <span style={{ fontSize: '13px', fontWeight: 500, color: '#92400E' }}>
+          <RefreshCw size={14} strokeWidth={2} color="#FFFFFF" />
+          <span style={{ fontSize: '13px', fontWeight: 500, color: '#FFFFFF' }}>
             Nova versão do sistema disponível.
           </span>
           <button
             onClick={atualizar}
             style={{
               height: '26px', padding: '0 12px', fontSize: '12px', fontWeight: 600,
-              color: '#FFFFFF', backgroundColor: '#CA8A04', border: 'none',
+              color: '#FF4B2E', backgroundColor: '#FFFFFF', border: 'none',
               borderRadius: '6px', cursor: 'pointer', transition: 'opacity 150ms',
               fontFamily: "'Manrope', system-ui, -apple-system, sans-serif",
             }}
