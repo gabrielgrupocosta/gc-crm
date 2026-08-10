@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import { AlertTriangle, Loader2, Copy, Check, X as XIcon, Download, Pencil, Sparkles } from 'lucide-react'
+import { AlertTriangle, Loader2, Copy, Check, X as XIcon, Download, Pencil, ChevronDown } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import { httpsCallable } from 'firebase/functions'
 import { useAuth } from '../contexts/AuthContext'
@@ -33,22 +33,6 @@ const DIAS = [
 ]
 
 const PRINT_LABELS = { desempenho: 'Print Desempenho', operacao: 'Print Operação', financeiro: 'Print Financeiro' }
-
-// Leitura automática de prints — cada print cobre um grupo de campos, só é
-// enviado ao Gemini se pelo menos um campo do seu grupo ainda estiver vazio.
-const CAMPOS_POR_PRINT = {
-  desempenho: ['faturamento', 'variacao'],
-  financeiro: ['faturamento', 'variacao'],
-  operacao:   ['cancelamento', 'chamados', 'tempoAberto'],
-}
-
-// Rótulo usado no indicador "Lendo X... (i/3)" durante a extração sequencial.
-const LEITURA_LABELS = { desempenho: 'desempenho', financeiro: 'financeiro', operacao: 'operação' }
-
-// Tier gratuito do Gemini tem limite de 5 requisições/minuto — processar os
-// prints em sequência (não em paralelo) com esse intervalo entre eles evita
-// estourar a cota.
-const DELAY_ENTRE_PRINTS_MS = 15000
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -197,7 +181,6 @@ function formatCurrencyDisplay(value) {
 // ─── Resumo IA via Firebase Function (Gemini Vision) ───────────────────────────
 
 const gerarResumoRelatorio = httpsCallable(functions, 'gerarResumoRelatorio')
-const extrairPrintIndividual = httpsCallable(functions, 'extrairPrintIndividual')
 
 // ─── PDF generator (jsPDF native — sem html2canvas para conteúdo estruturado) ──
 
@@ -497,19 +480,13 @@ function WarnBadge({ val, threshold }) {
   )
 }
 
-// Label de print + indicador de status da extração individual: sem indicador
-// (aguardando), spinner (processando) ou ✓ verde (concluído) — espelha o label
-// interno do ImageUpload (que fica suprimido quando usado aqui).
-function PrintLabelComStatus({ label, status }) {
+// Label de print — espelha o label interno do ImageUpload (que fica
+// suprimido quando usado aqui, pra não duplicar o texto).
+function PrintLabelComStatus({ label }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '6px' }}>
-      <p style={{ fontSize: '11px', color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-        {label}
-      </p>
-      {status === 'processando' && <Loader2 size={11} className="animate-spin" style={{ color: '#999999', flexShrink: 0 }} />}
-      {status === 'ok' && <Check size={11} strokeWidth={2.5} style={{ color: '#16A34A', flexShrink: 0 }} />}
-      {status === 'erro' && <span style={{ fontSize: '10px', color: '#DC2626', flexShrink: 0 }}>falhou</span>}
-    </div>
+    <p style={{ fontSize: '11px', color: '#999999', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>
+      {label}
+    </p>
   )
 }
 
@@ -606,6 +583,14 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
   const [printFinanceiro,     setPrintFinanceiro]     = useState(null)
   const [resultadoSalvo,      setResultadoSalvo]      = useState(false)
   const [loadingEnviar,       setLoadingEnviar]       = useState(false)
+  // `botaoEditar` controla só o rótulo do botão do rodapé ("Enviar Dados" →
+  // "Editar Dados") — fica true quando já existia um resultado salvo ao
+  // carregar (dado genuinamente enviado antes) ou quando o gestor clica no
+  // botão. NÃO é setado pelo autosave silencioso: sem essa separação, o botão
+  // virava "Editar Dados" assim que o gestor começava a digitar, antes de
+  // qualquer clique — o autosave continua rodando igual, só o rótulo não
+  // acompanha ele.
+  const [botaoEditar,         setBotaoEditar]         = useState(false)
 
   // ─ Seção 2: Relatório PDF
   const [cancelamento,   setCancelamento]   = useState('')
@@ -617,16 +602,14 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
   const [copiado,        setCopiado]        = useState(false)
   const [loadingPDF,     setLoadingPDF]     = useState(false)
 
-  // ─ Preenchimento automático via Gemini Vision. `camposAuto` marca quais
-  // campos foram lidos dos prints (borda verde).
-  const [loadingExtracao, setLoadingExtracao] = useState(false)
+  // `camposAuto` marca quais campos vieram de um preenchimento automático
+  // (borda verde) — hoje não é mais populado (extração automática removida),
+  // mas os inputs ainda checam a flag, então fica inofensivo mantê-la.
   const [camposAuto, setCamposAuto] = useState({})
-  // `statusExtracao` acompanha cada print individualmente. Os prints são
-  // processados em SEQUÊNCIA (não em paralelo) com um delay entre cada um,
-  // pra não estourar o limite gratuito de 5 requisições/minuto do Gemini.
-  const [statusExtracao,  setStatusExtracao]  = useState({ desempenho: null, financeiro: null, operacao: null })
-  // `printAtual` alimenta o indicador "Lendo X... (i/3)" durante a extração.
-  const [printAtual,      setPrintAtual]      = useState(null)
+
+  // ─ Seção "Resumo" (Relatório PDF) — colapsável, começa fechada pra não
+  // ocupar espaço até o gestor efetivamente ir gerar o PDF.
+  const [resumoAberto, setResumoAberto] = useState(false)
 
   // ─ Lightbox — imagem do print em tela cheia
   const [lightboxSrc, setLightboxSrc] = useState(null)
@@ -660,9 +643,9 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
     carregandoDadosRef.current = true
     setFaturamento(''); setVariacao(''); setObservacoes('')
     setPrintDesempenho(null); setPrintFinanceiro(null); setPrintOperacao(null); setResultadoSalvo(false)
+    setBotaoEditar(false)
     setCancelamento(''); setChamados(''); setTempoAberto('')
     setResumoIA(''); setCamposAuto({})
-    setStatusExtracao({ desempenho: null, financeiro: null, operacao: null })
 
     try {
       const prevWeek = getPreviousWeek(semanaRef)
@@ -686,7 +669,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
       setChamados((resData?.chamados ?? relData?.chamados)?.toString() ?? '')
       setTempoAberto((resData?.tempoAberto ?? relData?.tempoAberto)?.toString() ?? '')
       setResumoIA(relData?.textoResumo ?? '')
-      if (resData) setResultadoSalvo(true)
+      if (resData) { setResultadoSalvo(true); setBotaoEditar(true) }
 
       const prints = resData?.prints ?? relData?.prints ?? {}
       if (prints.desempenho) setPrintDesempenho({ dataUrl: prints.desempenho })
@@ -931,6 +914,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
       await registrarAcaoObservacao()
 
       setResultadoSalvo(true)
+      setBotaoEditar(true)
       toast(jaExistia ? 'Dados atualizados!' : 'Dados enviados com sucesso!', 'success')
       fetchHistorico()
       onSaved?.()
@@ -942,71 +926,6 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
     }
   }
 
-  // ─ Extração automática dos prints (Gemini Vision). Processa os prints
-  // necessários em SEQUÊNCIA (um await por vez, nunca Promise.all) com um
-  // delay de 15s entre cada chamada — o tier gratuito do Gemini permite só 5
-  // requisições/minuto, e 3 chamadas em paralelo estourariam essa cota. Só
-  // preenche os campos que o Gemini conseguiu ler; o resto fica vazio para o
-  // gestor completar. Se só 1 ou 2 prints estiverem anexados, processa
-  // somente os que existem, sem delay depois do último.
-  async function handleExtrairDados() {
-    const valores = { faturamento, variacao, cancelamento, chamados, tempoAberto }
-    const camposVazios = Object.keys(valores).filter(k => !valores[k]?.trim())
-
-    if (camposVazios.length === 0) {
-      toast('Todos os campos já estão preenchidos', 'warning')
-      return
-    }
-
-    const printsDisponiveis = { desempenho: printDesempenho, financeiro: printFinanceiro, operacao: printOperacao }
-    const tiposParaProcessar = Object.entries(CAMPOS_POR_PRINT)
-      .filter(([tipo, campos]) => campos.some(c => camposVazios.includes(c)) && printsDisponiveis[tipo]?.dataUrl)
-      .map(([tipo]) => tipo)
-
-    if (tiposParaProcessar.length === 0) {
-      toast('Todos os campos já estão preenchidos', 'warning')
-      return
-    }
-
-    setLoadingExtracao(true)
-    setStatusExtracao(prev => {
-      const next = { ...prev }
-      tiposParaProcessar.forEach(tipo => { next[tipo] = 'processando' })
-      return next
-    })
-
-    function aplicarResultado(d) {
-      const autoPreenchidos = {}
-      if (d.faturamento    != null) { setFaturamento(String(d.faturamento));       autoPreenchidos.faturamento    = true }
-      if (d.variacao       != null) { setVariacao(String(d.variacao));            autoPreenchidos.variacao       = true }
-      if (d.cancelamento   != null) { setCancelamento(String(d.cancelamento));    autoPreenchidos.cancelamento   = true }
-      if (d.chamados       != null) { setChamados(String(d.chamados));           autoPreenchidos.chamados       = true }
-      if (d.tempoLoja      != null) { setTempoAberto(String(d.tempoLoja));       autoPreenchidos.tempoAberto    = true }
-      setCamposAuto(prev => ({ ...prev, ...autoPreenchidos }))
-    }
-
-    for (let i = 0; i < tiposParaProcessar.length; i++) {
-      const tipo = tiposParaProcessar[i]
-      setPrintAtual({ tipo, indice: i + 1, total: tiposParaProcessar.length })
-      try {
-        const { data } = await extrairPrintIndividual({ print: printsDisponiveis[tipo].dataUrl, tipoPrint: tipo })
-        aplicarResultado(data?.dados ?? {})
-        setStatusExtracao(prev => ({ ...prev, [tipo]: 'ok' }))
-      } catch (err) {
-        console.error(`[handleExtrairDados] ${tipo}:`, err)
-        setStatusExtracao(prev => ({ ...prev, [tipo]: 'erro' }))
-      }
-
-      // Só aguarda entre um print e o próximo — não após o último.
-      if (i < tiposParaProcessar.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, DELAY_ENTRE_PRINTS_MS))
-      }
-    }
-
-    setPrintAtual(null)
-    setLoadingExtracao(false)
-    toast('Extração concluída! Verifique os dados e corrija se necessário.', 'success')
-  }
 
   // ─ Seção 2: IA + PDF
 
@@ -1030,6 +949,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
         },
       })
       setResumoIA(data.resumo)
+      setResumoAberto(true)
       toast('Resumo gerado!', 'success')
     } catch (err) {
       toast('Erro ao gerar resumo: ' + err.message, 'error')
@@ -1275,63 +1195,6 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                   </div>
                 </div>
 
-                <Field label="Observações (opcional)">
-                  <textarea
-                    value={observacoes}
-                    onChange={e => setObservacoes(e.target.value)}
-                    placeholder="Observações sobre o desempenho da semana..."
-                    rows={2}
-                    style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
-                    onFocus={e => e.target.style.borderColor = '#E5322D'}
-                    onBlur={e => e.target.style.borderColor = '#E8E8E8'}
-                  />
-                </Field>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                  <div>
-                    <PrintLabelComStatus label={PRINT_LABELS.desempenho} status={statusExtracao.desempenho} />
-                    <ImageUpload
-                      value={printDesempenho?.file ?? printDesempenho?.dataUrl ?? null}
-                      onChange={f => f ? handlePrintFile(setPrintDesempenho, f) : setPrintDesempenho(null)}
-                      onError={msg => toast(msg, 'error')}
-                      onPreviewClick={setLightboxSrc}
-                    />
-                  </div>
-                  <div>
-                    <PrintLabelComStatus label={PRINT_LABELS.financeiro} status={statusExtracao.financeiro} />
-                    <ImageUpload
-                      value={printFinanceiro?.file ?? printFinanceiro?.dataUrl ?? null}
-                      onChange={f => f ? handlePrintFile(setPrintFinanceiro, f) : setPrintFinanceiro(null)}
-                      onError={msg => toast(msg, 'error')}
-                      onPreviewClick={setLightboxSrc}
-                    />
-                  </div>
-                  <div>
-                    <PrintLabelComStatus label={PRINT_LABELS.operacao} status={statusExtracao.operacao} />
-                    <ImageUpload
-                      value={printOperacao?.file ?? printOperacao?.dataUrl ?? null}
-                      onChange={f => f ? handlePrintFile(setPrintOperacao, f) : setPrintOperacao(null)}
-                      onError={msg => toast(msg, 'error')}
-                      onPreviewClick={setLightboxSrc}
-                    />
-                  </div>
-                </div>
-
-                {(printDesempenho || printFinanceiro || printOperacao) && (
-                  <button
-                    type="button"
-                    onClick={handleExtrairDados}
-                    disabled={loadingExtracao}
-                    style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: '6px', height: '30px', padding: '0 12px', fontSize: '12px', fontWeight: 500, color: '#111111', background: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '5px', cursor: loadingExtracao ? 'not-allowed' : 'pointer', opacity: loadingExtracao ? 0.6 : 1, transition: 'border-color 150ms' }}
-                    onMouseEnter={e => { if (!loadingExtracao) e.currentTarget.style.borderColor = '#DDDDDD' }}
-                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8' }}
-                  >
-                    {loadingExtracao
-                      ? <><Loader2 size={13} className="animate-spin" /> {printAtual ? `Lendo ${LEITURA_LABELS[printAtual.tipo]}... (${printAtual.indice}/${printAtual.total})` : 'Lendo prints...'}</>
-                      : <><Sparkles size={13} strokeWidth={1.75} /> Preencher automaticamente</>}
-                  </button>
-                )}
-
                 {/* Separador sutil entre Vendas e Indicadores Operacionais */}
                 <div style={{ height: '1px', background: '#F0F0F0' }} />
 
@@ -1371,6 +1234,51 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                   </div>
                 </div>
 
+                <Field label="Observações (opcional)">
+                  <textarea
+                    value={observacoes}
+                    onChange={e => setObservacoes(e.target.value)}
+                    placeholder="Observações sobre o desempenho da semana..."
+                    rows={2}
+                    style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
+                    onFocus={e => e.target.style.borderColor = '#E5322D'}
+                    onBlur={e => e.target.style.borderColor = '#E8E8E8'}
+                  />
+                </Field>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                  <div>
+                    <PrintLabelComStatus label={PRINT_LABELS.desempenho} />
+                    <ImageUpload
+                      value={printDesempenho?.file ?? printDesempenho?.dataUrl ?? null}
+                      onChange={f => f ? handlePrintFile(setPrintDesempenho, f) : setPrintDesempenho(null)}
+                      onError={msg => toast(msg, 'error')}
+                      onPreviewClick={setLightboxSrc}
+                    />
+                  </div>
+                  <div>
+                    <PrintLabelComStatus label={PRINT_LABELS.financeiro} />
+                    <ImageUpload
+                      value={printFinanceiro?.file ?? printFinanceiro?.dataUrl ?? null}
+                      onChange={f => f ? handlePrintFile(setPrintFinanceiro, f) : setPrintFinanceiro(null)}
+                      onError={msg => toast(msg, 'error')}
+                      onPreviewClick={setLightboxSrc}
+                    />
+                  </div>
+                  <div>
+                    <PrintLabelComStatus label={PRINT_LABELS.operacao} />
+                    <ImageUpload
+                      value={printOperacao?.file ?? printOperacao?.dataUrl ?? null}
+                      onChange={f => f ? handlePrintFile(setPrintOperacao, f) : setPrintOperacao(null)}
+                      onError={msg => toast(msg, 'error')}
+                      onPreviewClick={setLightboxSrc}
+                    />
+                  </div>
+                </div>
+                <p style={{ fontSize: '11px', color: '#999999', margin: 0 }}>
+                  Dica: depois de tirar o print, clique num dos campos acima e cole com Ctrl+V (ou ⌘V) — não precisa salvar o arquivo antes.
+                </p>
+
                 {resultadoSalvo && (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#16A34A' }}>
                     <Check size={12}/> Dados enviados para esta semana
@@ -1390,23 +1298,43 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 <div>
-                  <SectionTitle label="Resumo" />
-                  <textarea
-                    value={resumoIA}
-                    onChange={e => setResumoIA(e.target.value)}
-                    placeholder="Texto gerado aparecerá aqui. Pode ser editado antes de salvar."
-                    rows={6}
-                    style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
-                    onFocus={e => e.target.style.borderColor = '#E5322D'}
-                    onBlur={e => e.target.style.borderColor = '#E8E8E8'}
-                  />
-                  {resumoIA && (
-                    <button
-                      onClick={handleCopiar}
-                      style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: copiado ? '#16A34A' : '#555', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                    >
-                      {copiado ? <><Check size={12}/> Copiado!</> : <><Copy size={12}/> Copiar texto</>}
-                    </button>
+                  <button
+                    type="button"
+                    onClick={() => setResumoAberto(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+                      marginBottom: resumoAberto ? '16px' : 0, paddingBottom: '8px', borderBottom: '1px solid #F3F3F3',
+                      background: 'none', border: 'none', borderBottomColor: '#F3F3F3', cursor: 'pointer', padding: '0 0 8px',
+                    }}
+                  >
+                    <span style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#999999' }}>
+                      Resumo{resumoIA && !resumoAberto ? ' · preenchido' : ''}
+                    </span>
+                    <ChevronDown
+                      size={14} strokeWidth={2}
+                      style={{ color: '#999999', transform: resumoAberto ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms' }}
+                    />
+                  </button>
+                  {resumoAberto && (
+                    <>
+                      <textarea
+                        value={resumoIA}
+                        onChange={e => setResumoIA(e.target.value)}
+                        placeholder="Texto gerado aparecerá aqui. Pode ser editado antes de salvar."
+                        rows={6}
+                        style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
+                        onFocus={e => e.target.style.borderColor = '#E5322D'}
+                        onBlur={e => e.target.style.borderColor = '#E8E8E8'}
+                      />
+                      {resumoIA && (
+                        <button
+                          onClick={handleCopiar}
+                          style={{ marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: copiado ? '#16A34A' : '#555', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          {copiado ? <><Check size={12}/> Copiado!</> : <><Copy size={12}/> Copiar texto</>}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -1476,8 +1404,8 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
               onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
             >
               {loadingEnviar ? (
-                <><Loader2 size={13} className="animate-spin" /> {resultadoSalvo ? 'Salvando…' : 'Enviando…'}</>
-              ) : resultadoSalvo ? (
+                <><Loader2 size={13} className="animate-spin" /> {botaoEditar ? 'Salvando…' : 'Enviando…'}</>
+              ) : botaoEditar ? (
                 <><Pencil size={13} strokeWidth={1.75} /> Editar Dados</>
               ) : <><Download size={13}/> Enviar Dados</>}
             </button>

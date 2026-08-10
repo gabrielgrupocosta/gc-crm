@@ -15,6 +15,7 @@ const ACCEPTED_TYPES = ['image/png', 'image/jpeg']
 export default function ImageUpload({ label, value, onChange, onError, onPreviewClick }) {
   const [dragOver, setDragOver] = useState(false)
   const [hover,    setHover]    = useState(false)
+  const [focused,  setFocused]  = useState(false)
   const [objectUrl, setObjectUrl] = useState(null)
   const inputRef    = useRef(null)
   // Contador de enter/leave — sem ele, o dragleave que dispara ao passar do
@@ -73,6 +74,16 @@ export default function ImageUpload({ label, value, onChange, onError, onPreview
     onChange(null)
   }
 
+  // Ctrl+V (ou ⌘V) direto no campo — precisa estar focado (por isso o
+  // tabIndex nos containers abaixo). Extrai a primeira imagem do clipboard;
+  // print de tela colado vem sempre como `image/png` num item do tipo file.
+  function handlePaste(e) {
+    const item = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'))
+    if (!item) return
+    e.preventDefault()
+    validarEEnviar(item.getAsFile())
+  }
+
   return (
     <div>
       {label && (
@@ -83,10 +94,12 @@ export default function ImageUpload({ label, value, onChange, onError, onPreview
 
       {previewSrc ? (
         <div
+          tabIndex={0}
+          onPaste={handlePaste}
           onMouseEnter={() => setHover(true)}
           onMouseLeave={() => setHover(false)}
           onClick={() => onPreviewClick?.(previewSrc)}
-          style={{ position: 'relative', height: '96px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E8E8E8', cursor: onPreviewClick ? 'zoom-in' : 'default' }}
+          style={{ position: 'relative', height: '96px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #E8E8E8', cursor: onPreviewClick ? 'zoom-in' : 'default', outline: 'none' }}
         >
           <img src={previewSrc} alt={label} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           <div
@@ -110,6 +123,10 @@ export default function ImageUpload({ label, value, onChange, onError, onPreview
         </div>
       ) : (
         <div
+          tabIndex={0}
+          onPaste={handlePaste}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           onClick={() => inputRef.current?.click()}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -117,15 +134,15 @@ export default function ImageUpload({ label, value, onChange, onError, onPreview
           onDrop={handleDrop}
           style={{
             height: '96px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '4px',
-            border: `2px dashed ${dragOver ? '#EA1D2C' : '#E8E8E8'}`,
+            border: `2px dashed ${dragOver ? '#EA1D2C' : focused ? '#BBBBBB' : '#E8E8E8'}`,
             backgroundColor: dragOver ? '#FFF0F1' : '#FAFAFA',
-            borderRadius: '8px', padding: '20px', boxSizing: 'border-box', cursor: 'pointer',
+            borderRadius: '8px', padding: '20px', boxSizing: 'border-box', cursor: 'pointer', outline: 'none',
             transition: 'border-color 150ms, background-color 150ms',
           }}
         >
           <Upload size={24} strokeWidth={1.5} color={dragOver ? '#EA1D2C' : '#BBBBBB'} style={{ pointerEvents: 'none' }} />
           <span style={{ fontSize: '13px', color: dragOver ? '#EA1D2C' : '#999999', textAlign: 'center', lineHeight: 1.3, pointerEvents: 'none' }}>
-            {dragOver ? 'Solte para adicionar' : 'Arraste uma imagem ou clique para selecionar'}
+            {dragOver ? 'Solte para adicionar' : 'Clique, arraste ou cole (Ctrl+V) uma imagem'}
           </span>
           {!dragOver && (
             <span style={{ fontSize: '11px', color: '#BBBBBB', pointerEvents: 'none' }}>PNG ou JPG até 5MB</span>
