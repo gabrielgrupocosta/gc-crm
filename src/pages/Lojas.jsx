@@ -64,7 +64,7 @@ const PRINT_LABELS = {
 const EMPTY_PRINTS = { desempenho: null, financeiro: null, funil: null, nota: null }
 
 const EMPTY_FORM = {
-  nome: '', organizacaoId: '', clienteId: '', gestorId: '', plataformas: [],
+  nome: '', organizacaoId: '', clienteId: '', gestorId: '', supervisorId: '', plataformas: [],
   segmento: '', status: 'Ativa', dataInicio: '', observacoes: '',
   diaRelatorio: '',
   preGestao30dias: '', preGestao7dias: '', preGestaoValorVendas: '', preGestaoTotalFaturamento: '',
@@ -497,7 +497,7 @@ function NovoClienteModal({ isOpen, onClose, onSave, gestores, lojas }) {
 
 // ─── Modal de loja ────────────────────────────────────────────────────────────
 
-function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organizacoes, isSuperAdmin, onClienteCriado }) {
+function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, supervisores, gestorMap, organizacoes, isSuperAdmin, onClienteCriado }) {
   const toast = useToast()
   const [form,   setForm]   = useState(EMPTY_FORM)
   const [prints, setPrints] = useState(EMPTY_PRINTS)
@@ -506,11 +506,16 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organiza
 
   useEffect(() => {
     if (!isOpen) return
+    // Lojas antigas podem ter gestorId apontando pra uma conta de role 'supervisor' (bug
+    // anterior, quando gestor e supervisor eram selecionáveis no mesmo campo). Ao abrir
+    // pra edição, migra esse valor pro campo certo — sem precisar de script de correção em massa.
+    const gestorApontaParaSupervisor = loja?.gestorId && gestorMap?.[loja.gestorId]?.role === 'supervisor'
     setForm(loja ? {
       nome:             loja.nome             ?? '',
       organizacaoId:    loja.organizacaoId     ?? '',
       clienteId:        loja.clienteId        ?? '',
-      gestorId:         loja.gestorId         ?? '',
+      gestorId:         gestorApontaParaSupervisor ? '' : (loja.gestorId ?? ''),
+      supervisorId:     loja.supervisorId     ?? (gestorApontaParaSupervisor ? loja.gestorId : ''),
       plataformas:      loja.plataformas?.length ? loja.plataformas : loja.plataforma ? [loja.plataforma] : [],
       segmento:         loja.segmento         ?? '',
       status:           loja.status           ?? 'Ativa',
@@ -573,7 +578,7 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organiza
     }
   }
 
-  const canSave = form.nome.trim() && form.organizacaoId && form.clienteId && form.gestorId && form.plataformas.length > 0 && form.status
+  const canSave = form.nome.trim() && form.organizacaoId && form.clienteId && (form.gestorId || form.supervisorId) && form.plataformas.length > 0 && form.status
 
   return (
     <>
@@ -646,11 +651,21 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, organiza
           <div className="flex flex-col gap-1.5">
             <label className="field-label" htmlFor="l-gestor">Gestor responsável</label>
             <select id="l-gestor" value={form.gestorId}
-              onChange={e => set('gestorId', e.target.value)} className="select" required>
-              <option value="">Selecione</option>
+              onChange={e => set('gestorId', e.target.value)} className="select">
+              <option value="">Sem gestor</option>
               {gestores.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
             </select>
           </div>
+        </div>
+
+        {/* Supervisor */}
+        <div className="flex flex-col gap-1.5">
+          <label className="field-label" htmlFor="l-supervisor">Supervisor</label>
+          <select id="l-supervisor" value={form.supervisorId}
+            onChange={e => set('supervisorId', e.target.value)} className="select">
+            <option value="">Sem supervisor</option>
+            {(supervisores ?? []).map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+          </select>
         </div>
 
         {/* Plataformas */}
@@ -1520,16 +1535,31 @@ export default function Lojas() {
   // ─── Lookup maps ────────────────────────────────────────────────────────────
 
   const clienteMap = useMemo(() => Object.fromEntries(clientes.map(c => [c.id, c])), [clientes])
+  // gestorMap cobre gestor E supervisor — usado só pra resolver o nome cacheado (gestorNome/supervisorNome) por id.
   const gestorMap  = useMemo(() => Object.fromEntries(gestores.map(g => [g.id, g])), [gestores])
 
+  // A coleção users combina role 'gestor' e 'supervisor' numa query só (loadAll acima) —
+  // aqui é onde de fato separamos por role, pra cada seletor de "Gestor" na tela nunca
+  // listar um supervisor como se fosse gestor (e vice-versa).
   const gestoresAtivos = useMemo(
-    () => gestores.filter(g => ['ativo', 'ativa'].includes(g.status?.toLowerCase())).sort((a, b) => a.nome?.localeCompare(b.nome ?? '', 'pt-BR')),
+    () => gestores.filter(g => g.role === 'gestor' && ['ativo', 'ativa'].includes(g.status?.toLowerCase())).sort((a, b) => a.nome?.localeCompare(b.nome ?? '', 'pt-BR')),
+    [gestores]
+  )
+
+  const supervisoresAtivos = useMemo(
+    () => gestores.filter(g => g.role === 'supervisor' && ['ativo', 'ativa'].includes(g.status?.toLowerCase())).sort((a, b) => a.nome?.localeCompare(b.nome ?? '', 'pt-BR')),
     [gestores]
   )
 
   const contagemPorGestor = useMemo(() => {
     const map = {}
     lojas.forEach(l => { if (l.gestorId) map[l.gestorId] = (map[l.gestorId] ?? 0) + 1 })
+    return map
+  }, [lojas])
+
+  const contagemPorSupervisor = useMemo(() => {
+    const map = {}
+    lojas.forEach(l => { if (l.supervisorId) map[l.supervisorId] = (map[l.supervisorId] ?? 0) + 1 })
     return map
   }, [lojas])
 
@@ -1663,7 +1693,8 @@ export default function Lojas() {
       nome:          form.nome.trim(),
       organizacaoId: isSuperAdmin ? form.organizacaoId : (user?.organizacaoId ?? null),
       clienteId:    form.clienteId,
-      gestorId:     form.gestorId,
+      gestorId:     form.gestorId || null,
+      supervisorId: form.supervisorId || null,
       segmento:     form.segmento.trim(),
       status:       form.status,
       dataInicio:   form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null,
@@ -1896,7 +1927,7 @@ export default function Lojas() {
         <select value={filtroGestor} onChange={e => setFiltroGestor(e.target.value)} className="select w-full sm:w-[180px] h-11 sm:h-[30px]" style={{ fontSize: '12px' }}>
           <option value="">Todos os gestores</option>
           <option value={SEM_GESTOR}>Sem gestor</option>
-          {gestores.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
+          {gestoresAtivos.map(g => <option key={g.id} value={g.id}>{g.nome}</option>)}
         </select>
 
         <select value={filtroStatus} onChange={e => setFiltroStatus(e.target.value)} className="select w-full sm:w-[148px] h-11 sm:h-[30px]" style={{ fontSize: '12px' }}>
@@ -2071,6 +2102,7 @@ export default function Lojas() {
               const loja = item.loja
               const clienteNome = loja.clienteId ? (loja.clienteNome ?? clienteMap[loja.clienteId]?.nome ?? '—') : '—'
               const gestorNome  = loja.gestorId  ? (loja.gestorNome  ?? gestorMap[loja.gestorId]?.nome   ?? '—') : 'Sem gestor'
+              const supervisorNome = loja.supervisorId ? (gestorMap[loja.supervisorId]?.nome ?? '—') : null
 
               return (
                 <motion.div
@@ -2086,6 +2118,7 @@ export default function Lojas() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-text-muted">
                     <span>{clienteNome}</span>
                     <span>{gestorNome}</span>
+                    {supervisorNome && <span>Sup.: {supervisorNome}</span>}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {(loja.plataformas ?? []).map(p => {
@@ -2145,7 +2178,9 @@ export default function Lojas() {
         onSave={handleSave}
         loja={editingLoja}
         clientes={clientes}
-        gestores={gestores}
+        gestores={gestoresAtivos}
+        supervisores={supervisoresAtivos}
+        gestorMap={gestorMap}
         organizacoes={organizacoes}
         isSuperAdmin={isSuperAdmin}
         onClienteCriado={handleClienteCriado}
@@ -2155,7 +2190,7 @@ export default function Lojas() {
         isOpen={clienteModalOpen}
         onClose={() => setClienteModalOpen(false)}
         onSave={handleSaveCliente}
-        gestores={gestores}
+        gestores={gestoresAtivos}
         lojas={lojas}
       />
 
