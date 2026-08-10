@@ -1433,21 +1433,14 @@ function PlataformaMiniStatus({ plataforma, existe }) {
 
 // Cores por plataforma reaproveitadas do PlatformBadge — usadas na borda
 // esquerda dos cards de lojas agrupadas automaticamente pelo mesmo cliente.
-const COR_BORDA_PLATAFORMA = {
-  ifood:    '#EA1D2C',
-  '99food': '#FFD700',
-  keeta:    '#00B14F',
-}
-
-function corBordaCliente(loja) {
-  const plataforma = plataformasDeLoja(loja)[0] ?? loja.plataforma
-  const key = plataforma?.toLowerCase().replace(/\s+/g, '')
-  return COR_BORDA_PLATAFORMA[key] ?? '#999999'
-}
+// Lojas agrupadas (mesmo cliente, mesmo dia) ganham borda completa + fundo
+// levemente tintado — sinal visual de agrupamento sem depender de texto ou de
+// borda só do lado esquerdo (ver regras do design system).
+const GRUPO_BORDA = '#C7CDD6'
+const GRUPO_FUNDO  = 'rgba(37,99,235,0.05)'
 
 function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleProps, innerRef, style, agrupavel }) {
   const detalhes = reportStatus.detalhes
-  const corGrupo  = agrupavel ? corBordaCliente(loja) : null
   return (
     <div
       ref={innerRef}
@@ -1456,9 +1449,8 @@ function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleP
         display: 'flex', flexDirection: 'column', gap: '3px',
         padding: '6px 8px', borderRadius: '5px',
         minWidth: 0, boxSizing: 'border-box',
-        border: isDragging ? '2px solid #EA1D2C' : '1px solid #E8E8E8',
-        borderLeft: corGrupo ? `3px solid ${corGrupo}` : undefined,
-        backgroundColor: isDragging ? '#FFFFFF' : '#F7F7F8',
+        border: isDragging ? '2px solid #EA1D2C' : `1px solid ${agrupavel ? GRUPO_BORDA : '#E8E8E8'}`,
+        backgroundColor: isDragging ? '#FFFFFF' : (agrupavel ? GRUPO_FUNDO : '#F7F7F8'),
         cursor: isDragging ? 'grabbing' : 'grab',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : 'none',
         transition: isDragging ? 'none' : 'border-color 150ms, background-color 150ms',
@@ -1466,7 +1458,7 @@ function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleP
       }}
       onClick={() => onClickLoja(loja)}
       onMouseEnter={e => { if (!isDragging) { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.backgroundColor = '#FFFFFF' } }}
-      onMouseLeave={e => { if (!isDragging) { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.backgroundColor = '#F7F7F8' } }}
+      onMouseLeave={e => { if (!isDragging) { e.currentTarget.style.borderColor = agrupavel ? GRUPO_BORDA : '#E8E8E8'; e.currentTarget.style.backgroundColor = agrupavel ? GRUPO_FUNDO : '#F7F7F8' } }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
         <span style={{ fontSize: '12px', color: '#111111', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{loja.nome}</span>
@@ -1483,33 +1475,31 @@ function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleP
   )
 }
 
-// ─── ClienteHeader ────────────────────────────────────────────────────────────
-// Header acima das lojas de um mesmo cliente (quando ele tem mais de uma loja
-// no dia) dentro de uma coluna do calendário. Agrupamento automático: não
-// depende de nenhum cadastro à parte, só de duas ou mais lojas com o mesmo
-// clienteId aparecendo no mesmo dia. Sempre visível — arrastar uma loja do
-// grupo arrasta todas as demais junto (ver handleDragEnd).
-
-function ClienteHeader({ clienteNome, lojasDoCliente, getReportStatus }) {
-  const total = lojasDoCliente.length
-  const enviados = lojasDoCliente.filter(l => getReportStatus(l).type === 'enviado').length
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', padding: '4px 6px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
-        <span style={{ fontSize: '12px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {clienteNome}
-        </span>
-        <span style={{ fontSize: '11px', color: '#999999', flexShrink: 0 }}>({total})</span>
-      </div>
-      <span style={{ fontSize: '10px', fontWeight: 500, color: enviados === total ? '#16A34A' : '#999999', flexShrink: 0, whiteSpace: 'nowrap' }}>
-        {enviados}/{total} enviados
-      </span>
-    </div>
-  )
-}
-
 // ─── CalendarGrid ─────────────────────────────────────────────────────────────
+
+// Agrupa lojas do mesmo clienteId de forma adjacente na lista, preservando a
+// ordem relativa de tudo mais — necessário pro destaque visual de grupo (borda
+// + fundo tintado) fazer sentido quando os cards não já vêm vizinhos.
+function agruparPorCliente(lista) {
+  const contagem = {}
+  lista.forEach(l => { if (l.clienteId) contagem[l.clienteId] = (contagem[l.clienteId] ?? 0) + 1 })
+  const usados = new Set()
+  const resultado = []
+  lista.forEach(l => {
+    if (usados.has(l.id)) return
+    resultado.push(l)
+    usados.add(l.id)
+    if (l.clienteId && contagem[l.clienteId] > 1) {
+      lista.forEach(outra => {
+        if (outra.clienteId === l.clienteId && !usados.has(outra.id)) {
+          resultado.push(outra)
+          usados.add(outra.id)
+        }
+      })
+    }
+  })
+  return resultado
+}
 
 function buildColumns(lojasList, prevColumns) {
   const map = {}
@@ -1529,12 +1519,19 @@ function buildColumns(lojasList, prevColumns) {
     })
   }
 
+  // Lojas ainda não posicionadas entram na posição alfabética correta dentro
+  // do dia, em vez de sempre no final — senão apareciam fora de ordem.
   lojasList.forEach(l => {
     if (l.diaRelatorio && map[l.diaRelatorio] && !seen.has(l.id)) {
-      map[l.diaRelatorio].push(l)
+      const dia = map[l.diaRelatorio]
+      let idx = dia.findIndex(existing => existing.nome.localeCompare(l.nome, 'pt-BR') > 0)
+      if (idx === -1) idx = dia.length
+      dia.splice(idx, 0, l)
       seen.add(l.id)
     }
   })
+
+  DIAS.forEach(d => { map[d.key] = agruparPorCliente(map[d.key]) })
 
   return map
 }
@@ -1574,37 +1571,21 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
   // do arrastar, que não é confiável em touch ao lado de scroll).
   //
   // Agrupamento automático por cliente: sem cadastro à parte — sempre que 2+
-  // lojas do mesmo clienteId aparecem no mesmo dia, ganham um header comum
-  // sempre expandido; cliente com só uma loja no dia fica solto na lista.
+  // lojas do mesmo clienteId aparecem no mesmo dia, ganham destaque visual
+  // comum (borda + fundo tintado em LojaCellCard); cliente com só uma loja no
+  // dia fica solto na lista, sem destaque.
   function renderLojaItems(lojasDia, { draggable }) {
     const contagemPorCliente = {}
     lojasDia.forEach(l => {
       if (l.clienteId) contagemPorCliente[l.clienteId] = (contagemPorCliente[l.clienteId] ?? 0) + 1
     })
 
-    const clientesVistos = new Set()
-    const primeiraOcorrencia = new Set()
-    lojasDia.forEach(l => {
-      if (l.clienteId && contagemPorCliente[l.clienteId] > 1 && !clientesVistos.has(l.clienteId)) {
-        clientesVistos.add(l.clienteId)
-        primeiraOcorrencia.add(l.id)
-      }
-    })
-
     return lojasDia.map((loja, idx) => {
       const agrupavel = !!loja.clienteId && contagemPorCliente[loja.clienteId] > 1
-      const clienteHeader = agrupavel && primeiraOcorrencia.has(loja.id) && (
-        <ClienteHeader
-          clienteNome={loja.clienteNome ?? '—'}
-          lojasDoCliente={lojasDia.filter(l => l.clienteId === loja.clienteId)}
-          getReportStatus={getReportStatus}
-        />
-      )
 
       if (draggable) {
         return (
           <Fragment key={loja.id}>
-            {clienteHeader}
             <Draggable draggableId={loja.id} index={idx}>
               {(dragProvided, dragSnapshot) => {
                 const card = (
@@ -1628,7 +1609,6 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
 
       return (
         <Fragment key={loja.id}>
-          {clienteHeader}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
             <LojaCellCard
               loja={loja}
