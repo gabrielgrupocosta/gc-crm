@@ -37,7 +37,7 @@ const PRINT_LABELS = { desempenho: 'Print Desempenho', operacao: 'Print Operaç�
 // Leitura automática de prints — cada print cobre um grupo de campos, só é
 // enviado ao Gemini se pelo menos um campo do seu grupo ainda estiver vazio.
 const CAMPOS_POR_PRINT = {
-  desempenho: ['faturamento', 'variacao', 'ticketMedio', 'clientesNovos', 'totalVendas'],
+  desempenho: ['faturamento', 'variacao'],
   financeiro: ['faturamento', 'variacao'],
   operacao:   ['cancelamento', 'chamados', 'tempoAberto'],
 }
@@ -563,9 +563,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
   // ─ Seção 1: Desempenho da Semana
   const [faturamento,         setFaturamento]         = useState('')
   const [variacao,            setVariacao]            = useState('')
-  const [ticketMedio,         setTicketMedio]         = useState('')
-  const [clientesNovos,       setClientesNovos]       = useState('')
-  const [totalVendas,         setTotalVendas]         = useState('')
   const [observacoes,         setObservacoes]         = useState('')
   const [printDesempenho,     setPrintDesempenho]     = useState(null)
   const [printFinanceiro,     setPrintFinanceiro]     = useState(null)
@@ -576,7 +573,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
   const [cancelamento,   setCancelamento]   = useState('')
   const [chamados,       setChamados]       = useState('')
   const [tempoAberto,    setTempoAberto]    = useState('')
-  const [contexto,       setContexto]       = useState('')
   const [printOperacao,  setPrintOperacao]  = useState(null)
   const [resumoIA,       setResumoIA]       = useState('')
   const [loadingIA,      setLoadingIA]      = useState(false)
@@ -625,9 +621,8 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
   async function fetchDados() {
     carregandoDadosRef.current = true
     setFaturamento(''); setVariacao(''); setObservacoes('')
-    setTicketMedio(''); setClientesNovos(''); setTotalVendas('')
     setPrintDesempenho(null); setPrintFinanceiro(null); setPrintOperacao(null); setResultadoSalvo(false)
-    setCancelamento(''); setChamados(''); setTempoAberto(''); setContexto('')
+    setCancelamento(''); setChamados(''); setTempoAberto('')
     setResumoIA(''); setCamposAuto({})
     setStatusExtracao({ desempenho: null, financeiro: null, operacao: null })
 
@@ -649,13 +644,9 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
       setFaturamento(currFat)
       setVariacao(resData?.variacao?.toString() ?? '')
       setObservacoes(resData?.observacoes ?? '')
-      setTicketMedio((resData?.ticketMedio ?? relData?.ticketMedio)?.toString() ?? '')
-      setClientesNovos((resData?.clientesNovos ?? relData?.clientesNovos)?.toString() ?? '')
-      setTotalVendas((resData?.totalVendas ?? relData?.totalVendas)?.toString() ?? '')
       setCancelamento((resData?.cancelamento ?? relData?.cancelamento)?.toString() ?? '')
       setChamados((resData?.chamados ?? relData?.chamados)?.toString() ?? '')
       setTempoAberto((resData?.tempoAberto ?? relData?.tempoAberto)?.toString() ?? '')
-      setContexto(resData?.contexto ?? relData?.contexto ?? '')
       setResumoIA(relData?.textoResumo ?? '')
       if (resData) setResultadoSalvo(true)
 
@@ -699,7 +690,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
     }
   }, [ // eslint-disable-line react-hooks/exhaustive-deps
     faturamento, variacao, cancelamento, chamados, tempoAberto,
-    ticketMedio, clientesNovos, totalVendas, contexto,
   ])
 
   async function autoSalvarResultado() {
@@ -719,13 +709,9 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
       semana:        semanaRef,
       faturamento:   parseFloat(faturamento)   || 0,
       variacao:      parseFloat(variacao)      || 0,
-      ticketMedio:   parseFloat(ticketMedio)   || 0,
-      clientesNovos: parseInt(clientesNovos)   || 0,
-      totalVendas:   parseInt(totalVendas)     || 0,
       cancelamento:  parseFloat(cancelamento)  || 0,
       chamados:      parseFloat(chamados)      || 0,
       tempoAberto:   parseFloat(tempoAberto)   || 0,
-      contexto:      contexto.trim(),
       atualizadoEm:  new Date().toISOString(),
     }
 
@@ -861,14 +847,10 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
         dataFim:          sunday.toISOString(),
         faturamento:      parseFloat(faturamento)   || 0,
         variacao:         parseFloat(variacao)      || 0,
-        ticketMedio:      parseFloat(ticketMedio)   || 0,
-        clientesNovos:    parseInt(clientesNovos)   || 0,
-        totalVendas:      parseInt(totalVendas)     || 0,
         cancelamento:     parseFloat(cancelamento)  || 0,
         chamados:         parseFloat(chamados)      || 0,
         tempoAberto:      parseFloat(tempoAberto)   || 0,
         observacoes:      observacoes.trim(),
-        contexto:         contexto.trim(),
         prints:           { desempenho: urlDesempenho, financeiro: urlFinanceiro, operacao: urlOperacao },
         relatorioEnviado: true,
         dataEnvio:        agora,
@@ -904,7 +886,7 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
   // gestor completar. Se só 1 ou 2 prints estiverem anexados, processa
   // somente os que existem, sem delay depois do último.
   async function handleExtrairDados() {
-    const valores = { faturamento, variacao, ticketMedio, clientesNovos, totalVendas, cancelamento, chamados, tempoAberto }
+    const valores = { faturamento, variacao, cancelamento, chamados, tempoAberto }
     const camposVazios = Object.keys(valores).filter(k => !valores[k]?.trim())
 
     if (camposVazios.length === 0) {
@@ -933,9 +915,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
       const autoPreenchidos = {}
       if (d.faturamento    != null) { setFaturamento(String(d.faturamento));       autoPreenchidos.faturamento    = true }
       if (d.variacao       != null) { setVariacao(String(d.variacao));            autoPreenchidos.variacao       = true }
-      if (d.ticketMedio    != null) { setTicketMedio(String(d.ticketMedio));      autoPreenchidos.ticketMedio    = true }
-      if (d.clientesNovos  != null) { setClientesNovos(String(d.clientesNovos));  autoPreenchidos.clientesNovos  = true }
-      if (d.totalVendas    != null) { setTotalVendas(String(d.totalVendas));      autoPreenchidos.totalVendas    = true }
       if (d.cancelamento   != null) { setCancelamento(String(d.cancelamento));    autoPreenchidos.cancelamento   = true }
       if (d.chamados       != null) { setChamados(String(d.chamados));           autoPreenchidos.chamados       = true }
       if (d.tempoLoja      != null) { setTempoAberto(String(d.tempoLoja));       autoPreenchidos.tempoAberto    = true }
@@ -979,7 +958,7 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
         cancelamento,
         chamados,
         tempoLoja:      tempoAberto,
-        contextoGestor: contexto,
+        contextoGestor: observacoes,
         prints: {
           desempenho: printDesempenho?.dataUrl ?? null,
           financeiro: printFinanceiro?.dataUrl ?? null,
@@ -1041,14 +1020,10 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
         semana:        semanaRef,
         faturamento:   parseFloat(faturamento)  || 0,
         variacao:      parseFloat(variacao)     || 0,
-        ticketMedio:   parseFloat(ticketMedio)  || 0,
-        clientesNovos: parseInt(clientesNovos)  || 0,
-        totalVendas:   parseInt(totalVendas)    || 0,
         cancelamento:  parseFloat(cancelamento) || 0,
         chamados:      parseFloat(chamados)     || 0,
         tempoAberto:   parseFloat(tempoAberto)  || 0,
         textoResumo:  resumoIA,
-        contexto:     contexto.trim(),
         prints:       { desempenho: urlDesempenho, operacao: urlOperacao, financeiro: urlFinanceiro },
         timestamp:    new Date().toISOString(),
         status:       'gerado',
@@ -1214,38 +1189,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
                       </Field>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                      <Field label="Ticket Médio (R$)">
-                        <input
-                          style={{ ...INPUT_STYLE, borderColor: camposAuto.ticketMedio ? '#16A34A' : '#E8E8E8' }}
-                          value={ticketMedio}
-                          onChange={e => { setTicketMedio(e.target.value); setCamposAuto(c => c.ticketMedio ? { ...c, ticketMedio: false } : c) }}
-                          placeholder="0.00"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
-                          onBlur={e => e.target.style.borderColor = camposAuto.ticketMedio ? '#16A34A' : '#E8E8E8'}
-                        />
-                      </Field>
-                      <Field label="Clientes Novos">
-                        <input
-                          style={{ ...INPUT_STYLE, borderColor: camposAuto.clientesNovos ? '#16A34A' : '#E8E8E8' }}
-                          value={clientesNovos}
-                          onChange={e => { setClientesNovos(e.target.value); setCamposAuto(c => c.clientesNovos ? { ...c, clientesNovos: false } : c) }}
-                          placeholder="0"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
-                          onBlur={e => e.target.style.borderColor = camposAuto.clientesNovos ? '#16A34A' : '#E8E8E8'}
-                        />
-                      </Field>
-                      <Field label="Total de Vendas (pedidos)">
-                        <input
-                          style={{ ...INPUT_STYLE, borderColor: camposAuto.totalVendas ? '#16A34A' : '#E8E8E8' }}
-                          value={totalVendas}
-                          onChange={e => { setTotalVendas(e.target.value); setCamposAuto(c => c.totalVendas ? { ...c, totalVendas: false } : c) }}
-                          placeholder="0"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
-                          onBlur={e => e.target.style.borderColor = camposAuto.totalVendas ? '#16A34A' : '#E8E8E8'}
-                        />
-                      </Field>
-                    </div>
                   </div>
                 </div>
 
@@ -1370,22 +1313,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                 <div>
-                  <SectionTitle label="Contexto da Semana" />
-                  <p style={{ fontSize: '11px', color: '#999999', marginBottom: '8px', lineHeight: 1.5 }}>
-                    Informe eventos relevantes que impactaram os resultados (ex: aumento de preços, ajuste de cardápio, promoções, feriados...)
-                  </p>
-                  <textarea
-                    value={contexto}
-                    onChange={e => setContexto(e.target.value)}
-                    placeholder="Ex: Aumentamos os preços na semana anterior. Fizemos um ajuste no cardápio removendo itens de baixa saída..."
-                    rows={3}
-                    style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
-                    onFocus={e => e.target.style.borderColor = '#E5322D'}
-                    onBlur={e => e.target.style.borderColor = '#E8E8E8'}
-                  />
-                </div>
-
-                <div>
                   <SectionTitle label="Resumo" />
                   <textarea
                     value={resumoIA}
@@ -1444,20 +1371,6 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
         {/* Footer */}
         <div style={{ padding: '14px 28px', borderTop: '1px solid #E8E8E8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
           <button
-            onClick={handleEnviarDados}
-            disabled={loadingEnviar}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#666666', background: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '5px', cursor: loadingEnviar ? 'not-allowed' : 'pointer', opacity: loadingEnviar ? 0.6 : 1, transition: 'border-color 150ms, color 150ms' }}
-            onMouseEnter={e => { if (!loadingEnviar) { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.color = '#111111' } }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.color = '#666666' }}
-          >
-            {loadingEnviar ? (
-              <><Loader2 size={13} className="animate-spin" /> {resultadoSalvo ? 'Salvando…' : 'Enviando…'}</>
-            ) : resultadoSalvo ? (
-              <><Pencil size={13} strokeWidth={1.75} /> Editar Dados</>
-            ) : 'Enviar Dados'}
-          </button>
-
-          <button
             onClick={handleGerarIA}
             disabled={loadingIA}
             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#666666', background: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '5px', cursor: loadingIA ? 'not-allowed' : 'pointer', opacity: loadingIA ? 0.6 : 1, transition: 'border-color 150ms, color 150ms' }}
@@ -1467,15 +1380,31 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
             {loadingIA ? <><Loader2 size={13} className="animate-spin" /> Gerando…</> : 'Gerar Resumo'}
           </button>
 
-          <button
-            onClick={handleGerarSalvarPDF}
-            disabled={loadingPDF}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 18px', fontSize: '13px', fontWeight: 500, color: '#fff', background: loadingPDF ? '#C42B26' : '#E5322D', border: 'none', borderRadius: '5px', cursor: loadingPDF ? 'not-allowed' : 'pointer', transition: 'filter 100ms' }}
-            onMouseEnter={e => { if (!loadingPDF) e.currentTarget.style.filter = 'brightness(1.1)' }}
-            onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
-          >
-            {loadingPDF ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><Download size={13}/> Gerar e Salvar PDF</>}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <button
+              onClick={handleEnviarDados}
+              disabled={loadingEnviar}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#666666', background: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '5px', cursor: loadingEnviar ? 'not-allowed' : 'pointer', opacity: loadingEnviar ? 0.6 : 1, transition: 'border-color 150ms, color 150ms' }}
+              onMouseEnter={e => { if (!loadingEnviar) { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.color = '#111111' } }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.color = '#666666' }}
+            >
+              {loadingEnviar ? (
+                <><Loader2 size={13} className="animate-spin" /> {resultadoSalvo ? 'Salvando…' : 'Enviando…'}</>
+              ) : resultadoSalvo ? (
+                <><Pencil size={13} strokeWidth={1.75} /> Editar Dados</>
+              ) : 'Enviar Dados'}
+            </button>
+
+            <button
+              onClick={handleGerarSalvarPDF}
+              disabled={loadingPDF}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 18px', fontSize: '13px', fontWeight: 500, color: '#fff', background: loadingPDF ? '#C42B26' : '#E5322D', border: 'none', borderRadius: '5px', cursor: loadingPDF ? 'not-allowed' : 'pointer', transition: 'filter 100ms' }}
+              onMouseEnter={e => { if (!loadingPDF) e.currentTarget.style.filter = 'brightness(1.1)' }}
+              onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
+            >
+              {loadingPDF ? <><Loader2 size={13} className="animate-spin" /> Gerando PDF…</> : <><Download size={13}/> Gerar e Salvar PDF</>}
+            </button>
+          </div>
         </div>
         </>
         )}

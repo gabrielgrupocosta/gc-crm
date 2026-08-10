@@ -16,7 +16,11 @@ const auth = getAuth()
 const db = getFirestore()
 const messaging = getMessaging()
 
-const ROLES_VALIDOS = ['master', 'admin_org', 'gestor']
+const ROLES_VALIDOS = ['master', 'admin_org', 'gestor', 'supervisor']
+
+// Espelha src/constants/menuPermissions.js — Cloud Functions não importam de src/,
+// então a lista de chaves válidas é duplicada aqui pra validar o array recebido.
+const MENU_PERMISSIONS_VALIDAS = ['metricas', 'clientes', 'lojas', 'contratos', 'financeiro', 'gestores']
 
 // Garante que quem chama é master — usado nas funções de administração
 // de contas, que só fazem sentido para quem gerencia a plataforma inteira.
@@ -74,7 +78,7 @@ const AUTH_ERROS_CRIACAO = {
 // role e organizacaoId (null para master) viram claim imediatamente —
 // o próprio doc em users/ é a fonte de verdade "de leitura fácil" (nome, etc),
 // mas quem decide acesso via Security Rules é sempre o claim do token.
-async function criarConta({ email, senha, nome, role, organizacaoId }) {
+async function criarConta({ email, senha, nome, role, organizacaoId, menuPermissions }) {
   let userRecord
   try {
     userRecord = await auth.createUser({ email, password: senha, displayName: nome })
@@ -82,16 +86,32 @@ async function criarConta({ email, senha, nome, role, organizacaoId }) {
     const [code, mensagem] = AUTH_ERROS_CRIACAO[err.code] ?? ['internal', 'Erro ao criar a conta. Tente novamente.']
     throw new HttpsError(code, mensagem)
   }
-  await auth.setCustomUserClaims(userRecord.uid, { role, organizacaoId: organizacaoId ?? null })
-  await db.collection('users').doc(userRecord.uid).set({
+  const claims = { role, organizacaoId: organizacaoId ?? null }
+  const dadosDoc = {
     nome,
     email,
     role,
     organizacaoId: organizacaoId ?? null,
     status: 'ativo',
     criadoEm: FieldValue.serverTimestamp(),
-  })
+  }
+  if (menuPermissions !== undefined) {
+    claims.menuPermissions = menuPermissions
+    dadosDoc.menuPermissions = menuPermissions
+  }
+  await auth.setCustomUserClaims(userRecord.uid, claims)
+  await db.collection('users').doc(userRecord.uid).set(dadosDoc)
   return { uid: userRecord.uid }
+}
+
+function validarMenuPermissions(menuPermissions) {
+  if (!Array.isArray(menuPermissions)) {
+    throw new HttpsError('invalid-argument', 'menuPermissions precisa ser uma lista')
+  }
+  const invalidas = menuPermissions.filter(m => !MENU_PERMISSIONS_VALIDAS.includes(m))
+  if (invalidas.length > 0) {
+    throw new HttpsError('invalid-argument', `menuPermissions inválidas: ${invalidas.join(', ')}`)
+  }
 }
 
 exports.criarSuperAdmin = onCall(async (request) => {
@@ -121,6 +141,39 @@ exports.criarGestor = onCall(async (request) => {
   return criarConta({ email, senha, nome, role: 'gestor', organizacaoId })
 })
 
+// Supervisor tem escopo de dados igual admin_org (organização inteira, sem
+// travar por gestorId), mas só enxerga os menus liberados em menuPermissions —
+// tanto na sidebar quanto nas rules do Firestore (claim é a fonte de verdade).
+exports.criarSupervisor = onCall(async (request) => {
+  const { email, senha, nome, organizacaoId, menuPermissions } = request.data || {}
+  if (!email || !senha || !nome || !organizacaoId) {
+    throw new HttpsError('invalid-argument', 'email, senha, nome e organizacaoId são obrigatórios')
+  }
+  exigirAdminDaOrg(request, organizacaoId)
+  validarMenuPermissions(menuPermissions ?? [])
+  return criarConta({ email, senha, nome, role: 'supervisor', organizacaoId, menuPermissions: menuPermissions ?? [] })
+})
+
+// Atualiza os menus liberados de um supervisor já existente — quem chama
+// precisa ser admin da mesma organização do supervisor-alvo. O trigger
+// sincronizarClaimsUsuario cuida de refletir a mudança no custom claim.
+exports.atualizarPermissoesSupervisor = onCall(async (request) => {
+  const { uid, menuPermissions } = request.data || {}
+  if (!uid) throw new HttpsError('invalid-argument', 'uid é obrigatório')
+  validarMenuPermissions(menuPermissions ?? [])
+
+  const alvoDoc = await db.collection('users').doc(uid).get()
+  if (!alvoDoc.exists) throw new HttpsError('not-found', 'Usuário não encontrado')
+  const alvoData = alvoDoc.data()
+  if (alvoData.role !== 'supervisor') {
+    throw new HttpsError('failed-precondition', 'Esta função só atualiza permissões de supervisor')
+  }
+
+  exigirAdminDaOrg(request, alvoData.organizacaoId)
+  await db.collection('users').doc(uid).update({ menuPermissions: menuPermissions ?? [] })
+  return { ok: true }
+})
+
 // Exclui a conta de um gestor por completo (Firebase Auth + doc em users/{uid})
 // via privilégio de admin — não depende mais de conhecer a senha do gestor pra
 // revogar o acesso no Auth. Sem isso, a única forma de remover o acesso sem
@@ -135,8 +188,8 @@ exports.excluirGestor = onCall(async (request) => {
   const gestorDoc = await db.collection('users').doc(gestorUid).get()
   if (!gestorDoc.exists) throw new HttpsError('not-found', 'Gestor não encontrado')
   const gestorData = gestorDoc.data()
-  if (gestorData.role !== 'gestor') {
-    throw new HttpsError('failed-precondition', 'Esta função só exclui contas de gestor')
+  if (gestorData.role !== 'gestor' && gestorData.role !== 'supervisor') {
+    throw new HttpsError('failed-precondition', 'Esta função só exclui contas de gestor ou supervisor')
   }
 
   exigirAdminDaOrg(request, gestorData.organizacaoId)
@@ -168,7 +221,11 @@ exports.sincronizarClaimsUsuario = onDocumentWritten('users/{userId}', async (ev
     return
   }
 
-  await auth.setCustomUserClaims(event.params.userId, { role, organizacaoId: organizacaoId ?? null })
+  const claims = { role, organizacaoId: organizacaoId ?? null }
+  if (role === 'supervisor') {
+    claims.menuPermissions = depois.menuPermissions ?? []
+  }
+  await auth.setCustomUserClaims(event.params.userId, claims)
 })
 
 // Definido via `firebase functions:secrets:set GEMINI_API_KEY` — nunca em texto plano no código.

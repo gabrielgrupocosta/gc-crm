@@ -19,23 +19,24 @@ const panelVariantsMobile = {
 }
 
 const BOTAO_TAMANHO = 88
+const BOTAO_TAMANHO_MOBILE = Math.round(BOTAO_TAMANHO * 0.7) // 30% menor no celular
 const MARGEM_TELA = 12
 const PANEL_LARGURA = 360
 const PANEL_ALTURA = 540
 const LIMIAR_ARRASTO = 5 // px de movimento para considerar arrasto em vez de clique
 const LARGURA_MOBILE = 640 // abaixo disso o chat abre em tela cheia — o popup flutuante fica pequeno demais pra digitar no celular
 
-function posicaoInicial() {
+function posicaoInicial(tamanhoBotao) {
   return {
-    x: window.innerWidth - MARGEM_TELA - BOTAO_TAMANHO,
-    y: window.innerHeight - MARGEM_TELA - BOTAO_TAMANHO,
+    x: window.innerWidth - MARGEM_TELA - tamanhoBotao,
+    y: window.innerHeight - MARGEM_TELA - tamanhoBotao,
   }
 }
 
-function limitarNaTela(pos) {
+function limitarNaTela(pos, tamanhoBotao) {
   return {
-    x: Math.min(Math.max(pos.x, MARGEM_TELA), window.innerWidth - BOTAO_TAMANHO - MARGEM_TELA),
-    y: Math.min(Math.max(pos.y, MARGEM_TELA), window.innerHeight - BOTAO_TAMANHO - MARGEM_TELA),
+    x: Math.min(Math.max(pos.x, MARGEM_TELA), window.innerWidth - tamanhoBotao - MARGEM_TELA),
+    y: Math.min(Math.max(pos.y, MARGEM_TELA), window.innerHeight - tamanhoBotao - MARGEM_TELA),
   }
 }
 
@@ -45,17 +46,19 @@ export default function AssistenteFloatingButton() {
   const location = useLocation()
   const { lojas, lojaId, setLojaId, popupAberto, setPopupAberto, limparConversa, mensagens } = useAssistenteChat()
 
-  const [pos, setPos] = useState(posicaoInicial)
   const [mobile, setMobile] = useState(() => window.innerWidth < LARGURA_MOBILE)
+  const [pos, setPos] = useState(() => posicaoInicial(mobile ? BOTAO_TAMANHO_MOBILE : BOTAO_TAMANHO))
   const arrastandoRef = useRef(false)
   const moveuRef = useRef(false)
   const inicioPointerRef = useRef({ x: 0, y: 0 })
   const inicioPosRef = useRef({ x: 0, y: 0 })
+  const botaoTamanho = mobile ? BOTAO_TAMANHO_MOBILE : BOTAO_TAMANHO
 
   useEffect(() => {
     function aoRedimensionar() {
-      setPos(p => limitarNaTela(p))
-      setMobile(window.innerWidth < LARGURA_MOBILE)
+      const novoMobile = window.innerWidth < LARGURA_MOBILE
+      setMobile(novoMobile)
+      setPos(p => limitarNaTela(p, novoMobile ? BOTAO_TAMANHO_MOBILE : BOTAO_TAMANHO))
     }
     window.addEventListener('resize', aoRedimensionar)
     return () => window.removeEventListener('resize', aoRedimensionar)
@@ -75,7 +78,7 @@ export default function AssistenteFloatingButton() {
     const dy = e.clientY - inicioPointerRef.current.y
     if (!moveuRef.current && Math.hypot(dx, dy) > LIMIAR_ARRASTO) moveuRef.current = true
     if (moveuRef.current) {
-      setPos(limitarNaTela({ x: inicioPosRef.current.x + dx, y: inicioPosRef.current.y + dy }))
+      setPos(limitarNaTela({ x: inicioPosRef.current.x + dx, y: inicioPosRef.current.y + dy }, botaoTamanho))
     }
   }
 
@@ -98,13 +101,13 @@ export default function AssistenteFloatingButton() {
   const painelLargura = Math.min(PANEL_LARGURA, window.innerWidth - 24)
   const painelAltura = Math.min(PANEL_ALTURA, window.innerHeight - 24)
   const espacoAcima = pos.y
-  const espacoAbaixo = window.innerHeight - (pos.y + BOTAO_TAMANHO)
+  const espacoAbaixo = window.innerHeight - (pos.y + botaoTamanho)
   const painelTop = espacoAcima >= painelAltura + 10
     ? pos.y - 10 - painelAltura
     : espacoAbaixo >= painelAltura + 10
-      ? pos.y + BOTAO_TAMANHO + 10
+      ? pos.y + botaoTamanho + 10
       : Math.min(Math.max(pos.y - painelAltura / 2, 8), window.innerHeight - painelAltura - 8)
-  const painelLeftPreferido = pos.x + BOTAO_TAMANHO - painelLargura
+  const painelLeftPreferido = pos.x + botaoTamanho - painelLargura
   const painelLeft = Math.min(Math.max(painelLeftPreferido, 8), window.innerWidth - painelLargura - 8)
 
   // No celular, com o chat em tela cheia, o próprio X do cabeçalho do painel
@@ -124,7 +127,7 @@ export default function AssistenteFloatingButton() {
           className="fixed flex items-center justify-center"
           style={{
             left: `${pos.x}px`, top: `${pos.y}px`, zIndex: 45,
-            width: `${BOTAO_TAMANHO}px`, height: `${BOTAO_TAMANHO}px`, borderRadius: '50%',
+            width: `${botaoTamanho}px`, height: `${botaoTamanho}px`, borderRadius: '50%',
             backgroundColor: '#FF4B2E', color: '#FFFFFF', border: 'none',
             boxShadow: '0 4px 14px rgba(255,75,46,0.35)',
             cursor: 'grab', touchAction: 'none',
@@ -135,8 +138,8 @@ export default function AssistenteFloatingButton() {
           onMouseLeave={e => { if (!popupAberto) e.currentTarget.style.opacity = '0.6' }}
         >
           {popupAberto
-            ? <X size={37} strokeWidth={2} />
-            : <img src={assistenteBotIcon} alt="" draggable={false} style={{ width: '84px', height: '84px', borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }} />}
+            ? <X size={mobile ? 26 : 37} strokeWidth={2} />
+            : <img src={assistenteBotIcon} alt="" draggable={false} style={{ width: `${botaoTamanho - 4}px`, height: `${botaoTamanho - 4}px`, borderRadius: '50%', objectFit: 'cover', pointerEvents: 'none' }} />}
         </button>
       )}
 

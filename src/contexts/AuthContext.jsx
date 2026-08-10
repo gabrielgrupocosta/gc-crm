@@ -138,12 +138,18 @@ export function AuthProvider({ children }) {
   const isSuperAdmin = user?.role === 'master'
   const isAdminOrg   = user?.role === 'admin_org'
   const isGestor     = user?.role === 'gestor'
+  const isSupervisor = user?.role === 'supervisor'
   const isAdmin      = isSuperAdmin || isAdminOrg
+
+  // Admin/master enxergam tudo. Supervisor só os menus liberados no seu cadastro.
+  function podeVerMenu(chave) {
+    return isAdmin || (isSupervisor && (user?.menuPermissions ?? []).includes(chave))
+  }
 
   return (
     <AuthContext.Provider value={{
       user, firebaseUser, loading, login, logout, atualizarPermissoes,
-      isSuperAdmin, isAdminOrg, isGestor, isAdmin,
+      isSuperAdmin, isAdminOrg, isGestor, isSupervisor, isAdmin, podeVerMenu,
       introAtiva, finalizarIntro,
     }}>
       {children}

@@ -1480,8 +1480,8 @@ export default function Lojas() {
       // que nenhuma conta atual tem, e o filtro/dropdown de gestor desta
       // página sempre ficava vazio pra quem loga como master.
       const gestoresQuery = isSuperAdmin
-        ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
-        : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
+        ? query(collection(db, COLLECTIONS.USERS), where('role', 'in', ['gestor', 'supervisor']))
+        : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', 'in', ['gestor', 'supervisor']))
 
       const [lojasSnap, clientesSnap, gestoresSnap] = await Promise.all([
         getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopo)),

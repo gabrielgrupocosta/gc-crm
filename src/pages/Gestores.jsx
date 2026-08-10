@@ -13,9 +13,12 @@ import { useToast } from '../components/UI/Toast'
 import Modal from '../components/UI/Modal'
 import Badge from '../components/UI/Badge'
 import Skeleton from '../components/UI/Skeleton'
+import { MENU_PERMISSIONS } from '../constants/menuPermissions'
 
 const criarGestorFn = httpsCallable(functions, 'criarGestor')
 const excluirGestorFn = httpsCallable(functions, 'excluirGestor')
+const criarSupervisorFn = httpsCallable(functions, 'criarSupervisor')
+const atualizarPermissoesSupervisorFn = httpsCallable(functions, 'atualizarPermissoesSupervisor')
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -171,13 +174,37 @@ function LojasMultiselect({ lojas, selected, onChange, gestores, gestorAtualId }
   )
 }
 
+function MenuPermissionsCheckboxes({ selected, onChange }) {
+  return (
+    <div className="border border-border-hover rounded overflow-hidden">
+      {MENU_PERMISSIONS.map(({ key, label }) => {
+        const isSelected = selected.includes(key)
+        return (
+          <label
+            key={key}
+            className="flex items-center gap-3 px-3 h-10 hover:bg-black/[0.03] cursor-pointer border-b border-border last:border-0"
+            onClick={() => onChange(
+              isSelected ? selected.filter(k => k !== key) : [...selected, key]
+            )}
+          >
+            <Checkbox checked={isSelected} onChange={() => {}} />
+            <span className={`flex-1 text-[13px] ${isSelected ? 'text-text-primary' : 'text-text-muted'}`}>
+              {label}
+            </span>
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── Modal de gestor ──────────────────────────────────────────────────────────
 
-function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, gestores, organizacoes, isSuperAdmin }) {
+function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, gestores, organizacoes, isSuperAdmin, isAdmin }) {
   const toast = useToast()
 
   const [form, setForm] = useState({
-    nome: '', email: '', senha: '', status: 'ativo', organizacaoId: '', lojasIds: [],
+    nome: '', email: '', senha: '', status: 'ativo', organizacaoId: '', lojasIds: [], role: 'gestor', menuPermissions: [],
   })
   const [showPass, setShowPass] = useState(false)
   const [saving,   setSaving]   = useState(false)
@@ -211,9 +238,9 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
     setShowPass(false)
     if (gestor) {
       const atribuidas = lojas.filter(l => l.gestorId === gestor.id).map(l => l.id)
-      setForm({ nome: gestor.nome ?? '', email: gestor.email ?? '', senha: '', status: gestor.status ?? 'ativo', organizacaoId: gestor.organizacaoId ?? '', lojasIds: atribuidas })
+      setForm({ nome: gestor.nome ?? '', email: gestor.email ?? '', senha: '', status: gestor.status ?? 'ativo', organizacaoId: gestor.organizacaoId ?? '', lojasIds: atribuidas, role: gestor.role ?? 'gestor', menuPermissions: gestor.menuPermissions ?? [] })
     } else {
-      setForm({ nome: '', email: '', senha: '', status: 'ativo', organizacaoId: !isSuperAdmin ? (organizacoes[0]?.id ?? '') : '', lojasIds: [] })
+      setForm({ nome: '', email: '', senha: '', status: 'ativo', organizacaoId: !isSuperAdmin ? (organizacoes[0]?.id ?? '') : '', lojasIds: [], role: 'gestor', menuPermissions: [] })
     }
     setEmailAtualConhecido(gestor?.email ?? '')
     setNovoEmailAcesso('')
@@ -330,13 +357,17 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
   const canSave = form.nome.trim() && form.status && form.email.trim() &&
     (isEditing || (form.senha.length >= 6 && form.organizacaoId))
 
-  const modalTitle = isEditing ? 'Editar gestor' : 'Novo gestor'
+  const isSupervisorForm = form.role === 'supervisor'
+
+  const modalTitle = isEditing
+    ? (isSupervisorForm ? 'Editar supervisor' : 'Editar gestor')
+    : (isSupervisorForm ? 'Novo supervisor' : 'Novo gestor')
 
   const submitLabel = saving
     ? 'Salvando…'
     : isEditing
       ? 'Salvar alterações'
-      : 'Criar gestor'
+      : (isSupervisorForm ? 'Criar supervisor' : 'Criar gestor')
 
   return (
     <Modal
@@ -373,6 +404,22 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
             autoFocus
           />
         </div>
+
+        {/* Perfil (só no create, e só admin escolhe — nunca deixamos um supervisor criar outro perfil) */}
+        {!isEditing && isAdmin && (
+          <div className="flex flex-col gap-1.5">
+            <label className="field-label" htmlFor="g-role">Perfil</label>
+            <select
+              id="g-role"
+              value={form.role}
+              onChange={e => set('role', e.target.value)}
+              className="select w-40"
+            >
+              <option value="gestor">Gestor</option>
+              <option value="supervisor">Supervisor</option>
+            </select>
+          </div>
+        )}
 
         {/* E-mail + Senha (senha só no create) */}
         {!isEditing ? (
@@ -668,22 +715,37 @@ function GestorModal({ isOpen, onClose, onSave, onVincularAuth, gestor, lojas, g
           </div>
         )}
 
-        {/* Lojas atribuídas */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label className="field-label">Lojas atribuídas</label>
-            <span className="text-[12px] text-text-subtle">
-              {form.lojasIds.length} selecionada{form.lojasIds.length !== 1 ? 's' : ''}
-            </span>
+        {/* Lojas atribuídas (gestor) ou Menus liberados (supervisor) */}
+        {isSupervisorForm ? (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="field-label">Menus liberados</label>
+              <span className="text-[12px] text-text-subtle">
+                {form.menuPermissions.length} selecionado{form.menuPermissions.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <MenuPermissionsCheckboxes
+              selected={form.menuPermissions}
+              onChange={keys => set('menuPermissions', keys)}
+            />
           </div>
-          <LojasMultiselect
-            lojas={lojas}
-            selected={form.lojasIds}
-            onChange={ids => set('lojasIds', ids)}
-            gestores={gestores}
-            gestorAtualId={gestor?.id}
-          />
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <label className="field-label">Lojas atribuídas</label>
+              <span className="text-[12px] text-text-subtle">
+                {form.lojasIds.length} selecionada{form.lojasIds.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <LojasMultiselect
+              lojas={lojas}
+              selected={form.lojasIds}
+              onChange={ids => set('lojasIds', ids)}
+              gestores={gestores}
+              gestorAtualId={gestor?.id}
+            />
+          </div>
+        )}
 
         {/* Erro */}
         {error && (
@@ -701,6 +763,7 @@ function DeleteGestorModal({ isOpen, onClose, onExcluir, onDesativarSemSenha, ge
   const [desativando,  setDesativando]  = useState(false)
 
   const busy = excluindo || desativando
+  const rotulo = gestor?.role === 'supervisor' ? 'supervisor' : 'gestor'
 
   async function handleExcluir() {
     setExcluindo(true)
@@ -724,7 +787,7 @@ function DeleteGestorModal({ isOpen, onClose, onExcluir, onDesativarSemSenha, ge
     <Modal
       isOpen={isOpen}
       onClose={busy ? () => {} : onClose}
-      title="Excluir gestor"
+      title={`Excluir ${rotulo}`}
       footer={
         <>
           <button type="button" onClick={onClose} disabled={busy} className="btn-secondary">
@@ -741,11 +804,12 @@ function DeleteGestorModal({ isOpen, onClose, onExcluir, onDesativarSemSenha, ge
     >
       <div className="flex flex-col gap-4">
         <p className="text-[13px] text-text-muted leading-relaxed">
-          Tem certeza que deseja excluir o gestor <strong className="text-text-primary font-medium">{gestor?.nome}</strong>?
-          Esta ação não pode ser desfeita. As lojas atribuídas a ele ficarão sem gestor responsável.
+          Tem certeza que deseja excluir o {rotulo} <strong className="text-text-primary font-medium">{gestor?.nome}</strong>?
+          Esta ação não pode ser desfeita.
+          {rotulo === 'gestor' && ' As lojas atribuídas a ele ficarão sem gestor responsável.'}
         </p>
         <p className="text-[11px] text-text-subtle leading-snug">
-          "Excluir e revogar acesso" remove o cadastro e o login por completo, sem precisar da senha do gestor.
+          "Excluir e revogar acesso" remove o cadastro e o login por completo, sem precisar da senha do {rotulo}.
           "Só desativar" mantém a conta existindo, mas com o status inativo e login bloqueado.
         </p>
       </div>
@@ -757,7 +821,7 @@ function DeleteGestorModal({ isOpen, onClose, onExcluir, onDesativarSemSenha, ge
 
 export default function Gestores() {
   const toast = useToast()
-  const { user, isSuperAdmin } = useAuth()
+  const { user, isSuperAdmin, isAdmin } = useAuth()
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
 
   const [gestores,     setGestores]     = useState([])
@@ -783,10 +847,10 @@ export default function Gestores() {
         ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
         : isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
       const usuariosQuery = modoTesteAtivo
-        ? query(collection(db, COLLECTIONS.USERS), where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10)), where('role', '==', 'gestor'))
+        ? query(collection(db, COLLECTIONS.USERS), where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10)), where('role', 'in', ['gestor', 'supervisor']))
         : isSuperAdmin
-          ? query(collection(db, COLLECTIONS.USERS), where('role', '==', 'gestor'))
-          : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', '==', 'gestor'))
+          ? query(collection(db, COLLECTIONS.USERS), where('role', 'in', ['gestor', 'supervisor']))
+          : query(collection(db, COLLECTIONS.USERS), where('organizacaoId', '==', orgId), where('role', 'in', ['gestor', 'supervisor']))
 
       const [usuariosSnap, lojasSnap] = await Promise.all([
         getDocs(usuariosQuery),
@@ -843,55 +907,78 @@ export default function Gestores() {
   // ─── Save ───────────────────────────────────────────────────────────────────
 
   async function handleSave(form) {
+    const isSupervisorForm = form.role === 'supervisor'
+
     if (editingGestor) {
-      // Atualiza dados do gestor
+      // Atualiza dados do gestor/supervisor
       await updateDoc(doc(db, COLLECTIONS.USERS, editingGestor.id), {
         nome:   form.nome.trim(),
         email:  form.email.trim().toLowerCase(),
         status: form.status,
       })
 
-      // Recalcula atribuição de lojas
-      const anteriores = lojas.filter(l => l.gestorId === editingGestor.id).map(l => l.id)
-      const adicionadas = form.lojasIds.filter(id => !anteriores.includes(id))
-      const removidas   = anteriores.filter(id => !form.lojasIds.includes(id))
+      if (editingGestor.role === 'supervisor') {
+        // Permissões de menu vivem no custom claim também — a Cloud Function
+        // atualiza o doc e o trigger sincronizarClaimsUsuario cuida do claim.
+        await atualizarPermissoesSupervisorFn({ uid: editingGestor.id, menuPermissions: form.menuPermissions })
+      } else {
+        // Recalcula atribuição de lojas
+        const anteriores = lojas.filter(l => l.gestorId === editingGestor.id).map(l => l.id)
+        const adicionadas = form.lojasIds.filter(id => !anteriores.includes(id))
+        const removidas   = anteriores.filter(id => !form.lojasIds.includes(id))
 
-      // gestorNome é um cache desnormalizado no doc da loja (usado pra exibir o
-      // nome sem precisar de join) — sem atualizar aqui junto com gestorId, a
-      // tabela de Lojas continuava mostrando o gestor antigo mesmo após a
-      // reatribuição ter funcionado por baixo dos panos.
-      const nomeAtualizado = form.nome.trim()
-      await Promise.all([
-        ...adicionadas.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: editingGestor.id, gestorNome: nomeAtualizado })),
-        ...removidas.map(id   => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: null, gestorNome: null })),
-      ])
+        // gestorNome é um cache desnormalizado no doc da loja (usado pra exibir o
+        // nome sem precisar de join) — sem atualizar aqui junto com gestorId, a
+        // tabela de Lojas continuava mostrando o gestor antigo mesmo após a
+        // reatribuição ter funcionado por baixo dos panos.
+        const nomeAtualizado = form.nome.trim()
+        await Promise.all([
+          ...adicionadas.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: editingGestor.id, gestorNome: nomeAtualizado })),
+          ...removidas.map(id   => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: null, gestorNome: null })),
+        ])
+      }
 
-      toast('Gestor atualizado.', 'success')
+      toast(isSupervisorForm ? 'Supervisor atualizado.' : 'Gestor atualizado.', 'success')
     } else {
       // Cria a conta via Cloud Function: garante custom claims (role/organizacaoId)
       // corretos desde o início — criar direto pelo client (Auth + Firestore)
       // deixava o gestor sem claim nenhum e incapaz de logar.
       const organizacaoId = isSuperAdmin ? form.organizacaoId : (user?.organizacaoId ?? null)
-      const { data } = await criarGestorFn({
-        email: form.email.trim().toLowerCase(),
-        senha: form.senha,
-        nome:  form.nome.trim(),
-        organizacaoId,
-      })
-      const uid = data.uid
 
-      if (form.status === 'inativo') {
-        await updateDoc(doc(db, COLLECTIONS.USERS, uid), { status: 'inativo' })
+      if (isSupervisorForm) {
+        const { data } = await criarSupervisorFn({
+          email: form.email.trim().toLowerCase(),
+          senha: form.senha,
+          nome:  form.nome.trim(),
+          organizacaoId,
+          menuPermissions: form.menuPermissions,
+        })
+        if (form.status === 'inativo') {
+          await updateDoc(doc(db, COLLECTIONS.USERS, data.uid), { status: 'inativo' })
+        }
+        toast('Supervisor criado com sucesso.', 'success')
+      } else {
+        const { data } = await criarGestorFn({
+          email: form.email.trim().toLowerCase(),
+          senha: form.senha,
+          nome:  form.nome.trim(),
+          organizacaoId,
+        })
+        const uid = data.uid
+
+        if (form.status === 'inativo') {
+          await updateDoc(doc(db, COLLECTIONS.USERS, uid), { status: 'inativo' })
+        }
+
+        // Atribui lojas selecionadas (gestorNome junto — ver comentário acima sobre o cache)
+        if (form.lojasIds.length > 0) {
+          await Promise.all(
+            form.lojasIds.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: uid, gestorNome: form.nome.trim() }))
+          )
+        }
+
+        toast('Gestor criado com sucesso.', 'success')
       }
-
-      // Atribui lojas selecionadas (gestorNome junto — ver comentário acima sobre o cache)
-      if (form.lojasIds.length > 0) {
-        await Promise.all(
-          form.lojasIds.map(id => updateDoc(doc(db, COLLECTIONS.LOJAS, id), { gestorId: uid, gestorNome: form.nome.trim() }))
-        )
-      }
-
-      toast('Gestor criado com sucesso.', 'success')
     }
 
     await loadAll()
@@ -986,7 +1073,7 @@ export default function Gestores() {
         <h1 className="page-title" style={{ marginBottom: 0 }}>Gestores</h1>
         <button onClick={openNew} className="btn-primary flex items-center gap-2 h-9">
           <Plus size={15} strokeWidth={2} />
-          Novo gestor
+          {isAdmin ? 'Novo gestor / supervisor' : 'Novo gestor'}
         </button>
       </div>
 
@@ -1042,6 +1129,18 @@ export default function Gestores() {
                     <td className="px-4 h-12 text-[14px] text-text-primary font-medium">
                       <span className="inline-flex items-center gap-2">
                         {g.nome}
+                        {g.role === 'supervisor' && (
+                          <span
+                            className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
+                            style={{
+                              padding: '1px 6px', borderRadius: '4px',
+                              color: '#2563EB', backgroundColor: '#EFF6FF',
+                              border: '1px solid #BFDBFE',
+                            }}
+                          >
+                            Supervisor
+                          </span>
+                        )}
                         {g.status === 'inativo' && (
                           <span
                             className="text-[10px] font-medium uppercase tracking-[0.04em] shrink-0"
@@ -1127,6 +1226,7 @@ export default function Gestores() {
         gestores={gestores}
         organizacoes={organizacoes}
         isSuperAdmin={isSuperAdmin}
+        isAdmin={isAdmin}
       />
 
       <DeleteGestorModal

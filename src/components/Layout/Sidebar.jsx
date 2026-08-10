@@ -44,7 +44,7 @@ const NAV_MAIN = [
 // os gestores (admin). Rota já é gated por AdminRoute; aqui só evita mostrar
 // o item pra quem não vai conseguir acessá-lo.
 const NAV_MAIN_ADMIN = [
-  { to: '/metricas', label: 'Métricas', icon: BarChart3 },
+  { to: '/metricas', label: 'Métricas', icon: BarChart3, menuKey: 'metricas' },
 ]
 
 // CRM de prospecção — visível pra quem pertence a uma organização (admin_org
@@ -55,10 +55,10 @@ const NAV_CRM = [
 
 // Clientes/Lojas/Contratos seguem exclusivos de admin (mesmas rotas de sempre)
 const NAV_CARTEIRA_ADMIN = [
-  { to: '/clientes',  label: 'Clientes',  icon: Users    },
-  { to: '/lojas',     label: 'Lojas',     icon: Store    },
-  { to: '/contratos', label: 'Contratos', icon: FileText },
-  { to: '/financeiro', label: 'Financeiro', icon: Wallet },
+  { to: '/clientes',  label: 'Clientes',  icon: Users,    menuKey: 'clientes'   },
+  { to: '/lojas',     label: 'Lojas',     icon: Store,    menuKey: 'lojas'      },
+  { to: '/contratos', label: 'Contratos', icon: FileText, menuKey: 'contratos' },
+  { to: '/financeiro', label: 'Financeiro', icon: Wallet,  menuKey: 'financeiro' },
 ]
 
 // Visível para admin e gestor
@@ -75,7 +75,7 @@ const NAV_GESTAO = [
 ]
 
 const NAV_PERFIL = [
-  { to: '/gestores', label: 'Gestores', icon: UserCog },
+  { to: '/gestores', label: 'Gestores', icon: UserCog, menuKey: 'gestores' },
 ]
 
 // Visível só para master (gestão da plataforma como um todo, entre organizações)
@@ -352,8 +352,8 @@ function NavSection({ sectionKey, label, collapsedSections, onToggle, sidebarCol
 }
 
 export default function Sidebar() {
-  const { user, isAdmin, isSuperAdmin, isAdminOrg, logout } = useAuth()
-  const navResultado = isAdmin ? [...NAV_MAIN, ...NAV_MAIN_ADMIN] : NAV_MAIN
+  const { user, isAdmin, isSuperAdmin, isAdminOrg, isSupervisor, podeVerMenu, logout } = useAuth()
+  const navResultado = [...NAV_MAIN, ...NAV_MAIN_ADMIN.filter(i => podeVerMenu(i.menuKey))]
   const pertenceOrg = !!user?.organizacaoId
   const navigate = useNavigate()
   const location = useLocation()
@@ -399,8 +399,8 @@ export default function Sidebar() {
     const sectionItemsMap = {
       resultado: navResultado,
       gestao:    NAV_GESTAO,
-      carteira:  [...(pertenceOrg ? NAV_CRM : []), ...(isAdmin ? NAV_CARTEIRA_ADMIN : []), ...NAV_CARTEIRA_TODOS],
-      perfil:    isAdmin ? NAV_PERFIL : [],
+      carteira:  [...(pertenceOrg ? NAV_CRM : []), ...NAV_CARTEIRA_ADMIN.filter(i => podeVerMenu(i.menuKey)), ...NAV_CARTEIRA_TODOS],
+      perfil:    NAV_PERFIL.filter(i => podeVerMenu(i.menuKey)),
       plataforma: isSuperAdmin ? NAV_PLATAFORMA : [],
       suporte:   NAV_SUPORTE,
     }
@@ -412,7 +412,7 @@ export default function Sidebar() {
       saveCollapsedSections(next)
       return next
     })
-  }, [location.pathname, isAdmin, isSuperAdmin])
+  }, [location.pathname, isAdmin, isSuperAdmin, podeVerMenu])
 
   // ── Onboard: lojas aguardando preenchimento de dados (master: todas / admin_org:
   // só da própria org / gestor: só as suas) — sem o filtro de organizacaoId pra
@@ -567,7 +567,9 @@ export default function Sidebar() {
     '/atividades': atividadesHighlight,
   }
 
-  const carteiraItems = [...(pertenceOrg ? NAV_CRM : []), ...(isAdmin ? NAV_CARTEIRA_ADMIN : []), ...NAV_CARTEIRA_TODOS]
+  const carteiraAdminItems = NAV_CARTEIRA_ADMIN.filter(i => podeVerMenu(i.menuKey))
+  const carteiraItems = [...(pertenceOrg ? NAV_CRM : []), ...carteiraAdminItems, ...NAV_CARTEIRA_TODOS]
+  const perfilItems = NAV_PERFIL.filter(i => podeVerMenu(i.menuKey))
 
   // Pendências agregadas por seção — vira o badge no label quando a seção
   // está colapsada no modo expandido (mesma chave usada no toggle).
@@ -674,7 +676,7 @@ export default function Sidebar() {
           {pertenceOrg && NAV_CRM.map(({ to, label, icon: Icon }) => (
             <NavItem key={to} to={to} label={label} Icon={Icon} highlight={HIGHLIGHTS[to]} collapsed={effectiveCollapsed} />
           ))}
-          {isAdmin && NAV_CARTEIRA_ADMIN.map(({ to, label, icon: Icon }) => (
+          {carteiraAdminItems.map(({ to, label, icon: Icon }) => (
             <NavItem
               key={to}
               to={to}
@@ -701,16 +703,16 @@ export default function Sidebar() {
           ))}
         </NavSection>
 
-        {isAdmin && (
+        {perfilItems.length > 0 && (
           <NavSection
             sectionKey="perfil"
             label="Perfil"
-            pendingDots={pendingDotsFor(NAV_PERFIL)}
+            pendingDots={pendingDotsFor(perfilItems)}
             collapsedSections={collapsedSections}
             onToggle={toggleSection}
             sidebarCollapsed={effectiveCollapsed}
           >
-            {NAV_PERFIL.map(({ to, label, icon: Icon }) => (
+            {perfilItems.map(({ to, label, icon: Icon }) => (
               <NavItem key={to} to={to} label={label} Icon={Icon} highlight={HIGHLIGHTS[to]} collapsed={effectiveCollapsed} />
             ))}
           </NavSection>
@@ -756,7 +758,7 @@ export default function Sidebar() {
               {user?.nome ?? '—'}
             </span>
             <span className="font-sans" style={{ fontSize: '10px', fontWeight: 500, color: '#9AA3AF', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              {isSuperAdmin ? 'Master' : isAdminOrg ? 'Admin' : 'Gestor'}
+              {isSuperAdmin ? 'Master' : isAdminOrg ? 'Admin' : isSupervisor ? 'Supervisor' : 'Gestor'}
             </span>
           </div>
         )}

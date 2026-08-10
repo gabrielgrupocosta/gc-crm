@@ -27,6 +27,18 @@ service cloud.firestore {
       return autenticado() && role() == 'gestor';
     }
 
+    function isSupervisor() {
+      return autenticado() && role() == 'supervisor';
+    }
+
+    // Supervisor tem escopo de dados igual admin_org (organização inteira),
+    // mas só nas coleções cujo menu foi liberado no custom claim. curto-circuita
+    // em isSupervisor() primeiro pra não quebrar em tokens de outros roles que
+    // não têm o campo menuPermissions.
+    function temMenu(chave) {
+      return isSupervisor() && (chave in request.auth.token.menuPermissions);
+    }
+
     function mesmaOrg(dados) {
       return autenticado() && organizacaoId() == dados.organizacaoId;
     }
@@ -104,8 +116,13 @@ service cloud.firestore {
     // documentos da própria organizacaoId; master acessa tudo.
     match /users/{userId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
-      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
-      allow update, delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data))
+        || (temMenu('gestores') && mesmaOrg(request.resource.data) && request.resource.data.role == 'gestor');
+      allow update, delete: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(resource.data))
+        || (temMenu('gestores') && mesmaOrg(resource.data) && resource.data.role == 'gestor'
+            && (!('role' in request.resource.data) || request.resource.data.role == 'gestor'));
     }
 
     // Clientes: contém mensalidade (dado financeiro). Update exige dupla
@@ -113,9 +130,11 @@ service cloud.firestore {
     match /clientes/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin()
-        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('clientes'));
+        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('clientes'))
+        || (temMenu('clientes') && mesmaOrg(request.resource.data) && rateLimitOk('clientes'));
       allow update: if isSuperAdmin()
-        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data));
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (temMenu('clientes') && escritaSeguraOrg(resource.data, request.resource.data));
       allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
@@ -123,11 +142,13 @@ service cloud.firestore {
     // da própria organização (gestor não acessa, mesma exclusividade de Clientes).
     // Update exige dupla política — organizacaoId não pode ser alterado.
     match /contratos/{docId} {
-      allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+      allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data)) || (temMenu('contratos') && mesmaOrg(resource.data));
       allow create: if isSuperAdmin()
-        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('contratos'));
+        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('contratos'))
+        || (temMenu('contratos') && mesmaOrg(request.resource.data) && rateLimitOk('contratos'));
       allow update: if isSuperAdmin()
-        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data));
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (temMenu('contratos') && escritaSeguraOrg(resource.data, request.resource.data));
       allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
@@ -135,10 +156,13 @@ service cloud.firestore {
     // dado financeiro do cliente, só master e admin_org da própria organização.
     // Update exige dupla política — organizacaoId não pode ser alterado.
     match /cobrancas/{docId} {
-      allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
-      allow create: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(request.resource.data));
+      allow read: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data)) || (temMenu('financeiro') && mesmaOrg(resource.data));
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data))
+        || (temMenu('financeiro') && mesmaOrg(request.resource.data));
       allow update: if isSuperAdmin()
-        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data));
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (temMenu('financeiro') && escritaSeguraOrg(resource.data, request.resource.data));
       allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
     }
 
@@ -149,9 +173,11 @@ service cloud.firestore {
     match /lojas/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin()
-        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('lojas'));
+        || (isAdminOrg() && mesmaOrg(request.resource.data) && rateLimitOk('lojas'))
+        || (temMenu('lojas') && mesmaOrg(request.resource.data) && rateLimitOk('lojas'));
       allow update: if isSuperAdmin()
         || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (temMenu('lojas') && escritaSeguraOrg(resource.data, request.resource.data))
         || (isGestor() && escritaSeguraOrg(resource.data, request.resource.data)
             && resource.data.gestorId == request.auth.uid
             && request.resource.data.gestorId == request.auth.uid);
@@ -162,6 +188,23 @@ service cloud.firestore {
     // política — organizacaoId não pode ser alterado na edição, e o gestor
     // só edita resultado que continua sendo dele antes e depois da escrita.
     match /resultados/{docId} {
+      allow read: if isSuperAdmin() || mesmaOrg(resource.data);
+      allow create: if isSuperAdmin()
+        || (isAdminOrg() && mesmaOrg(request.resource.data))
+        || (isGestor() && mesmaOrg(request.resource.data) && request.resource.data.gestorId == request.auth.uid);
+      allow update: if isSuperAdmin()
+        || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (isGestor() && escritaSeguraOrg(resource.data, request.resource.data)
+            && resource.data.gestorId == request.auth.uid
+            && request.resource.data.gestorId == request.auth.uid);
+      allow delete: if isSuperAdmin() || (isAdminOrg() && mesmaOrg(resource.data));
+    }
+
+    // Checkpoints de lojas novas (acompanhamento dos primeiros 30 dias/4
+    // semanas de gestão, independente de resultados/dashboard) — mesma regra
+    // de escopo de Resultados: gestor só cria/edita checkpoint de loja onde é
+    // o gestorId responsável.
+    match /checkpoints_lojas_novas/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin()
         || (isAdminOrg() && mesmaOrg(request.resource.data))

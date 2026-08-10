@@ -60,12 +60,13 @@ function PrivateRoute() {
   return <Outlet />
 }
 
-// Bloqueia rotas exclusivas de admin
-function AdminRoute() {
-  const { user, loading, isAdmin } = useAuth()
+// Bloqueia rotas exclusivas de admin (master/admin_org sempre passam; supervisor
+// só se o menu correspondente estiver liberado no cadastro dele)
+function MenuRoute({ menuKey }) {
+  const { user, loading, podeVerMenu } = useAuth()
   if (loading) return <LoadingScreen />
   if (!user) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/dashboard" replace />
+  if (!podeVerMenu(menuKey)) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
 
@@ -371,13 +372,23 @@ function AppRoutes() {
           <Route path="/feedback"    element={<Feedback />} />
           <Route path="/onboard"     element={<Onboard />} />
 
-          <Route element={<AdminRoute />}>
-            <Route path="/lojas"     element={<Lojas />} />
-            <Route path="/clientes"  element={<Clientes />} />
+          <Route element={<MenuRoute menuKey="lojas" />}>
+            <Route path="/lojas" element={<Lojas />} />
+          </Route>
+          <Route element={<MenuRoute menuKey="clientes" />}>
+            <Route path="/clientes" element={<Clientes />} />
+          </Route>
+          <Route element={<MenuRoute menuKey="contratos" />}>
             <Route path="/contratos" element={<Contratos />} />
+          </Route>
+          <Route element={<MenuRoute menuKey="financeiro" />}>
             <Route path="/financeiro" element={<Financeiro />} />
-            <Route path="/gestores"  element={<Gestores />} />
-            <Route path="/metricas"  element={<Metricas />} />
+          </Route>
+          <Route element={<MenuRoute menuKey="gestores" />}>
+            <Route path="/gestores" element={<Gestores />} />
+          </Route>
+          <Route element={<MenuRoute menuKey="metricas" />}>
+            <Route path="/metricas" element={<Metricas />} />
           </Route>
 
           <Route element={<SuperAdminRoute />}>

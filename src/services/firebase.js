@@ -210,4 +210,5 @@ export const COLLECTIONS = {
   CRM_LEADS:     'crm_leads',
   CONTRATOS:     'contratos',
   COBRANCAS:     'cobrancas',
+  CHECKPOINTS_LOJAS_NOVAS: 'checkpoints_lojas_novas',
 }
