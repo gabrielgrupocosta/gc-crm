@@ -23,17 +23,31 @@ const MALHA_URL = 'https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?intr
 const OFFSET_PIN_PX = 10
 const iconesPorPosicao = new Map()
 
-function pinIcon(indiceNoGrupo = 0, totalNoGrupo = 1) {
-  const chave = `${indiceNoGrupo}-${totalNoGrupo}`
-  if (iconesPorPosicao.has(chave)) return iconesPorPosicao.get(chave)
+// Cacheia por (posição no grupo × parado/caindo × duração da queda) — é
+// essencial que o ícone de um pin já pousado seja sempre a MESMA instância
+// entre renders: se `pinIcon` devolvesse um `L.divIcon` novo a cada chamada,
+// o Leaflet chama `marker.setIcon()` (troca o nó no DOM) em TODOS os pins já
+// visíveis a cada re-render do componente pai — não só no pin novo — e isso
+// reinicia a animação CSS de queda em todo mundo ao mesmo tempo, mesmo quem
+// já tinha pousado. Só o pin recém-adicionado (chovendo=true) deve animar;
+// os anteriores reaproveitam o ícone parado cacheado, sem novo nó no DOM.
+function pinIcon(indiceNoGrupo = 0, totalNoGrupo = 1, chovendo = false, quedaMs = 400) {
   const meio = (totalNoGrupo - 1) / 2
   const deslocamentoPx = (indiceNoGrupo - meio) * OFFSET_PIN_PX
-  const icon = L.divIcon({
-    className: '',
-    html: `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
+  const chave = `${indiceNoGrupo}-${totalNoGrupo}-${chovendo ? quedaMs : 'parado'}`
+  if (iconesPorPosicao.has(chave)) return iconesPorPosicao.get(chave)
+
+  const svgHtml = `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
       <path d="M13 0C5.8 0 0 5.8 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.8 20.2 0 13 0z" fill="#E5322D"/>
       <circle cx="13" cy="13" r="5.5" fill="#FFFFFF"/>
-    </svg>`,
+    </svg>`
+  const html = chovendo
+    ? `<div class="pin-chuva" style="animation-duration:${quedaMs}ms">${svgHtml}</div>`
+    : svgHtml
+
+  const icon = L.divIcon({
+    className: '',
+    html,
     iconSize: [26, 34],
     iconAnchor: [13 - deslocamentoPx, 34],
     popupAnchor: [deslocamentoPx, -30],
@@ -113,6 +127,7 @@ function ContornoEstados({ geoData, ufsAtendidas, zoomInicial }) {
     const uf = UF_POR_CODAREA[feature.properties.codarea]
     const atendida = uf && ufsAtendidas[uf] > 0
     return {
+      className: 'estado-contorno',
       color: atendida ? '#E5322D' : '#BBBBBB',
       weight: atendida ? 2.5 : 1,
       opacity: atendida ? 0.9 : 0.35,
@@ -227,6 +242,58 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
     return espalharColisoes(base)
   }, [lojas, clienteMap, gestorMap])
 
+  // Ordena sul → norte (latitude mais negativa primeiro, já que no Brasil o
+  // sul fica em torno de -33° e o norte perto do equador) — é a ordem em que
+  // os pins "chovem" quando o mapa abre.
+  const pontosOrdenados = useMemo(() => [...pontos].sort((a, b) => a.lat - b.lat), [pontos])
+
+  // Quantos pins já "pousaram" — sobe de 1 em 1, começando do zero toda vez
+  // que o modal reabre. O contorno dos estados usa esse mesmo índice pra ir
+  // revelando a cor conforme os pins daquele estado caem.
+  const [pinsVisiveis, setPinsVisiveis] = useState(0)
+
+  // Duração da queda de UM pin — o intervalo entre pins é IGUAL a essa
+  // duração (nunca menor), então o próximo só começa a cair quando o
+  // anterior já pousou: é isso que garante "um de cada vez" em vez de vários
+  // caindo ao mesmo tempo. Encolhe um pouco com muitas lojas (piso 220ms)
+  // só pra não esticar demais o total, mas continua estritamente sequencial.
+  const quedaMs = useMemo(
+    () => Math.round(Math.max(220, Math.min(500, 4500 / Math.max(pontosOrdenados.length, 1)))),
+    [pontosOrdenados.length]
+  )
+
+  useEffect(() => {
+    if (!isOpen) { setPinsVisiveis(0); return }
+    if (pontosOrdenados.length === 0) return
+    setPinsVisiveis(0)
+    let i = 0
+    const id = setInterval(() => {
+      i++
+      setPinsVisiveis(i)
+      if (i >= pontosOrdenados.length) clearInterval(id)
+    }, quedaMs)
+    return () => clearInterval(id)
+  }, [isOpen, pontosOrdenados.length, quedaMs])
+
+  const pontosVisiveis = useMemo(() => pontosOrdenados.slice(0, pinsVisiveis), [pontosOrdenados, pinsVisiveis])
+
+  // UFs "reveladas" até agora — o contorno some pintado assim que o primeiro
+  // pin daquele estado pousa, não espera todos os pins do país.
+  const ufsReveladas = useMemo(() => {
+    const set = new Set()
+    pontosVisiveis.forEach(p => {
+      const uf = normalizarUF(p.estado)
+      if (uf) set.add(uf)
+    })
+    return set
+  }, [pontosVisiveis])
+
+  const ufsAtendidasReveladas = useMemo(() => {
+    const map = {}
+    ufsReveladas.forEach(uf => { map[uf] = ufsAtendidas[uf] })
+    return map
+  }, [ufsReveladas, ufsAtendidas])
+
   // Lojas com cidade/estado preenchidos mas sem coordenada — aparecem na
   // lista lateral (contam pro total do estado) mas não têm pin no mapa.
   // Acontece com lojas cadastradas antes do geocode existir, ou cujo
@@ -283,6 +350,24 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
           animate="animate"
           exit="exit"
         >
+          {/* Animação de "chuva de pins" + contorno dos estados ganhando cor
+              conforme os pins pousam — pin-chuva toca sozinha ao entrar no
+              DOM (cada marker só monta uma vez); estado-contorno anima a
+              transição de opacidade quando o React troca o style do GeoJSON. */}
+          <style>{`
+            @keyframes pinChuva {
+              0%   { transform: translateY(-560px); opacity: 0; }
+              100% { transform: translateY(0); opacity: 1; }
+            }
+            .pin-chuva {
+              /* easeOutExpo — cai rápido e desacelera suave até parar
+                 exatamente na posição final, sem quicar nem oscilar. */
+              animation: pinChuva 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+            }
+            .estado-contorno {
+              transition: fill-opacity 450ms ease, opacity 400ms ease, stroke-opacity 400ms ease;
+            }
+          `}</style>
           <div className="flex items-center justify-between shrink-0" style={{ padding: '14px 20px', borderBottom: '1px solid #E8E8E8', backgroundColor: '#FFFFFF' }}>
             <div>
               <h2 style={{ fontSize: '16px', fontWeight: 600, color: '#111111' }}>Mapa das Lojas</h2>
@@ -446,10 +531,14 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
               )}
               <MapContainer center={BRASIL_CENTER} zoom={4} style={{ width: '100%', height: '100%' }} scrollWheelZoom>
                 <TileConformeZoom zoomInicial={4} />
-                {geoData && <ContornoEstados geoData={geoData} ufsAtendidas={ufsAtendidas} zoomInicial={4} />}
+                {geoData && <ContornoEstados geoData={geoData} ufsAtendidas={ufsAtendidasReveladas} zoomInicial={4} />}
                 <FitBounds pontos={pontos} />
-                {pontos.map(p => (
-                  <Marker key={p.id} position={[p.lat, p.lng]} icon={pinIcon(p.indiceGrupo, p.totalGrupo)}>
+                {pontosVisiveis.map((p, i) => (
+                  <Marker
+                    key={p.id}
+                    position={[p.lat, p.lng]}
+                    icon={pinIcon(p.indiceGrupo, p.totalGrupo, i === pinsVisiveis - 1, quedaMs)}
+                  >
                     <Popup>
                       <div style={{ fontFamily: 'Inter, sans-serif', minWidth: '160px' }}>
                         <p style={{ fontSize: '13px', fontWeight: 600, color: '#111111', margin: '0 0 4px' }}>{p.nome}</p>
