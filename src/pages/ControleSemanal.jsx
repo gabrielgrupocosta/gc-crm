@@ -1098,6 +1098,9 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                 <h2 style={{ fontSize: '16px', fontWeight: 700, color: '#111111', letterSpacing: '-0.02em', margin: 0 }}>{loja.nome}</h2>
+                {!multiplasPlataformas && plataformasLoja[0] && (
+                  <PlatformBadge plataforma={plataformasLoja[0]} />
+                )}
                 {multiplasPlataformas && plataformaSelecionada && (
                   <>
                     <PlatformBadge plataforma={plataformaSelecionada} />
@@ -1442,7 +1445,7 @@ function corBordaCliente(loja) {
   return COR_BORDA_PLATAFORMA[key] ?? '#999999'
 }
 
-function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleProps, innerRef, style, collapsed, agrupavel }) {
+function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleProps, innerRef, style, agrupavel }) {
   const detalhes = reportStatus.detalhes
   const corGrupo  = agrupavel ? corBordaCliente(loja) : null
   return (
@@ -1451,68 +1454,49 @@ function LojaCellCard({ loja, reportStatus, onClickLoja, isDragging, dragHandleP
       {...dragHandleProps}
       style={{
         display: 'flex', flexDirection: 'column', gap: '3px',
-        padding: collapsed ? '0' : '6px 8px', borderRadius: '5px',
+        padding: '6px 8px', borderRadius: '5px',
         minWidth: 0, boxSizing: 'border-box',
-        border: collapsed ? 'none' : (isDragging ? '2px solid #EA1D2C' : '1px solid #E8E8E8'),
-        borderLeft: collapsed ? 'none' : (corGrupo ? `3px solid ${corGrupo}` : undefined),
+        border: isDragging ? '2px solid #EA1D2C' : '1px solid #E8E8E8',
+        borderLeft: corGrupo ? `3px solid ${corGrupo}` : undefined,
         backgroundColor: isDragging ? '#FFFFFF' : '#F7F7F8',
         cursor: isDragging ? 'grabbing' : 'grab',
         boxShadow: isDragging ? '0 8px 24px rgba(0,0,0,0.15)' : 'none',
         transition: isDragging ? 'none' : 'border-color 150ms, background-color 150ms',
-        height: collapsed ? 0 : undefined,
-        margin: collapsed ? 0 : undefined,
-        overflow: collapsed ? 'hidden' : undefined,
-        pointerEvents: collapsed ? 'none' : undefined,
         ...style,
       }}
       onClick={() => onClickLoja(loja)}
       onMouseEnter={e => { if (!isDragging) { e.currentTarget.style.borderColor = '#DDDDDD'; e.currentTarget.style.backgroundColor = '#FFFFFF' } }}
       onMouseLeave={e => { if (!isDragging) { e.currentTarget.style.borderColor = '#E8E8E8'; e.currentTarget.style.backgroundColor = '#F7F7F8' } }}
     >
-      {!collapsed && (
-        <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-            <span style={{ fontSize: '12px', color: '#111111', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{loja.nome}</span>
-            <ReportStatusBadge type={reportStatus.type} />
-          </div>
-          {detalhes && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {detalhes.map(d => (
-                <PlataformaMiniStatus key={d.plataforma} plataforma={d.plataforma} existe={d.existe} />
-              ))}
-            </div>
-          )}
-        </>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+        <span style={{ fontSize: '12px', color: '#111111', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>{loja.nome}</span>
+        <ReportStatusBadge type={reportStatus.type} />
+      </div>
+      {detalhes && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {detalhes.map(d => (
+            <PlataformaMiniStatus key={d.plataforma} plataforma={d.plataforma} existe={d.existe} />
+          ))}
+        </div>
       )}
     </div>
   )
 }
 
 // ─── ClienteHeader ────────────────────────────────────────────────────────────
-// Header clicável acima das lojas de um mesmo cliente (quando ele tem mais de
-// uma loja no dia) dentro de uma coluna do calendário — expande/colapsa os
-// cards (que continuam montados no DOM pra não quebrar os índices do
-// drag-and-drop, só ficam com display:none). Agrupamento automático: não
+// Header acima das lojas de um mesmo cliente (quando ele tem mais de uma loja
+// no dia) dentro de uma coluna do calendário. Agrupamento automático: não
 // depende de nenhum cadastro à parte, só de duas ou mais lojas com o mesmo
-// clienteId aparecendo no mesmo dia.
+// clienteId aparecendo no mesmo dia. Sempre visível — arrastar uma loja do
+// grupo arrasta todas as demais junto (ver handleDragEnd).
 
-function ClienteHeader({ clienteNome, lojasDoCliente, getReportStatus, collapsed, onToggle }) {
+function ClienteHeader({ clienteNome, lojasDoCliente, getReportStatus }) {
   const total = lojasDoCliente.length
   const enviados = lojasDoCliente.filter(l => getReportStatus(l).type === 'enviado').length
 
   return (
-    <div
-      onClick={onToggle}
-      style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px',
-        padding: '4px 6px', cursor: 'pointer', userSelect: 'none',
-        borderRadius: '4px', transition: 'background-color 100ms',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.backgroundColor = '#F0F0F0' }}
-      onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent' }}
-    >
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', padding: '4px 6px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '5px', minWidth: 0 }}>
-        <ChevronRightIcon collapsed={collapsed} />
         <span style={{ fontSize: '12px', fontWeight: 600, color: '#111111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {clienteNome}
         </span>
@@ -1522,17 +1506,6 @@ function ClienteHeader({ clienteNome, lojasDoCliente, getReportStatus, collapsed
         {enviados}/{total} enviados
       </span>
     </div>
-  )
-}
-
-function ChevronRightIcon({ collapsed }) {
-  return (
-    <svg
-      width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#999999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ flexShrink: 0, transition: 'transform 100ms', transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
   )
 }
 
@@ -1573,18 +1546,9 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
   const semDia = useMemo(() => lojas.filter(l => !l.diaRelatorio), [lojas])
 
   const [columns, setColumns] = useState(() => buildColumns(lojas))
-  const [collapsedClientes, setCollapsedClientes] = useState(() => new Set())
   // Mobile: sem colunas lado a lado — abas de dia, uma coluna por vez.
   // Cai no dia de hoje se for dia útil da semana definida (seg-sáb); senão segunda.
   const [mobileDia, setMobileDia] = useState(() => DIAS[todayOffset]?.key ?? DIAS[0].key)
-
-  function toggleCliente(clienteId) {
-    setCollapsedClientes(prev => {
-      const next = new Set(prev)
-      if (next.has(clienteId)) next.delete(clienteId); else next.add(clienteId)
-      return next
-    })
-  }
 
   useEffect(() => {
     setColumns(prev => buildColumns(lojas, prev))
@@ -1611,7 +1575,7 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
   //
   // Agrupamento automático por cliente: sem cadastro à parte — sempre que 2+
   // lojas do mesmo clienteId aparecem no mesmo dia, ganham um header comum
-  // (colapsável); cliente com só uma loja no dia fica solto na lista.
+  // sempre expandido; cliente com só uma loja no dia fica solto na lista.
   function renderLojaItems(lojasDia, { draggable }) {
     const contagemPorCliente = {}
     lojasDia.forEach(l => {
@@ -1629,14 +1593,11 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
 
     return lojasDia.map((loja, idx) => {
       const agrupavel = !!loja.clienteId && contagemPorCliente[loja.clienteId] > 1
-      const ehColapsado = agrupavel ? collapsedClientes.has(loja.clienteId) : false
       const clienteHeader = agrupavel && primeiraOcorrencia.has(loja.id) && (
         <ClienteHeader
           clienteNome={loja.clienteNome ?? '—'}
           lojasDoCliente={lojasDia.filter(l => l.clienteId === loja.clienteId)}
           getReportStatus={getReportStatus}
-          collapsed={ehColapsado}
-          onToggle={() => toggleCliente(loja.clienteId)}
         />
       )
 
@@ -1655,7 +1616,6 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
                     innerRef={dragProvided.innerRef}
                     dragHandleProps={{ ...dragProvided.draggableProps, ...dragProvided.dragHandleProps }}
                     style={dragProvided.draggableProps.style}
-                    collapsed={ehColapsado && !dragSnapshot.isDragging}
                     agrupavel={agrupavel}
                   />
                 )
@@ -1666,8 +1626,6 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
         )
       }
 
-      if (ehColapsado) return <Fragment key={loja.id}>{clienteHeader}</Fragment>
-
       return (
         <Fragment key={loja.id}>
           {clienteHeader}
@@ -1676,7 +1634,6 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
               loja={loja}
               reportStatus={getReportStatus(loja)}
               onClickLoja={onClickLoja}
-              collapsed={false}
               agrupavel={agrupavel}
             />
             <select
@@ -1703,23 +1660,30 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
     const sourceDia = source.droppableId
     const destDia   = destination.droppableId
 
+    // Loja arrastada pertence a um grupo de cliente? Se sim, todas as outras
+    // lojas do mesmo cliente presentes na coluna de origem se movem junto.
+    const sourceList = columns[sourceDia] ?? []
+    const moved = sourceList.find(l => l.id === draggableId)
+    if (!moved) return
+    const grupo = moved.clienteId ? sourceList.filter(l => l.clienteId === moved.clienteId) : [moved]
+    const groupIds = new Set(grupo.map(l => l.id))
+
     setColumns(prev => {
       const next = { ...prev }
-      const sourceList = Array.from(next[sourceDia] ?? [])
-      const [moved] = sourceList.splice(source.index, 1)
-      next[sourceDia] = sourceList
+      const remainingSource = (prev[sourceDia] ?? []).filter(l => !groupIds.has(l.id))
+      next[sourceDia] = remainingSource
       if (sourceDia === destDia) {
-        sourceList.splice(destination.index, 0, moved)
+        remainingSource.splice(destination.index, 0, ...grupo)
       } else {
-        const destList = Array.from(next[destDia] ?? [])
-        destList.splice(destination.index, 0, moved)
+        const destList = Array.from(prev[destDia] ?? [])
+        destList.splice(destination.index, 0, ...grupo)
         next[destDia] = destList
       }
       return next
     })
 
     if (sourceDia !== destDia) {
-      onDropLoja(draggableId, destDia)
+      grupo.forEach(l => onDropLoja(l.id, destDia))
     }
   }
 
