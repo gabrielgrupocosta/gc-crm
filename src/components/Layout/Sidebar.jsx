@@ -75,7 +75,7 @@ const NAV_GESTAO = [
 ]
 
 const NAV_PERFIL = [
-  { to: '/gestores', label: 'Gestores', icon: UserCog, menuKey: 'gestores' },
+  { to: '/gestores', label: 'Acessos', icon: UserCog, menuKey: 'gestores' },
 ]
 
 // Visível só para master (gestão da plataforma como um todo, entre organizações)

@@ -17,7 +17,6 @@ import AssistenteFloatingButton from './components/Layout/AssistenteFloatingButt
 import PedirPermissaoNotificacao from './components/UI/PedirPermissaoNotificacao'
 import InstalarPWAiOS from './components/UI/InstalarPWAiOS'
 import InstalarPWAAndroid from './components/UI/InstalarPWAAndroid'
-import AppIntroSplash from './components/UI/AppIntroSplash'
 // Login carrega direto (é a primeira tela que qualquer usuário deslogado vê).
 // O resto é lazy — cada rota vira um chunk próprio, baixado só quando navegada,
 // em vez de inflar o bundle inicial com todas as 18 páginas de uma vez.
@@ -402,19 +401,7 @@ function AppRoutes() {
   )
 }
 
-// Viewport mobile no momento do mount (sem listener de resize — é uma
-// checagem de "abriu no celular", não algo que deva reagir a redimensionar
-// a janela do navegador em desktop). Mesmo breakpoint sm do Tailwind (640px)
-// usado no resto do produto.
-function isMobileViewport() {
-  return typeof window !== 'undefined' && window.innerWidth <= 640
-}
-
 export default function App() {
-  // Toca sempre que o app é aberto no celular — sessão ativa ou não, antes
-  // de qualquer coisa terminar de carregar por baixo (ver AppIntroSplash).
-  const [showIntro, setShowIntro] = useState(isMobileViewport)
-
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -427,9 +414,6 @@ export default function App() {
           </ToastProvider>
         </ModoTesteProvider>
       </AuthProvider>
-      <AnimatePresence>
-        {showIntro && <AppIntroSplash onFinish={() => setShowIntro(false)} />}
-      </AnimatePresence>
     </BrowserRouter>
   )
 }

@@ -524,7 +524,7 @@ function HistoricoLista({ itens, loadingHistDoc, onDownload }) {
 
 // ─── LojaModal ────────────────────────────────────────────────────────────────
 
-function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
+function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
   const toast = useToast()
   const { user, isSuperAdmin } = useAuth()
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
@@ -559,6 +559,12 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
   // pode trocar manualmente se precisar lançar dados de outra semana.
   const weekOptions = useMemo(() => generateWeekOptions(), [])
   const [semanaRef, setSemanaRef] = useState(() => getSemanaAnteriorAtual())
+
+  // ─ Dia da semana em que o relatório dessa loja é enviado — editável aqui
+  // (no lugar de um seletor solto na página) pra não competir com o scroll
+  // no mobile; mantém estado local pra refletir a troca sem esperar o pai
+  // repassar um `loja` atualizado.
+  const [diaSelecionado, setDiaSelecionado] = useState(loja.diaRelatorio ?? '')
 
   // ─ Seção 1: Desempenho da Semana
   const [faturamento,         setFaturamento]         = useState('')
@@ -1114,14 +1120,31 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio }) {
                   </>
                 )}
               </div>
-              <select
-                value={semanaRef}
-                onChange={e => setSemanaRef(e.target.value)}
-                className="select"
-                style={{ height: '22px', fontSize: '12px', color: '#999999', padding: '0 8px', width: 'auto' }}
-              >
-                {weekOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-              </select>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <select
+                  value={semanaRef}
+                  onChange={e => setSemanaRef(e.target.value)}
+                  className="select"
+                  style={{ height: '22px', fontSize: '12px', color: '#999999', padding: '0 8px', width: 'auto' }}
+                >
+                  {weekOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+                {onDefinirDia && (
+                  <select
+                    value={diaSelecionado}
+                    onChange={e => {
+                      const novoDia = e.target.value
+                      setDiaSelecionado(novoDia)
+                      if (novoDia) onDefinirDia(loja, novoDia)
+                    }}
+                    className="select"
+                    style={{ height: '22px', fontSize: '12px', color: '#999999', padding: '0 8px', width: 'auto' }}
+                  >
+                    <option value="" disabled>Dia do relatório…</option>
+                    {DIAS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
+                  </select>
+                )}
+              </div>
             </div>
             <button
               onClick={onClose}
@@ -1565,10 +1588,10 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
     return computeLojaStatus(diaOffset, todayOffset, !!resInfo, !!resInfo?.enviado, !!statusMaps.relatorios[loja.id])
   }
 
-  // Monta os itens (headers de cliente + cards) de uma coluna/dia — compartilhado
-  // entre a visão desktop (draggable=true, dentro de Droppable/Draggable) e a
-  // visão mobile em abas (draggable=false, card + select "mover para" no lugar
-  // do arrastar, que não é confiável em touch ao lado de scroll).
+  // Monta os itens (cards) de uma coluna/dia — compartilhado entre a visão
+  // desktop (draggable=true, dentro de Droppable/Draggable) e a visão mobile
+  // em abas (draggable=false, só o card — mover de dia no mobile é feito
+  // dentro do LojaModal, não direto na página, pra não competir com o scroll).
   //
   // Agrupamento automático por cliente: sem cadastro à parte — sempre que 2+
   // lojas do mesmo clienteId aparecem no mesmo dia, ganham destaque visual
@@ -1609,24 +1632,12 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
 
       return (
         <Fragment key={loja.id}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <LojaCellCard
-              loja={loja}
-              reportStatus={getReportStatus(loja)}
-              onClickLoja={onClickLoja}
-              agrupavel={agrupavel}
-            />
-            <select
-              value={loja.diaRelatorio ?? ''}
-              onClick={e => e.stopPropagation()}
-              onChange={e => { if (e.target.value) onDefinirDia(loja, e.target.value) }}
-              className="select"
-              style={{ height: '32px', fontSize: '12px' }}
-            >
-              <option value="" disabled>Mover para outro dia…</option>
-              {DIAS.map(d => <option key={d.key} value={d.key}>{d.label}</option>)}
-            </select>
-          </div>
+          <LojaCellCard
+            loja={loja}
+            reportStatus={getReportStatus(loja)}
+            onClickLoja={onClickLoja}
+            agrupavel={agrupavel}
+          />
         </Fragment>
       )
     })
@@ -1807,10 +1818,13 @@ export default function ControleSemanal() {
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const toast = useToast()
 
-  // A semana de referência pra badges/lançamentos é sempre a semana anterior
-  // à atual — fixa (não é mais um seletor navegável na página; a semana que
-  // pode ser trocada manualmente fica dentro do LojaModal).
-  const semanaAnteriorAtual = useMemo(() => getSemanaAnteriorAtual(), [])
+  // Semana de referência pra badges/lançamentos do calendário — default é
+  // sempre a semana anterior completa à atual (os números só fecham depois
+  // que a semana termina), mas o admin/gestor pode navegar pra outras
+  // semanas pelo seletor no header. Independente do seletor de semana do
+  // LojaModal, que serve pra lançar/editar um resultado específico.
+  const weekOptions = useMemo(() => generateWeekOptions(), [])
+  const [semanaSelecionada, setSemanaSelecionada] = useState(() => getSemanaAnteriorAtual())
 
   const [lojas,          setLojas]          = useState([])
   const [gestoresMap,    setGestoresMap]    = useState({})
@@ -1863,7 +1877,7 @@ export default function ControleSemanal() {
   }, [user, isAdmin, isSuperAdmin, toast])
 
   // Status do calendário: existência de `resultados`/`relatorios` para a
-  // semana anterior atual (fixa) — não depende de nenhum seletor da página.
+  // semana selecionada no header.
   useEffect(() => {
     if (!user || lojas.length === 0) { setStatusMaps({ resultados: {}, relatorios: {} }); return }
     let cancelled = false
@@ -1871,8 +1885,8 @@ export default function ControleSemanal() {
 
     async function load() {
       try {
-        const resConstraints = [where('semana', '==', semanaAnteriorAtual)]
-        const relConstraints = [where('semana', '==', semanaAnteriorAtual)]
+        const resConstraints = [where('semana', '==', semanaSelecionada)]
+        const relConstraints = [where('semana', '==', semanaSelecionada)]
         if (!isSuperAdmin) {
           resConstraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
           relConstraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
@@ -1903,7 +1917,7 @@ export default function ControleSemanal() {
     }
     load()
     return () => { cancelled = true }
-  }, [user, isAdmin, lojas, semanaAnteriorAtual, statusRefresh])
+  }, [user, isAdmin, lojas, semanaSelecionada, statusRefresh])
 
   // Escrita no sistema legado de "envio" (usado pelo checklist do Dashboard) —
   // mantido só como espelho pra não quebrar o Dashboard, não é mais lido aqui.
@@ -1987,7 +2001,17 @@ export default function ControleSemanal() {
       {/* Header */}
       <div className="page-header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <h1 className="page-title" style={{ marginBottom: 0 }}>Controle Semanal</h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select
+            value={semanaSelecionada}
+            onChange={e => setSemanaSelecionada(e.target.value)}
+            className="select"
+            style={{ height: '36px', fontSize: '13px', minWidth: '200px' }}
+          >
+            {weekOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
           <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '8px', padding: '8px 16px', textAlign: 'center', minWidth: '64px' }}>
             <span style={{ display: 'block', fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '20px', lineHeight: 1, color: '#16A34A', fontWeight: 500 }}>{totalEnviados}</span>
             <span className="section-label" style={{ fontSize: '10px', textTransform: 'lowercase' }}>enviados</span>
@@ -2051,6 +2075,7 @@ export default function ControleSemanal() {
             onClose={() => setLojaModal(null)}
             onSaved={() => setStatusRefresh(n => n + 1)}
             onMarcarEnvio={marcarEnvio}
+            onDefinirDia={handleDefinirDia}
           />
         )}
       </AnimatePresence>
