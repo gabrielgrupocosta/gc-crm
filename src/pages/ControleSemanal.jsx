@@ -821,6 +821,27 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
     reader.readAsDataURL(file)
   }
 
+  // Colar (Ctrl+V/⌘V) em qualquer lugar do modal — não só dentro de um campo
+  // de print específico. Clicar num campo pra "focar antes de colar" não
+  // funciona nesse formulário porque o clique já abre o seletor de arquivos
+  // (rouba o foco da página pro diálogo do SO); um listener no window resolve
+  // sem precisar mudar esse comportamento de clique. Preenche o primeiro
+  // campo ainda vazio, na ordem Desempenho → Financeiro → Operação.
+  useEffect(() => {
+    function onPasteGlobal(e) {
+      const item = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'))
+      if (!item) return
+      e.preventDefault()
+      const file = item.getAsFile()
+      if (!printDesempenho) { handlePrintFile(setPrintDesempenho, file); toast('Print colado em "Desempenho"', 'success') }
+      else if (!printFinanceiro) { handlePrintFile(setPrintFinanceiro, file); toast('Print colado em "Financeiro"', 'success') }
+      else if (!printOperacao) { handlePrintFile(setPrintOperacao, file); toast('Print colado em "Operação"', 'success') }
+      else toast('Os 3 campos de print já estão preenchidos', 'warning')
+    }
+    window.addEventListener('paste', onPasteGlobal)
+    return () => window.removeEventListener('paste', onPasteGlobal)
+  }, [printDesempenho, printFinanceiro, printOperacao])
+
   async function resolvePrintUrl(val, caminho) {
     if (val?.file) return await uploadImagem(val.file, caminho)
     return val?.dataUrl ?? null
@@ -1276,7 +1297,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                   </div>
                 </div>
                 <p style={{ fontSize: '11px', color: '#999999', margin: 0 }}>
-                  Dica: depois de tirar o print, clique num dos campos acima e cole com Ctrl+V (ou ⌘V) — não precisa salvar o arquivo antes.
+                  Dica: depois de tirar o print, cole com Ctrl+V (ou ⌘V) em qualquer lugar deste formulário — não precisa clicar no campo nem salvar o arquivo antes. Preenche o primeiro campo vazio.
                 </p>
 
                 {resultadoSalvo && (
