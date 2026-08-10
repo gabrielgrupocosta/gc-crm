@@ -475,7 +475,7 @@ function PercentInput({ value, onChange, borderColor, placeholder }) {
   return (
     <div style={{ ...INPUT_STYLE, display: 'flex', alignItems: 'center', gap: '4px', borderColor }}>
       <input
-        style={{ border: 'none', outline: 'none', background: 'transparent', flex: 1, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
+        style={{ border: 'none', outline: 'none', background: 'transparent', flex: '0 1 auto', width: `${Math.max(String(value ?? '').length, String(placeholder ?? '').length, 1) + 1}ch`, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
         value={value}
         onChange={onChange}
         placeholder={placeholder}
