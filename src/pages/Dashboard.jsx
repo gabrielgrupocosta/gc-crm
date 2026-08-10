@@ -709,13 +709,14 @@ function ModalLancamentoRapido({ loja, semana, periodoLabel, onClose, onSaved })
       const varNum = variacao !== '' && !isNaN(parseFloat(varStr)) ? parseFloat(varStr) : null
       const payload = {
         lojaId:           loja.id,
-        gestorId:         user.uid,
+        gestorId:         loja.gestorId,
+        organizacaoId:    loja.organizacaoId ?? user.organizacaoId ?? null,
         plataforma:       plataformaSelecionada,
         semana,
         faturamento:      fat,
         variacao:         varNum,
         observacoes:      observacoes.trim() || null,
-        relatorioEnviado: false,
+        relatorioEnviado: true,
         criadoEm:         serverTimestamp(),
       }
       const ref = await addDoc(collection(db, COLLECTIONS.RESULTADOS), payload)

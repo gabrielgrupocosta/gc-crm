@@ -696,6 +696,7 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
     }
   }, [ // eslint-disable-line react-hooks/exhaustive-deps
     faturamento, variacao, cancelamento, chamados, tempoAberto,
+    printDesempenho, printFinanceiro, printOperacao,
   ])
 
   async function autoSalvarResultado() {
@@ -704,6 +705,29 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
         lojaId: loja?.id, semanaRef, plataformaSelecionada, multiplasPlataformas,
       })
       return
+    }
+
+    // Sobe pro Storage qualquer print recém-anexado (ainda como File local) e
+    // atualiza o estado com a URL resultante, pra não reenviar o mesmo arquivo
+    // a cada disparo do debounce.
+    let urlDesempenho = printDesempenho?.dataUrl ?? null
+    let urlFinanceiro = printFinanceiro?.dataUrl ?? null
+    let urlOperacao   = printOperacao?.dataUrl ?? null
+    try {
+      if (printDesempenho?.file) {
+        urlDesempenho = await uploadImagem(printDesempenho.file, storagePath('resultados', 'desempenho'))
+        setPrintDesempenho({ dataUrl: urlDesempenho })
+      }
+      if (printFinanceiro?.file) {
+        urlFinanceiro = await uploadImagem(printFinanceiro.file, storagePath('resultados', 'financeiro'))
+        setPrintFinanceiro({ dataUrl: urlFinanceiro })
+      }
+      if (printOperacao?.file) {
+        urlOperacao = await uploadImagem(printOperacao.file, storagePath('resultados', 'operacao'))
+        setPrintOperacao({ dataUrl: urlOperacao })
+      }
+    } catch (err) {
+      console.error('[autoSave] erro ao subir prints:', err)
     }
 
     const docId = resultadoDocId(semanaRef)
@@ -718,6 +742,8 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
       cancelamento:  parseFloat(cancelamento)  || 0,
       chamados:      parseFloat(chamados)      || 0,
       tempoAberto:   parseFloat(tempoAberto)   || 0,
+      prints:        { desempenho: urlDesempenho, financeiro: urlFinanceiro, operacao: urlOperacao },
+      relatorioEnviado: true,
       atualizadoEm:  new Date().toISOString(),
     }
 
@@ -996,7 +1022,7 @@ function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia }) {
       const [urlDesempenho, urlFinanceiro, urlOperacao] = await Promise.all([
         resolvePrintUrl(printDesempenho, storagePath('resultados', 'desempenho')),
         resolvePrintUrl(printFinanceiro, storagePath('resultados', 'financeiro')),
-        resolvePrintUrl(printOperacao,   storagePath('relatorios', 'operacao')),
+        resolvePrintUrl(printOperacao,   storagePath('resultados', 'operacao')),
       ])
 
       // O PDF em si usa os dataURLs locais (evita depender de um fetch de
@@ -1814,9 +1840,16 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ControleSemanal() {
-  const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isSupervisor } = useAuth()
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const toast = useToast()
+
+  // Supervisor tem visão de dados equivalente à do admin (org inteira, não
+  // travada por gestorId) — só a permissão de menu é que é configurável, e
+  // Relatório Semanal é uma tela aberta a todos os roles. Por isso, pra fins
+  // de escopo de dados e renderização desta página, tratamos supervisor como
+  // admin (isAmplo), mantendo isAdmin puro só onde a distinção realmente importa.
+  const isAmplo = isAdmin || isSupervisor
 
   // Semana de referência pra badges/lançamentos do calendário — default é
   // sempre a semana anterior completa à atual (os números só fecham depois
@@ -1846,10 +1879,10 @@ export default function ControleSemanal() {
           ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
           : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
         const [lojasSnap, gestoresSnap] = await Promise.all([
-          isAdmin
+          isAmplo
             ? getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg))
             : getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', user.uid))),
-          isAdmin
+          isAmplo
             ? getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor')))
             : Promise.resolve(null),
         ])
@@ -1874,7 +1907,7 @@ export default function ControleSemanal() {
     }
     load()
     return () => { cancelled = true }
-  }, [user, isAdmin, isSuperAdmin, toast])
+  }, [user, isAmplo, isSuperAdmin, toast])
 
   // Status do calendário: existência de `resultados`/`relatorios` para a
   // semana selecionada no header.
@@ -1891,7 +1924,7 @@ export default function ControleSemanal() {
           resConstraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
           relConstraints.push(where('organizacaoId', '==', user.organizacaoId ?? null))
         }
-        if (!isAdmin) {
+        if (!isAmplo) {
           resConstraints.push(where('gestorId', '==', user.uid))
           relConstraints.push(where('gestorId', '==', user.uid))
         }
@@ -1917,7 +1950,7 @@ export default function ControleSemanal() {
     }
     load()
     return () => { cancelled = true }
-  }, [user, isAdmin, lojas, semanaSelecionada, statusRefresh])
+  }, [user, isAmplo, lojas, semanaSelecionada, statusRefresh])
 
   // Escrita no sistema legado de "envio" (usado pelo checklist do Dashboard) —
   // mantido só como espelho pra não quebrar o Dashboard, não é mais lido aqui.
@@ -1966,7 +1999,7 @@ export default function ControleSemanal() {
   }, [lojas, statusMaps])
 
   const gestorGroups = useMemo(() => {
-    if (!isAdmin) return null
+    if (!isAmplo) return null
     const groups = {}
     lojas.forEach(l => { const key = l.gestorId || SEM_GESTOR_KEY; if (!groups[key]) groups[key] = []; groups[key].push(l) })
     return Object.entries(groups)
@@ -1980,11 +2013,11 @@ export default function ControleSemanal() {
         if (a.semGestor !== b.semGestor) return a.semGestor ? -1 : 1
         return a.gestorNome.localeCompare(b.gestorNome, 'pt-BR')
       })
-  }, [isAdmin, lojas, gestoresMap])
+  }, [isAmplo, lojas, gestoresMap])
 
   const sortedLojas = useMemo(
-    () => isAdmin ? [] : [...lojas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
-    [isAdmin, lojas]
+    () => isAmplo ? [] : [...lojas].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+    [isAmplo, lojas]
   )
 
   if (loadingLojas) {
@@ -2026,7 +2059,7 @@ export default function ControleSemanal() {
       {/* Content */}
       {loadingStatus ? (
         <Skeleton.Table rows={4} cols={6} />
-      ) : isAdmin ? (
+      ) : isAmplo ? (
         gestorGroups && gestorGroups.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
             {gestorGroups.map(group => (
