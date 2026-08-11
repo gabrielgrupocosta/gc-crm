@@ -59,8 +59,21 @@ function formatVar(v) {
 // anterior) — mais robusto que média de `variacao` individuais, já que nem
 // todo doc de resultado tem esse campo preenchido. Mesmo padrão usado em
 // Carteira.jsx e Metricas.jsx.
+//
+// Compara o mesmo número de semanas dos dois lados. Se a org é recente e o
+// período "anterior" só tem histórico pra N semanas (menos que as pedidas),
+// usa só as N semanas mais recentes do período atual também — senão somar 4
+// semanas de atual contra só 2 de anterior infla a variação artificialmente
+// (mais dias de receita de um lado só porque falta histórico do outro).
 function crescimentoAgregado(atualDocs, anteriorDocs) {
-  const somaAtual    = atualDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
+  const semanasAnterior = new Set(anteriorDocs.map(r => r.semana))
+  if (semanasAnterior.size === 0) return null
+
+  const semanasAtualUsadas = new Set(
+    [...new Set(atualDocs.map(r => r.semana))].sort().reverse().slice(0, semanasAnterior.size)
+  )
+
+  const somaAtual    = atualDocs.filter(r => semanasAtualUsadas.has(r.semana)).reduce((s, r) => s + (r.faturamento ?? 0), 0)
   const somaAnterior = anteriorDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
   if (somaAnterior <= 0) return null
   return ((somaAtual - somaAnterior) / somaAnterior) * 100

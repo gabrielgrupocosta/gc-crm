@@ -78,11 +78,29 @@ function formatBRL(n) {
 
 // Soma agregada de faturamento (atual vs anterior) — mais robusto que média de
 // variações individuais, já que nem todo doc de resultado tem `variacao` salva.
+//
+// `somaAtual` (exibido como "Faturamento Total") sempre soma o período atual
+// inteiro. Já a `variacao` compara o mesmo número de semanas dos dois lados:
+// se o "anterior" só tem histórico pra N semanas (menos que as pedidas, ex:
+// org recente), usa só as N semanas mais recentes do atual pra essa conta —
+// senão comparar 4 semanas de atual contra só 2 de anterior infla a % à toa.
 function calcVariacaoPeriodo(atualDocs, anteriorDocs) {
   const somaAtual    = atualDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
   const somaAnterior = anteriorDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
   const temDados      = atualDocs.length > 0 || anteriorDocs.length > 0
-  const variacao       = somaAnterior > 0 ? ((somaAtual - somaAnterior) / somaAnterior) * 100 : null
+
+  const semanasAnterior = new Set(anteriorDocs.map(r => r.semana))
+  let variacao = null
+  if (somaAnterior > 0 && semanasAnterior.size > 0) {
+    const semanasAtualUsadas = new Set(
+      [...new Set(atualDocs.map(r => r.semana))].sort().reverse().slice(0, semanasAnterior.size)
+    )
+    const somaAtualComparavel = atualDocs
+      .filter(r => semanasAtualUsadas.has(r.semana))
+      .reduce((s, r) => s + (r.faturamento ?? 0), 0)
+    variacao = ((somaAtualComparavel - somaAnterior) / somaAnterior) * 100
+  }
+
   return { somaAtual, variacao, temDados }
 }
 

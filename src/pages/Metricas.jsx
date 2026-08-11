@@ -34,11 +34,31 @@ function lojaAtiva(l) {
   return ['ativa', 'ativo'].includes(l.status?.toLowerCase())
 }
 
+// Loja pode estar atribuída a um gestor OU direto a um supervisor (sem
+// gestor no meio) — ver Lojas.jsx, campo `supervisorId`. Sem esse fallback,
+// toda loja de supervisor ficava de fora das quebras "por gestor" e dos
+// nichos cujas lojas são todas de supervisor sumiam da tela inteiros.
+function responsavelDaLoja(loja) {
+  return loja?.gestorId || loja?.supervisorId || null
+}
+
 // Soma agregada (não média de variações individuais) — mais robusto quando
 // nem todo doc de resultado tem `variacao` já calculada. Mesmo padrão usado
 // em Carteira.jsx.
+//
+// Compara o mesmo número de semanas dos dois lados. Se o período "anterior"
+// só tem histórico pra N semanas (menos que as pedidas, ex: org recente),
+// usa só as N semanas mais recentes do período atual também — senão somar
+// 4 semanas de atual contra só 2 de anterior infla a variação artificialmente.
 function crescimentoAgregado(atualDocs, anteriorDocs) {
-  const somaAtual    = atualDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
+  const semanasAnterior = new Set(anteriorDocs.map(r => r.semana))
+  if (semanasAnterior.size === 0) return null
+
+  const semanasAtualUsadas = new Set(
+    [...new Set(atualDocs.map(r => r.semana))].sort().reverse().slice(0, semanasAnterior.size)
+  )
+
+  const somaAtual    = atualDocs.filter(r => semanasAtualUsadas.has(r.semana)).reduce((s, r) => s + (r.faturamento ?? 0), 0)
   const somaAnterior = anteriorDocs.reduce((s, r) => s + (r.faturamento ?? 0), 0)
   if (somaAnterior <= 0) return null
   return ((somaAtual - somaAnterior) / somaAnterior) * 100
@@ -278,7 +298,7 @@ export default function Metricas() {
         const escopo = modoTesteAtivo
           ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
           : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
-        const gestoresQuery = query(collection(db, COLLECTIONS.USERS), ...escopo, where('role', '==', 'gestor'))
+        const gestoresQuery = query(collection(db, COLLECTIONS.USERS), ...escopo, where('role', 'in', ['gestor', 'supervisor']))
 
         const [lojasSnap, gestoresSnap] = await Promise.all([
           getDocs(query(collection(db, COLLECTIONS.LOJAS), ...escopo)),
@@ -336,23 +356,23 @@ export default function Metricas() {
   // ── 1. Crescimento médio da carteira, gestor a gestor ──────────────────────
   const crescimentoPorGestor = useMemo(() => {
     const linhas = gestores.map(g => {
-      const atualG    = resAtualValidos.filter(r => r.gestorId === g.id)
-      const anteriorG = resAnteriorValidos.filter(r => r.gestorId === g.id)
+      const atualG    = resAtualValidos.filter(r => responsavelDaLoja(lojaMap[r.lojaId]) === g.id)
+      const anteriorG = resAnteriorValidos.filter(r => responsavelDaLoja(lojaMap[r.lojaId]) === g.id)
       return { gestorId: g.id, nome: g.nome, valor: crescimentoAgregado(atualG, anteriorG) }
     })
     const mediaEmpresa = crescimentoAgregado(resAtualValidos, resAnteriorValidos)
     return { linhas, mediaEmpresa }
-  }, [gestores, resAtualValidos, resAnteriorValidos])
+  }, [gestores, lojaMap, resAtualValidos, resAnteriorValidos])
 
   // ── 2. Cancelamento médio, empresa x gestor ────────────────────────────────
   const cancelamentoPorGestor = useMemo(() => {
     const linhas = gestores.map(g => {
-      const docsG = resAtualValidos.filter(r => r.gestorId === g.id && r.cancelamento != null)
+      const docsG = resAtualValidos.filter(r => responsavelDaLoja(lojaMap[r.lojaId]) === g.id && r.cancelamento != null)
       return { gestorId: g.id, nome: g.nome, valor: media(docsG.map(r => r.cancelamento)) }
     })
     const mediaEmpresa = media(resAtualValidos.filter(r => r.cancelamento != null).map(r => r.cancelamento))
     return { linhas, mediaEmpresa }
-  }, [gestores, resAtualValidos])
+  }, [gestores, lojaMap, resAtualValidos])
 
   // ── 3. Crescimento por nicho — média do nicho e gestores dentro dele ───────
   const crescimentoPorNicho = useMemo(() => {
@@ -364,11 +384,11 @@ export default function Metricas() {
         const anteriorNicho  = resAnteriorValidos.filter(r => lojasDoNicho.has(r.lojaId))
         const mediaNicho     = crescimentoAgregado(atualNicho, anteriorNicho)
 
-        const gestoresDoNicho = [...new Set([...lojasDoNicho].map(id => lojaMap[id]?.gestorId).filter(Boolean))]
+        const gestoresDoNicho = [...new Set([...lojasDoNicho].map(id => responsavelDaLoja(lojaMap[id])).filter(Boolean))]
         const linhasGestores = gestoresDoNicho.map(gestorId => {
           const nome = gestores.find(g => g.id === gestorId)?.nome ?? '—'
-          const atualGN    = atualNicho.filter(r => r.gestorId === gestorId)
-          const anteriorGN = anteriorNicho.filter(r => r.gestorId === gestorId)
+          const atualGN    = atualNicho.filter(r => responsavelDaLoja(lojaMap[r.lojaId]) === gestorId)
+          const anteriorGN = anteriorNicho.filter(r => responsavelDaLoja(lojaMap[r.lojaId]) === gestorId)
           return { gestorId, nome, valor: crescimentoAgregado(atualGN, anteriorGN) }
         }).filter(g => g.valor != null)
 
@@ -387,7 +407,7 @@ export default function Metricas() {
       return Math.max(0, (agora.getFullYear() - inicio.getFullYear()) * 12 + (agora.getMonth() - inicio.getMonth()))
     }
     const linhas = gestores.map(g => {
-      const lojasG = lojas.filter(l => l.gestorId === g.id)
+      const lojasG = lojas.filter(l => responsavelDaLoja(l) === g.id)
       return { gestorId: g.id, nome: g.nome, valor: media(lojasG.map(mesesDe)) }
     })
     const mediaEmpresa = media(lojas.map(mesesDe))
