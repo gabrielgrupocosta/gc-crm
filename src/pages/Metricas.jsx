@@ -282,7 +282,10 @@ export default function Metricas() {
   const [loading,  setLoading]  = useState(true)
   const [lojas,    setLojas]    = useState([])
   const [gestores, setGestores] = useState([])
-  const [periodo,  setPeriodo]  = useState('4semanas')
+  // Padrão "1 semana": com pouco histórico acumulado (organização recente),
+  // "4 semanas" abria a tela toda vazia (sem período anterior pra comparar),
+  // então o usuário via "sem dados" antes mesmo de poder trocar o filtro.
+  const [periodo,  setPeriodo]  = useState('1semana')
   const [resultadosAtual,    setResultadosAtual]    = useState([])
   const [resultadosAnterior, setResultadosAnterior] = useState([])
   const [loadingResultados,  setLoadingResultados]  = useState(true)

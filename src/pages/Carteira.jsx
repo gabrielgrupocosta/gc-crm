@@ -938,7 +938,7 @@ export default function Carteira() {
                           <span className="font-mono" style={{ fontSize: '15px', fontWeight: 700, color: '#111111' }}>
                             {p.temDados ? formatBRL(p.somaAtual) : '—'}
                           </span>
-                          {p.temDados ? <VarBadge value={p.variacao} /> : (
+                          {p.temDados && p.variacao != null ? <VarBadge value={p.variacao} /> : (
                             <span className="text-[12px] text-text-faint">—</span>
                           )}
                         </div>
@@ -983,7 +983,7 @@ export default function Carteira() {
                             <span className="text-[14px] text-text-primary font-medium truncate pr-4">{g.nome}</span>
                             {PLATAFORMAS.map(p => (
                               <div key={p} className="flex justify-end">
-                                {g[p].temDados ? <VarBadge value={g[p].variacao} /> : (
+                                {g[p].temDados && g[p].variacao != null ? <VarBadge value={g[p].variacao} /> : (
                                   <span className="text-[12px] text-text-subtle">—</span>
                                 )}
                               </div>
