@@ -9,7 +9,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useModoTeste } from '../contexts/ModoTesteContext'
 import {
-  db, COLLECTIONS, collection, query, where, getDocs, getDoc,
+  db, COLLECTIONS, collection, query, where, getDocs,
   setDoc, updateDoc, doc, orderBy, limit, startAfter,
 } from '../services/firebase'
 import Skeleton from '../components/UI/Skeleton'
@@ -723,6 +723,30 @@ function ModalRelatorio({ loja, semana, periodoLabel, lojaStatus, onClose, onSav
         } else throw err
       }
 
+      // Fonte real lida pelo Dashboard/Sidebar: `relatorioEnviado` direto no(s)
+      // doc(s) de `resultados` da loja nessa semana (mesmo campo que o autosave
+      // do Controle Semanal grava) — sem isso o toggle manual aqui não refletia
+      // em lugar nenhum, já que a coleção legada acima não é mais lida.
+      const resultadosSnap = await getDocs(query(
+        collection(db, COLLECTIONS.RESULTADOS),
+        where('organizacaoId', '==', user.organizacaoId ?? null),
+        where('lojaId', '==', loja.id),
+        where('semana', '==', semana),
+      ))
+      if (resultadosSnap.empty) {
+        await setDoc(doc(db, COLLECTIONS.RESULTADOS, `${loja.id}_${semana}`), {
+          lojaId: loja.id,
+          gestorId,
+          organizacaoId: user.organizacaoId ?? null,
+          semana,
+          relatorioEnviado: enviado,
+        }, { merge: true })
+      } else {
+        await Promise.all(
+          resultadosSnap.docs.map(d => updateDoc(d.ref, { relatorioEnviado: enviado }))
+        )
+      }
+
       onSaved(loja.id, { enviado, dataEnvio: now })
     } catch (err) {
       console.error('[ModalRelatorio] save:', err?.code, err?.message)
@@ -789,8 +813,6 @@ export default function Dashboard() {
   // elas, calculado pelo próprio sistema em vez de depender do campo
   // `variacao` digitado manualmente.
   const [resultadosPeriodoAnterior30, setResultadosPeriodoAnterior30] = useState([])
-  const [relatoriosSemanais,       setRelatoriosSemanais]       = useState({})
-  const [relatoriosSemanaisAdmin,  setRelatoriosSemanaisAdmin]  = useState({})
 
   // ── Card de performance do gestor (aberto ao clicar no nome da loja no ranking) ──
   const [performanceCliente,  setPerformanceCliente]  = useState(null) // { id, nome, plataformas }
@@ -935,28 +957,6 @@ export default function Dashboard() {
           })
           .catch(err => console.error('[Dashboard] gestores:', err?.code, err?.message))
 
-        if (!isAdmin) {
-          getDoc(doc(db, 'relatorios_semanais', `${user.uid}_${currentWeek}`))
-          .then(snap => {
-            if (!cancelled) setRelatoriosSemanais(snap.exists() ? (snap.data().lojas || {}) : {})
-          })
-          .catch(err => console.error('[Dashboard] relatorios:', err?.code, err?.message))
-        } else {
-          getDocs(query(collection(db, 'relatorios_semanais'), ...escopoOrg, where('semana', '==', currentWeek)))
-          .then(snap => {
-            if (!cancelled) {
-              const flatMap = {}
-              snap.docs.forEach(d => {
-                Object.entries(d.data().lojas || {}).forEach(([lojaId, status]) => {
-                  flatMap[lojaId] = status
-                })
-              })
-              setRelatoriosSemanaisAdmin(flatMap)
-            }
-          })
-          .catch(err => console.error('[Dashboard] relatorios admin:', err?.code, err?.message))
-        }
-
       } catch (err) {
         console.error('[Dashboard] erro ao carregar:', err?.code, err?.message, err)
       } finally {
@@ -966,7 +966,7 @@ export default function Dashboard() {
 
     load()
     return () => { cancelled = true }
-  }, [user, isAdmin, isSuperAdmin, currentWeek, last8Weeks, modoTesteAtivo, organizacaoIdsPermitidos])
+  }, [user, isAdmin, isSuperAdmin, last8Weeks, modoTesteAtivo, organizacaoIdsPermitidos])
 
   // ─── Consolidado fetch ───────────────────────────────────────────────────────
 
@@ -1092,13 +1092,31 @@ export default function Dashboard() {
     return { mediaVar, faturamentoCarteira, faturamentoVariacao }
   }, [lojasAtivasGlobal, resultadosSemanaSelecionadaFiltrados, resultadosSemanaAnteriorASelecionadaFiltrados])
 
+  // Deriva o mapa "enviado" direto do campo `relatorioEnviado` gravado nos
+  // resultados da semana ANTERIOR (fechada) — fonte real do autosave do
+  // Controle Semanal. O Controle Semanal só permite lançar número depois que
+  // a semana termina (ver `getSemanaAnteriorAtual` lá), então por padrão é
+  // sempre o doc da semana anterior que recebe `relatorioEnviado`, nunca o da
+  // semana em andamento — mesmo raciocínio já usado no `CalendarGrid` de lá
+  // (dias da semana atual pra elegibilidade, dado da semana anterior pro
+  // status "enviado"). Formato { [lojaId]: { enviado, dataEnvio } } pra
+  // continuar compatível com quem já consumia o mapa legado (ex: `lojaStatus`
+  // passado pro ModalRelatorio).
+  const relEnviadoMap = useMemo(() => {
+    const map = {}
+    resultadosSemanaAnterior.forEach(r => {
+      if (r.relatorioEnviado) map[r.lojaId] = { enviado: true, dataEnvio: r.atualizadoEm ?? r.dataEnvio ?? null }
+    })
+    return map
+  }, [resultadosSemanaAnterior])
+
   // "Relatórios em Dia" — considera só lojas cujo diaRelatorio já chegou ou passou
   // dentro da semana atual (mesma régua de dia usada em `lojasAtrasadas`/`checklistRelatorios`),
-  // e mede quantas dessas já têm o relatório da semana atual marcado como enviado.
+  // e mede quantas dessas já têm o relatório da semana anterior marcado como enviado.
   const relatoriosEmDia = useMemo(() => {
     const DIA_OFFSET   = { segunda: 0, terca: 1, quarta: 2, quinta: 3, sexta: 4, sabado: 5 }
     const todayOffset  = (new Date().getDay() + 6) % 7
-    const relMap       = isAdmin ? relatoriosSemanaisAdmin : relatoriosSemanais
+    const relMap       = relEnviadoMap
 
     const elegiveis = lojasAtivas.filter(l => {
       if (!l.diaRelatorio) return false
@@ -1113,7 +1131,7 @@ export default function Dashboard() {
       emDiaCount: emDia.length,
       elegiveisCount: elegiveis.length,
     }
-  }, [lojasAtivas, isAdmin, relatoriosSemanaisAdmin, relatoriosSemanais])
+  }, [lojasAtivas, relEnviadoMap])
 
   // "Variação Média · 30 dias" — calculada pelo próprio sistema: faturamento
   // agregado das últimas 4 semanas fechadas (last8Weeks[1..4]) vs faturamento
@@ -1183,15 +1201,14 @@ export default function Dashboard() {
   const lojasAtrasadas = useMemo(() => {
     const DIA_OFFSET = { segunda: 0, terca: 1, quarta: 2, quinta: 3, sexta: 4, sabado: 5 }
     const todayOffset = (new Date().getDay() + 6) % 7
-    const relMap = isAdmin ? relatoriosSemanaisAdmin : relatoriosSemanais
     return lojasAtivas.filter(l => {
-      if (relMap[l.id]?.enviado) return false
+      if (relEnviadoMap[l.id]?.enviado) return false
       if (!l.diaRelatorio) return false
       const diaOffset = DIA_OFFSET[l.diaRelatorio]
       if (diaOffset == null) return false
       return diaOffset < todayOffset
     })
-  }, [lojasAtivas, isAdmin, relatoriosSemanaisAdmin, relatoriosSemanais])
+  }, [lojasAtivas, relEnviadoMap])
 
   const checklistSemanaAnterior = useMemo(() => {
     if (isAdmin) return []
@@ -1215,11 +1232,11 @@ export default function Dashboard() {
       .map(l => ({
         id:         l.id,
         nome:       l.nome,
-        done:       relatoriosSemanais[l.id]?.enviado === true,
-        lojaStatus: relatoriosSemanais[l.id] ?? null,
+        done:       relEnviadoMap[l.id]?.enviado === true,
+        lojaStatus: relEnviadoMap[l.id] ?? null,
       }))
       .sort((a, b) => Number(a.done) - Number(b.done))
-  }, [lojasAtivas, relatoriosSemanais, isAdmin])
+  }, [lojasAtivas, relEnviadoMap, isAdmin])
 
   const topLojas = useMemo(() => {
     const ativasIds = new Set(lojasAtivasGlobal.map(l => l.id))
@@ -1533,7 +1550,7 @@ export default function Dashboard() {
         const semResultado = lojasG.filter(l => !resultadoSet.has(l.id))
 
         const lojasComRelStatus = lojasG.map(l => {
-          const st = relatoriosSemanaisAdmin[l.id] || {}
+          const st = relEnviadoMap[l.id] || {}
           let relStatus
           if (st.enviado) {
             relStatus = 'enviado'
@@ -1568,7 +1585,7 @@ export default function Dashboard() {
       })
       .filter(Boolean)
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-  }, [isAdmin, gestores, lojas, resultadosSemanaAnterior, relatoriosSemanaisAdmin])
+  }, [isAdmin, gestores, lojas, resultadosSemanaAnterior, relEnviadoMap])
 
   const [expandido, setExpandido] = useState(null)
 
@@ -1671,7 +1688,12 @@ export default function Dashboard() {
   }
 
   function handleRelatorioSaved(lojaId, statusObj) {
-    setRelatoriosSemanais(prev => ({ ...prev, [lojaId]: statusObj }))
+    setResultadosSemanaAnterior(prev => {
+      const jaTem = prev.some(r => r.lojaId === lojaId)
+      return jaTem
+        ? prev.map(r => (r.lojaId === lojaId ? { ...r, relatorioEnviado: statusObj.enviado } : r))
+        : [...prev, { id: `${lojaId}_${prevWeek}`, lojaId, relatorioEnviado: statusObj.enviado }]
+    })
     setModalRelatorio(null)
   }
 
@@ -2138,8 +2160,8 @@ export default function Dashboard() {
       {modalRelatorio && (
         <ModalRelatorio
           loja={modalRelatorio.loja}
-          semana={currentWeek}
-          periodoLabel={formatWeekPeriod(currentWeek)}
+          semana={prevWeek}
+          periodoLabel={formatWeekPeriod(prevWeek)}
           lojaStatus={modalRelatorio.lojaStatus}
           onClose={() => setModalRelatorio(null)}
           onSaved={handleRelatorioSaved}

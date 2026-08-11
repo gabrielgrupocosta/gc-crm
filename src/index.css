@@ -16,6 +16,9 @@
        aparecer/sumir, mudando a largura disponível e tremendo TODAS as
        colunas de grid (1fr) da página, inclusive as de outros gestores. */
     scrollbar-gutter: stable;
+    /* Rede de segurança contra scroll horizontal no mobile — algum elemento
+       fora da largura correta não deve conseguir "esticar" a página. */
+    overflow-x: hidden;
   }
 
   body {
@@ -25,6 +28,7 @@
     font-size: 13px;
     line-height: 1.5;
     margin: 0;
+    overflow-x: hidden;
   }
 
   #root {
@@ -92,6 +96,18 @@
   .textarea {
     @apply input h-auto py-2 resize-none;
     min-height: 80px;
+  }
+
+  /* iOS Safari dá zoom automático ao focar um input com font-size < 16px —
+     com o pinch-zoom desativado no viewport (ver index.html), isso trava a
+     página numa área ampliada sem jeito de voltar. Sobe pra 16px só no
+     breakpoint mobile pra não mudar a escala tipográfica no desktop.
+     !important necessário: muitos componentes fixam fontSize inline (ex:
+     ControleSemanal.jsx), e estilo inline sempre vence regra de classe. */
+  @media (max-width: 640px) {
+    .input, .select, .textarea, input, select, textarea {
+      font-size: 16px !important;
+    }
   }
 
   .btn-primary {

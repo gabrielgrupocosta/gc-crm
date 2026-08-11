@@ -31,7 +31,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSidebar } from '../../contexts/SidebarContext'
-import { db, COLLECTIONS, collection, doc, query, where, onSnapshot } from '../../services/firebase'
+import { db, COLLECTIONS, collection, query, where, onSnapshot } from '../../services/firebase'
+import { getPrevWeekStr } from '../../utils/semanas'
 import AlterarSenhaModal from '../UI/AlterarSenhaModal'
 
 // Comparativo não é mais item de topo — vive como botão dentro da página
@@ -502,11 +503,29 @@ export default function Sidebar() {
       err => console.error('[Sidebar] relatorio lojas onSnapshot:', err?.code, err?.message)
     )
 
-    const currentWeek = getISOWeekStr()
+    // Fonte real de "relatório enviado": campo `relatorioEnviado` gravado direto
+    // no doc de resultado pelo autosave do Controle Semanal — a coleção legada
+    // `relatorios_semanais` só é escrita no clique explícito de "Enviar Dados"
+    // e por isso ficava dessincronizada do badge aqui (mesma causa do bug do
+    // card "Relatórios em Dia" no Dashboard, ver comentário em Dashboard.jsx).
+    // Usa a semana ANTERIOR (fechada), não a atual: o Controle Semanal edita
+    // por padrão os números da semana que acabou de fechar (só dá pra lançar
+    // resultado depois que a semana termina) — é nesse doc que o autosave
+    // marca `relatorioEnviado`, nunca no doc da semana em andamento.
+    const prevWeek = getPrevWeekStr(getISOWeekStr())
     const unsubRel = onSnapshot(
-      doc(db, 'relatorios_semanais', `${user.uid}_${currentWeek}`),
+      query(
+        collection(db, COLLECTIONS.RESULTADOS),
+        where('organizacaoId', '==', user.organizacaoId ?? null),
+        where('gestorId', '==', user.uid),
+        where('semana', '==', prevWeek),
+      ),
       snap => {
-        relMap = snap.exists() ? (snap.data().lojas || {}) : {}
+        relMap = {}
+        snap.docs.forEach(d => {
+          const data = d.data()
+          if (data.relatorioEnviado) relMap[data.lojaId] = { enviado: true }
+        })
         recompute()
       },
       err => console.error('[Sidebar] relatorio status onSnapshot:', err?.code, err?.message)
