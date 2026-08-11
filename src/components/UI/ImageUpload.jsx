@@ -81,6 +81,12 @@ export default function ImageUpload({ label, value, onChange, onError, onPreview
     const item = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'))
     if (!item) return
     e.preventDefault()
+    // Sem isso, o evento borbulhava até o listener global de colar do
+    // ControleSemanal (que preenche "o primeiro campo vazio"), e a mesma
+    // imagem acabava colada em dois campos de uma vez sempre que este campo
+    // específico estava focado (ex: depois de clicar numa miniatura já
+    // preenchida pra dar zoom).
+    e.stopPropagation()
     validarEEnviar(item.getAsFile())
   }
 
