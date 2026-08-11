@@ -209,7 +209,7 @@ function RankingList({ items, showGestor, onSelectLoja, onSelectGestor }) {
         const varColor = item.variacao == null ? '#999999' : item.variacao >= 0 ? '#16A34A' : '#DC2626'
         return (
           <motion.div
-            key={item.lojaId}
+            key={item.id ?? item.lojaId}
             variants={itemVariants}
             className="table-row-base"
             style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 16px', height: '36px', minWidth: '600px' }}
@@ -794,9 +794,15 @@ function ModalRelatorio({ loja, semana, periodoLabel, lojaStatus, onClose, onSav
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-  const { user, isAdmin, isSuperAdmin } = useAuth()
+  const { user, isAdmin, isSuperAdmin, isSupervisor } = useAuth()
   const { modoTesteAtivo, organizacaoIdsPermitidos } = useModoTeste()
   const navigate = useNavigate()
+  // Supervisor tem visão de dados equivalente à do admin (org inteira, não
+  // travada por gestorId) — mesmo critério já usado no Controle Semanal. Sem
+  // isso, o Dashboard filtrava lojas/resultados por `gestorId === user.uid`,
+  // e como as lojas do supervisor ficam em `supervisorId` (não `gestorId`),
+  // ele via a tela toda vazia.
+  const isAmplo = isAdmin || isSupervisor
 
   const currentWeek = useMemo(() => getISOWeekStr(), [])
   const last8Weeks  = useMemo(() => getLast8Weeks(), [])
@@ -966,7 +972,7 @@ export default function Dashboard() {
 
     load()
     return () => { cancelled = true }
-  }, [user, isAdmin, isSuperAdmin, last8Weeks, modoTesteAtivo, organizacaoIdsPermitidos])
+  }, [user, isAmplo, isSuperAdmin, last8Weeks, modoTesteAtivo, organizacaoIdsPermitidos])
 
   // ─── Consolidado fetch ───────────────────────────────────────────────────────
 
@@ -1014,7 +1020,7 @@ export default function Dashboard() {
     setLoadingC(true)
     try {
       let allDocs
-      if (isAdmin) {
+      if (isAmplo) {
         allDocs = await fetchByWeeksBatched(
           allWeeks,
           modoTesteAtivo ? organizacaoIdsPermitidos : isSuperAdmin ? null : (user.organizacaoId ?? null)
@@ -1039,17 +1045,17 @@ export default function Dashboard() {
     } finally {
       setLoadingC(false)
     }
-  }, [user, isAdmin, isSuperAdmin, cMode, cSemana, cMes, cDe, cAte])
+  }, [user, isAmplo, isSuperAdmin, cMode, cSemana, cMes, cDe, cAte])
 
   useEffect(() => { fetchConsolidado() }, [fetchConsolidado])
 
   // ─── Derived state ──────────────────────────────────────────────────────────
 
   const lojasVisiveis = useMemo(() => {
-    if (!isAdmin) return lojas.filter(l => l.gestorId === user?.uid)
+    if (!isAmplo) return lojas.filter(l => l.gestorId === user?.uid)
     if (filtroGestor) return lojas.filter(l => l.gestorId === filtroGestor)
     return lojas
-  }, [lojas, isAdmin, filtroGestor, user])
+  }, [lojas, isAmplo, filtroGestor, user])
 
   const lojasAtivas = useMemo(() =>
     lojasVisiveis.filter(lojaAtiva),
@@ -1062,17 +1068,17 @@ export default function Dashboard() {
   )
 
   const resultadosSemanaSelecionadaFiltrados = useMemo(() =>
-    isAdmin && filtroGestor
+    isAmplo && filtroGestor
       ? resultadosSemanaSelecionada.filter(r => r.gestorId === filtroGestor)
       : resultadosSemanaSelecionada,
-    [resultadosSemanaSelecionada, isAdmin, filtroGestor]
+    [resultadosSemanaSelecionada, isAmplo, filtroGestor]
   )
 
   const resultadosSemanaAnteriorASelecionadaFiltrados = useMemo(() =>
-    isAdmin && filtroGestor
+    isAmplo && filtroGestor
       ? resultadosSemanaAnteriorASelecionada.filter(r => r.gestorId === filtroGestor)
       : resultadosSemanaAnteriorASelecionada,
-    [resultadosSemanaAnteriorASelecionada, isAdmin, filtroGestor]
+    [resultadosSemanaAnteriorASelecionada, isAmplo, filtroGestor]
   )
 
   const kpis = useMemo(() => {
@@ -1144,19 +1150,19 @@ export default function Dashboard() {
     const semanas4Anterior = new Set(getPeriodoComparativo(last8Weeks[1], 4).anterior)
 
     const filtrar = lista => lista.filter(r =>
-      ativasIds.has(r.lojaId) && (!isAdmin || !filtroGestor || r.gestorId === filtroGestor)
+      ativasIds.has(r.lojaId) && (!isAmplo || !filtroGestor || r.gestorId === filtroGestor)
     )
 
     const atual    = filtrar(resultadosHistorico).filter(r => semanas4Atual.has(r.semana))
     const anterior = filtrar(resultadosPeriodoAnterior30).filter(r => semanas4Anterior.has(r.semana))
 
     return crescimentoAgregado(atual, anterior)
-  }, [resultadosHistorico, resultadosPeriodoAnterior30, lojasAtivasGlobal, last8Weeks, isAdmin, filtroGestor])
+  }, [resultadosHistorico, resultadosPeriodoAnterior30, lojasAtivasGlobal, last8Weeks, isAmplo, filtroGestor])
 
   const ranking = useMemo(() => {
     const lojaMap   = Object.fromEntries(lojas.map(l => [l.id, l]))
     const ativasIds = new Set(lojasAtivas.map(l => l.id))
-    const base      = isAdmin && filtroGestor
+    const base      = isAmplo && filtroGestor
       ? resultadosSemanaSelecionada.filter(r => r.gestorId === filtroGestor)
       : resultadosSemanaSelecionada
     return base
@@ -1164,6 +1170,12 @@ export default function Dashboard() {
       .map(r => {
         const loja = lojaMap[r.lojaId]
         return {
+          // Doc de resultado, não loja — lojas com múltiplas plataformas têm
+          // um resultado por plataforma, todos com o mesmo lojaId; usar
+          // lojaId como key duplicava a key no ranking e o React renderizava
+          // a linha errada (conteúdo "fantasma" de outra ordenação) sempre
+          // que a lista reordenava.
+          id:          r.id,
           lojaId:      r.lojaId,
           nome:        loja?.nome ?? '—',
           plataforma:  loja?.plataforma ?? '',
@@ -1184,13 +1196,13 @@ export default function Dashboard() {
           : (b.variacao ?? -Infinity) - (a.variacao ?? -Infinity)
       })
       .slice(0, 10)
-  }, [lojas, lojasAtivas, resultadosSemanaSelecionada, isAdmin, filtroGestor, rankingSort, gestoresMap])
+  }, [lojas, lojasAtivas, resultadosSemanaSelecionada, isAmplo, filtroGestor, rankingSort, gestoresMap])
 
   const resultadosSemanaAnteriorFiltrados = useMemo(() =>
-    isAdmin && filtroGestor
+    isAmplo && filtroGestor
       ? resultadosSemanaAnterior.filter(r => r.gestorId === filtroGestor)
       : resultadosSemanaAnterior,
-    [resultadosSemanaAnterior, isAdmin, filtroGestor]
+    [resultadosSemanaAnterior, isAmplo, filtroGestor]
   )
 
   const lojasSemRelatorio = useMemo(() => {
@@ -1211,15 +1223,15 @@ export default function Dashboard() {
   }, [lojasAtivas, relEnviadoMap])
 
   const checklistSemanaAnterior = useMemo(() => {
-    if (isAdmin) return []
+    if (isAmplo) return []
     const comResultado = new Set(resultadosSemanaAnterior.map(r => r.lojaId))
     return lojasAtivas
       .map(l => ({ id: l.id, nome: l.nome, done: comResultado.has(l.id) }))
       .sort((a, b) => Number(a.done) - Number(b.done) || a.nome.localeCompare(b.nome, 'pt-BR'))
-  }, [lojasAtivas, resultadosSemanaAnterior, isAdmin])
+  }, [lojasAtivas, resultadosSemanaAnterior, isAmplo])
 
   const checklistRelatorios = useMemo(() => {
-    if (isAdmin) return []
+    if (isAmplo) return []
     const DIA_OFFSET = { segunda: 0, terca: 1, quarta: 2, quinta: 3, sexta: 4, sabado: 5 }
     const todayOffset = (new Date().getDay() + 6) % 7
     return lojasAtivas
@@ -1236,7 +1248,7 @@ export default function Dashboard() {
         lojaStatus: relEnviadoMap[l.id] ?? null,
       }))
       .sort((a, b) => Number(a.done) - Number(b.done))
-  }, [lojasAtivas, relEnviadoMap, isAdmin])
+  }, [lojasAtivas, relEnviadoMap, isAmplo])
 
   const topLojas = useMemo(() => {
     const ativasIds = new Set(lojasAtivasGlobal.map(l => l.id))
@@ -1536,7 +1548,7 @@ export default function Dashboard() {
   }, [resultadosSemanaSelecionada, gestoresMap])
 
   const statusPorGestor = useMemo(() => {
-    if (!isAdmin || !gestores.length) return []
+    if (!isAmplo || !gestores.length) return []
     const resultadoSet = new Set(resultadosSemanaAnterior.map(r => r.lojaId))
     const DIA_OFFSET   = { segunda: 0, terca: 1, quarta: 2, quinta: 3, sexta: 4, sabado: 5 }
     const todayOffset  = (new Date().getDay() + 6) % 7
@@ -1585,7 +1597,7 @@ export default function Dashboard() {
       })
       .filter(Boolean)
       .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-  }, [isAdmin, gestores, lojas, resultadosSemanaAnterior, relEnviadoMap])
+  }, [isAmplo, gestores, lojas, resultadosSemanaAnterior, relEnviadoMap])
 
   const [expandido, setExpandido] = useState(null)
 
@@ -1734,7 +1746,7 @@ export default function Dashboard() {
               <option key={o.value} value={o.value}>{o.label}</option>
             ))}
           </select>
-          {isAdmin && gestores.length > 0 && (
+          {isAmplo && gestores.length > 0 && (
             <select
               value={filtroGestor}
               onChange={e => setFiltroGestor(e.target.value)}
@@ -1752,7 +1764,7 @@ export default function Dashboard() {
 
       {/* Pendências — relatórios atrasados e lojas sem resultado, em um único card */}
       <AnimatePresence>
-        {(lojasAtrasadas.length > 0 || (isAdmin && lojasSemRelatorio.length > 0)) && (
+        {(lojasAtrasadas.length > 0 || (isAmplo && lojasSemRelatorio.length > 0)) && (
           <motion.div
             variants={listVariants}
             initial="initial"
@@ -1774,7 +1786,7 @@ export default function Dashboard() {
                   display: 'flex', alignItems: 'center', gap: '11px',
                   padding: '11px 16px 11px 14px',
                   borderLeft: '3px solid #DC2626',
-                  borderBottom: isAdmin && lojasSemRelatorio.length > 0 ? '1px solid #F3F3F3' : 'none',
+                  borderBottom: isAmplo && lojasSemRelatorio.length > 0 ? '1px solid #F3F3F3' : 'none',
                 }}
               >
                 <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#DC2626' }}>
@@ -1802,7 +1814,7 @@ export default function Dashboard() {
               </motion.div>
             )}
 
-            {isAdmin && lojasSemRelatorio.length > 0 && (
+            {isAmplo && lojasSemRelatorio.length > 0 && (
               <motion.div
                 variants={itemVariants}
                 style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '11px 16px 11px 14px', borderLeft: '3px solid #CA8A04' }}
@@ -1853,7 +1865,7 @@ export default function Dashboard() {
       </div>
 
       {/* Ranking + painel direito */}
-      <div className={`grid grid-cols-1 gap-4 mb-4 ${!isAdmin ? 'sm:grid-cols-[2fr_3fr]' : ''}`}>
+      <div className={`grid grid-cols-1 gap-4 mb-4 ${!isAmplo ? 'sm:grid-cols-[2fr_3fr]' : ''}`}>
         <SectionCard
           title="Ranking da Semana"
           subtitle={
@@ -1886,7 +1898,7 @@ export default function Dashboard() {
           <div className="overflow-x-auto">
             <RankingList
               items={ranking}
-              showGestor={isAdmin}
+              showGestor={isAmplo}
               onSelectLoja={abrirPerformanceCard}
               onSelectGestor={g => abrirGestorCard(g)}
             />
@@ -1920,7 +1932,7 @@ export default function Dashboard() {
         </SectionCard>
 
         {/* Gestor: dois cards de status empilhados */}
-        {!isAdmin && (
+        {!isAmplo && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <GestorStatusCard
               title="Resultados — Semana Anterior"
@@ -1949,7 +1961,7 @@ export default function Dashboard() {
       </div>
 
       {/* Status da semana por gestor (admin) */}
-      {isAdmin && (
+      {isAmplo && (
         <GestorStatusTable
           rows={statusPorGestor}
           expandido={expandido}
