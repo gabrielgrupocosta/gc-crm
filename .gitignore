@@ -33,6 +33,8 @@ scripts/data
 # graphify — cache local, não precisa versionar (graph.json/GRAPH_REPORT.md/graph.html ficam)
 graphify-out/cost.json
 graphify-out/cache/
+# caminho do Python é específico de cada máquina — commitar quebra em outro PC
+graphify-out/.graphify_python
 
 # Agent Skills genéricas do Firebase instaladas pelo `firebase init` — guias de
 # referência pro assistente, não fazem parte do código do app

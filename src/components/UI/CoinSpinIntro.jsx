@@ -11,7 +11,7 @@ export default function CoinSpinIntro({ size = 140 }) {
   const [giroConcluido, setGiroConcluido] = useState(false)
 
   return (
-    <div style={{ perspective: '800px' }}>
+    <div style={{ perspective: '800px', position: 'relative' }}>
       <motion.div
         initial={{ scale: 0.4, opacity: 0, rotateY: 0 }}
         animate={{ scale: 1, opacity: 1, rotateY: 1080 }}
