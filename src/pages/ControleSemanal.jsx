@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
-import { AlertTriangle, Loader2, Copy, Check, X as XIcon, Download, Pencil, ChevronDown } from 'lucide-react'
+import { AlertTriangle, Loader2, Copy, Check, X as XIcon, Download, Pencil, ChevronDown, Store } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import { httpsCallable } from 'firebase/functions'
 import { useAuth } from '../contexts/AuthContext'
@@ -16,6 +16,11 @@ import { useToast } from '../components/UI/Toast'
 import Skeleton from '../components/UI/Skeleton'
 import PlatformBadge from '../components/UI/PlatformBadge'
 import ImageUpload from '../components/UI/ImageUpload'
+import Modal from '../components/UI/Modal'
+import {
+  maskCurrencyInput, formatCurrencyDisplay, INPUT_STYLE, Field, PercentInput,
+  CheckpointModal, LojasNovasButton,
+} from '../components/UI/CheckpointsLojaNova'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -160,22 +165,6 @@ async function urlParaDataURL(url) {
     fr.onerror = reject
     fr.readAsDataURL(blob)
   })
-}
-
-// ─── Máscara de moeda (BRL) ─────────────────────────────────────────────────
-
-// Converte o texto digitado (com ou sem formatação) para número puro em string,
-// tratando os dígitos como centavos — ex: "1234" digitado vira "12.34".
-function maskCurrencyInput(rawText) {
-  const digits = (rawText ?? '').replace(/\D/g, '')
-  if (!digits) return ''
-  return (parseInt(digits, 10) / 100).toFixed(2)
-}
-
-// Formata o número puro ("1234.56") para exibição "R$ 1.234,56".
-function formatCurrencyDisplay(value) {
-  if (value === '' || value == null || isNaN(Number(value))) return ''
-  return `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
 // ─── Resumo IA via Firebase Function (Gemini Vision) ───────────────────────────
@@ -365,6 +354,12 @@ const pageVariants = {
   animate: { opacity: 1, y: 0, transition: { duration: 0.15, ease: 'easeOut' } },
 }
 
+const listVariants = { animate: { transition: { staggerChildren: 0.04 } } }
+const itemVariants = {
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.12 } },
+}
+
 const overlayV = {
   initial: { opacity: 0 },
   animate: { opacity: 1, transition: { duration: 0.15 } },
@@ -431,46 +426,10 @@ function ReportStatusBadge({ type }) {
 
 // ─── Shared form helpers (module-level — não podem ficar dentro de componentes) ─
 
-const INPUT_STYLE = {
-  background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px',
-  height: '32px', fontSize: '13px', color: '#111111', padding: '0 10px',
-  fontFamily: "'Segoe UI', system-ui, sans-serif", outline: 'none', width: '100%', boxSizing: 'border-box',
-}
-
-function Field({ label, children }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      <label style={{ fontSize: '12px', color: '#666666', fontWeight: 500 }}>{label}</label>
-      {children}
-    </div>
-  )
-}
-
 function SectionTitle({ label }) {
   return (
     <div style={{ marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #F3F3F3' }}>
       <p style={{ fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#999999', margin: 0 }}>{label}</p>
-    </div>
-  )
-}
-
-function PercentInput({ value, onChange, borderColor, placeholder }) {
-  // Largura acompanha o texto REALMENTE exibido — valor digitado quando tem
-  // um, senão o placeholder. Usar sempre o maior dos dois (valor antigo)
-  // deixava o campo largo mesmo com um valor curto digitado (ex: "2"),
-  // empurrando o "%" pra longe do número.
-  const textoExibido = (value !== '' && value != null) ? String(value) : String(placeholder ?? '')
-  return (
-    <div style={{ ...INPUT_STYLE, display: 'flex', alignItems: 'center', gap: '4px', borderColor }}>
-      <input
-        style={{ border: 'none', outline: 'none', background: 'transparent', flex: '0 1 auto', width: `${Math.max(textoExibido.length, 1) + 1}ch`, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        onFocus={e => { e.target.parentElement.style.borderColor = '#E5322D' }}
-        onBlur={e => { e.target.parentElement.style.borderColor = borderColor }}
-      />
-      <span style={{ fontSize: '13px', color: '#999999', flexShrink: 0 }}>%</span>
     </div>
   )
 }
@@ -2021,7 +1980,7 @@ export default function ControleSemanal() {
       {/* Header */}
       <div className="page-header flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <h1 className="page-title" style={{ marginBottom: 0 }}>Controle Semanal</h1>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <select
             value={semanaSelecionada}
             onChange={e => setSemanaSelecionada(e.target.value)}
@@ -2032,6 +1991,7 @@ export default function ControleSemanal() {
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          <LojasNovasButton lojas={lojas} gestorMap={gestoresMap} toast={toast} />
           <div style={{ backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '8px', padding: '8px 16px', textAlign: 'center', minWidth: '64px' }}>
             <span style={{ display: 'block', fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '20px', lineHeight: 1, color: '#16A34A', fontWeight: 500 }}>{totalEnviados}</span>
             <span className="section-label" style={{ fontSize: '10px', textTransform: 'lowercase' }}>enviados</span>

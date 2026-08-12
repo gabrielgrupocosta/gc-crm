@@ -31,7 +31,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSidebar } from '../../contexts/SidebarContext'
-import { db, COLLECTIONS, collection, query, where, onSnapshot } from '../../services/firebase'
+import { db, COLLECTIONS, collection, query, where, onSnapshot, getDocs } from '../../services/firebase'
 import { getPrevWeekStr } from '../../utils/semanas'
 import AlterarSenhaModal from '../UI/AlterarSenhaModal'
 
@@ -123,6 +123,23 @@ const DIA_OFFSET = { segunda: 0, terca: 1, quarta: 2, quinta: 3, sexta: 4, sabad
 
 function lojaAtiva(l) {
   return ['ativa', 'ativo'].includes(l.status?.toLowerCase())
+}
+
+// Mesmo cálculo de checkpoint de "loja nova" usado em ControleSemanal.jsx —
+// duplicado aqui só pro badge da sidebar, que precisa contar pendências sem
+// montar a tela inteira do Relatório Semanal.
+const CHECKPOINTS_DIAS = [7, 14, 21, 28]
+const JANELA_LOJA_NOVA_DIAS = 30
+const MS_DIA = 24 * 60 * 60 * 1000
+
+function diasDesde(ts) {
+  if (!ts) return null
+  const d = ts.toDate ? ts.toDate() : new Date(ts)
+  return Math.floor((Date.now() - d.getTime()) / MS_DIA)
+}
+
+function checkpointDocId(lojaId, dias) {
+  return `${lojaId}_${dias}`
 }
 
 function sameDay(a, b) {
@@ -353,6 +370,9 @@ function NavSection({ sectionKey, label, collapsedSections, onToggle, sidebarCol
 
 export default function Sidebar() {
   const { user, isAdmin, isSuperAdmin, isAdminOrg, isGestor, isSupervisor, podeVerMenu, logout } = useAuth()
+  // Supervisor enxerga a org inteira igual admin — mesmo critério usado no
+  // Controle Semanal e no Dashboard (ver isAmplo lá).
+  const isAmplo = isAdmin || isSupervisor
   const navResultado = [...NAV_MAIN, ...NAV_MAIN_ADMIN.filter(i => podeVerMenu(i.menuKey))]
   // CRM não é visível pro gestor — só admin/supervisor dentro da própria org
   const pertenceOrg = !!user?.organizacaoId && !isGestor
@@ -376,6 +396,7 @@ export default function Sidebar() {
   }, [mobileOpen])
 
   const [onboardPendentes, setOnboardPendentes] = useState(0)
+  const [lojasNovasPendentes, setLojasNovasPendentes] = useState(0)
   const [lojasSemGestor,   setLojasSemGestor]   = useState(0)
   const [relatorioStatus,  setRelatorioStatus]  = useState({ atrasadas: 0, pendentesHoje: 0 })
   const [tarefasHoje,      setTarefasHoje]      = useState(0)
@@ -446,6 +467,52 @@ export default function Sidebar() {
     )
     return unsubscribe
   }, [isAdmin, isSuperAdmin, user])
+
+  // ── Lojas Novas: checkpoints (dia 7/14/21/28) já disponíveis mas ainda não
+  // preenchidos, dentro da tela Relatório Semanal. onSnapshot na lista de
+  // lojas (recalcula ao surgir loja nova) + getDocs pontual nos checkpoints
+  // já salvos — não precisa ser milissegundo-real-time, só refletir o mesmo
+  // estado que o usuário vê ao abrir o Relatório Semanal.
+  useEffect(() => {
+    if (!user) return
+    const orgId = user.organizacaoId ?? null
+    const escopoOrg = isSuperAdmin ? [] : [where('organizacaoId', '==', orgId)]
+    const q = isAmplo
+      ? query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg)
+      : query(collection(db, COLLECTIONS.LOJAS), ...escopoOrg, where('gestorId', '==', user.uid))
+
+    const unsubscribe = onSnapshot(
+      q,
+      async snap => {
+        try {
+          const lojasNovas = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(l => l.dataInicio)
+            .map(l => ({ ...l, dias: diasDesde(l.dataInicio) }))
+            .filter(l => l.dias != null && l.dias >= 0 && l.dias <= JANELA_LOJA_NOVA_DIAS)
+          if (lojasNovas.length === 0) { setLojasNovasPendentes(0); return }
+
+          const checkpointsQuery = isSuperAdmin
+            ? collection(db, COLLECTIONS.CHECKPOINTS_LOJAS_NOVAS)
+            : query(collection(db, COLLECTIONS.CHECKPOINTS_LOJAS_NOVAS), where('organizacaoId', '==', orgId))
+          const checkpointsSnap = await getDocs(checkpointsQuery)
+          const checkpointsSet = new Set(checkpointsSnap.docs.map(d => d.id))
+
+          let pendentes = 0
+          lojasNovas.forEach(l => {
+            CHECKPOINTS_DIAS.forEach(dias => {
+              if (l.dias >= dias && !checkpointsSet.has(checkpointDocId(l.id, dias))) pendentes++
+            })
+          })
+          setLojasNovasPendentes(pendentes)
+        } catch (err) {
+          console.error('[Sidebar] checkpoints lojas novas:', err?.code, err?.message)
+        }
+      },
+      err => console.error('[Sidebar] lojas novas onSnapshot:', err?.code, err?.message)
+    )
+    return unsubscribe
+  }, [isAmplo, isSuperAdmin, user])
 
   // ── Lojas sem gestor vinculado (master vê todas; admin_org só a própria org) ──
   useEffect(() => {
@@ -574,7 +641,12 @@ export default function Sidebar() {
     ? { color: '#FF4B2E', bg: 'rgba(255,75,46,0.16)', badge: <AlertTriangle size={13} strokeWidth={2} color="#FF4B2E" style={{ flexShrink: 0 }} />, dot: '!', dotColor: '#FF4B2E' }
     : relatorioStatus.pendentesHoje > 0
       ? { color: '#FF4B2E', bg: 'rgba(255,75,46,0.16)', badge: <CountBadge n={relatorioStatus.pendentesHoje} color="#FF4B2E" />, dot: relatorioStatus.pendentesHoje, dotColor: '#FF4B2E' }
-      : null
+      // Checkpoint de loja nova pendente (dia 7/14/21/28) — mesma seção
+      // "Lojas Novas" dentro do Relatório Semanal, mas menos urgente que um
+      // relatório semanal atrasado, por isso só entra quando não há nenhum.
+      : lojasNovasPendentes > 0
+        ? { color: '#CA8A04', bg: 'rgba(202,138,4,0.16)', badge: <SquareCountBadge n={lojasNovasPendentes} color="#CA8A04" />, dot: lojasNovasPendentes, dotColor: '#CA8A04' }
+        : null
 
   const atividadesHighlight = tarefasHoje > 0
     ? { color: '#F59E0B', bg: 'rgba(245,158,11,0.16)', badge: <SquareCountBadge n={tarefasHoje} color="#F59E0B" />, dot: tarefasHoje, dotColor: '#F59E0B' }

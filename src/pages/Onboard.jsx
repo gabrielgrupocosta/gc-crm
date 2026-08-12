@@ -12,6 +12,7 @@ import Modal from '../components/UI/Modal'
 import Skeleton from '../components/UI/Skeleton'
 import ImageUpload from '../components/UI/ImageUpload'
 import PlatformBadge from '../components/UI/PlatformBadge'
+import CurrencyInput, { parseMoney } from '../components/UI/CurrencyInput'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -89,25 +90,6 @@ function checklistProgress(loja) {
   return { feitos: feitos + respondidas, total: CHECKLIST_ITENS.length + 2 }
 }
 
-// ─── Lojas Novas — checkpoints de 7 em 7 dias ──────────────────────────────────
-// Módulo independente de resultados/dashboard: acompanha lojas nos primeiros
-// 30 dias/4 semanas de contrato, com checkpoint a cada 7 dias contados a
-// partir de `dataInicio` (data de cadastro, não `dataInicioGestao`).
-
-const CHECKPOINTS_DIAS = [7, 14, 21, 28]
-const JANELA_LOJA_NOVA_DIAS = 30
-const MS_DIA = 24 * 60 * 60 * 1000
-
-function diasDesde(ts) {
-  if (!ts) return null
-  const d = ts.toDate ? ts.toDate() : new Date(ts)
-  return Math.floor((Date.now() - d.getTime()) / MS_DIA)
-}
-
-function checkpointDocId(lojaId, dias) {
-  return `${lojaId}_${dias}`
-}
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 // Plataformas de uma loja — array novo (`plataformas`) com fallback pro campo
@@ -159,12 +141,6 @@ function formatBRL(n) {
   }).format(n)
 }
 
-function parseMoney(str) {
-  if (str === '' || str == null) return null
-  const n = parseFloat(String(str).replace(',', '.'))
-  return isNaN(n) ? null : n
-}
-
 function caminhoPrintPreGestao(lojaId, key) {
   return `lojas/${lojaId}/pre-gestao/${key}.jpg`
 }
@@ -187,26 +163,6 @@ const listVariants = { animate: { transition: { staggerChildren: 0.04 } } }
 const itemVariants = {
   initial: { opacity: 0, y: 4 },
   animate: { opacity: 1, y: 0, transition: { duration: 0.12 } },
-}
-
-// ─── CurrencyInput ────────────────────────────────────────────────────────────
-
-function CurrencyInput({ id, value, onChange }) {
-  return (
-    <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ fontSize: '12px', color: '#999999' }}>R$</span>
-      <input
-        id={id}
-        type="number"
-        min="0"
-        step="0.01"
-        placeholder="0,00"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="input pl-9 font-mono"
-      />
-    </div>
-  )
 }
 
 // ─── Modal: dados pré-gestão ───────────────────────────────────────────────────
@@ -859,237 +815,6 @@ function KanbanColumn({ title, count, headerBg, headerColor, children }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-// ─── Modal: preencher checkpoint de loja nova ─────────────────────────────────
-
-function CheckpointModal({ item, onClose, onSave }) {
-  const toast = useToast()
-  const [faturamento, setFaturamento] = useState('')
-  const [observacoes,  setObservacoes] = useState('')
-  const [saving,       setSaving]      = useState(false)
-
-  useEffect(() => {
-    if (!item) return
-    setFaturamento(item.checkpoint?.faturamento != null ? String(item.checkpoint.faturamento) : '')
-    setObservacoes(item.checkpoint?.observacoes ?? '')
-  }, [item])
-
-  async function handleSubmit(e) {
-    e.preventDefault()
-    if (saving) return
-    setSaving(true)
-    try {
-      await onSave(item, { faturamento: parseMoney(faturamento), observacoes: observacoes.trim() })
-      onClose()
-    } catch (err) {
-      console.error('[Onboard] salvar checkpoint:', err?.code, err?.message)
-      toast('Erro ao salvar checkpoint. Tente novamente.', 'error')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Modal
-      isOpen={!!item}
-      onClose={onClose}
-      title={item ? `Checkpoint dia ${item.dias} — ${item.loja.nome}` : ''}
-      width="max-w-md"
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
-          <button form="checkpoint-form" type="submit" disabled={saving} className="btn-primary">
-            {saving ? 'Salvando…' : 'Salvar'}
-          </button>
-        </>
-      }
-    >
-      <form id="checkpoint-form" onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label className="field-label" htmlFor="cp-faturamento">Faturamento da semana</label>
-          <CurrencyInput id="cp-faturamento" value={faturamento} onChange={setFaturamento} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label className="field-label" htmlFor="cp-observacoes">Observações</label>
-          <textarea
-            id="cp-observacoes"
-            value={observacoes}
-            onChange={e => setObservacoes(e.target.value)}
-            rows={4}
-            className="textarea"
-            placeholder="Como foi essa semana da loja?"
-          />
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
-// ─── Card de loja nova (checkpoints) ──────────────────────────────────────────
-
-function CheckpointPill({ dias, checkpoint, disponivel, onClick }) {
-  const preenchido = !!checkpoint
-  const atrasado = disponivel && !preenchido
-
-  const bg     = preenchido ? 'rgba(0,200,150,0.1)' : atrasado ? '#FFF1ED' : '#F3F3F3'
-  const border = preenchido ? 'rgba(0,200,150,0.2)' : atrasado ? '#FECACA' : '#E8E8E8'
-  const color  = preenchido ? '#00C896' : atrasado ? '#DC2626' : '#999999'
-
-  return (
-    <button
-      type="button"
-      onClick={disponivel ? onClick : undefined}
-      disabled={!disponivel}
-      style={{
-        flex: 1, borderRadius: '6px', padding: '8px 6px',
-        backgroundColor: bg, border: `1px solid ${border}`,
-        cursor: disponivel ? 'pointer' : 'default',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px',
-      }}
-    >
-      <span style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', color }}>
-        Dia {dias}
-      </span>
-      <span style={{ fontSize: '10px', color: preenchido ? '#00C896' : atrasado ? '#DC2626' : '#BBBBBB', fontWeight: 500 }}>
-        {preenchido ? 'Preenchido' : atrasado ? 'Pendente' : 'Aguardando'}
-      </span>
-    </button>
-  )
-}
-
-function LojaNovaCard({ loja, gestorNome, checkpointsMap, onFillCheckpoint }) {
-  const dias = diasDesde(loja.dataInicio)
-
-  return (
-    <div style={{
-      backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '10px',
-      padding: '16px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
-    }}>
-      <div className="flex items-start justify-between">
-        <div>
-          <p style={{ fontSize: '14px', fontWeight: 700, color: '#111111' }}>{loja.nome}</p>
-          {gestorNome && <p style={{ fontSize: '11px', color: '#999999', marginTop: '2px' }}>{gestorNome}</p>}
-        </div>
-        <span style={{
-          fontSize: '11px', fontWeight: 600, color: '#666666',
-          backgroundColor: '#F9F9F9', border: '1px solid #E8E8E8', borderRadius: '4px', padding: '2px 8px',
-        }}>
-          {dias}º dia
-        </span>
-      </div>
-
-      <div className="flex" style={{ gap: '8px', marginTop: '14px' }}>
-        {CHECKPOINTS_DIAS.map(d => (
-          <CheckpointPill
-            key={d}
-            dias={d}
-            checkpoint={checkpointsMap[checkpointDocId(loja.id, d)]}
-            disponivel={dias >= d}
-            onClick={() => onFillCheckpoint({ loja, dias: d, checkpoint: checkpointsMap[checkpointDocId(loja.id, d)] })}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ─── Aba: Lojas Novas ──────────────────────────────────────────────────────────
-
-function LojasNovasView({ lojas, gestorMap, toast }) {
-  const [checkpointsMap, setCheckpointsMap] = useState({})
-  const [loading, setLoading] = useState(true)
-  const [fillModal, setFillModal] = useState(null) // { loja, dias, checkpoint }
-
-  const lojasNovas = useMemo(() => {
-    return lojas
-      .filter(l => l.dataInicio)
-      .map(l => ({ loja: l, dias: diasDesde(l.dataInicio) }))
-      .filter(({ dias }) => dias != null && dias >= 0 && dias <= JANELA_LOJA_NOVA_DIAS)
-      .sort((a, b) => a.dias - b.dias)
-      .map(({ loja }) => loja)
-  }, [lojas])
-
-  async function loadCheckpoints() {
-    setLoading(true)
-    try {
-      const docs = await Promise.all(
-        lojasNovas.flatMap(loja => CHECKPOINTS_DIAS.map(async dias => {
-          const snap = await getDoc(doc(db, COLLECTIONS.CHECKPOINTS_LOJAS_NOVAS, checkpointDocId(loja.id, dias)))
-          return snap.exists() ? [snap.id, snap.data()] : null
-        }))
-      )
-      setCheckpointsMap(Object.fromEntries(docs.filter(Boolean)))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { loadCheckpoints() }, [lojasNovas.map(l => l.id).join(',')])
-
-  async function handleSaveCheckpoint({ loja, dias }, { faturamento, observacoes }) {
-    await setDoc(doc(db, COLLECTIONS.CHECKPOINTS_LOJAS_NOVAS, checkpointDocId(loja.id, dias)), {
-      lojaId:        loja.id,
-      gestorId:      loja.gestorId || null,
-      organizacaoId: loja.organizacaoId ?? null,
-      diasCheckpoint: dias,
-      faturamento,
-      observacoes,
-      atualizadoEm:  serverTimestamp(),
-    }, { merge: true })
-    toast('Checkpoint salvo.', 'success')
-    await loadCheckpoints()
-  }
-
-  if (loading) {
-    return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: '16px' }}>
-        <Skeleton.Table rows={3} cols={1} />
-        <Skeleton.Table rows={3} cols={1} />
-        <Skeleton.Table rows={3} cols={1} />
-      </div>
-    )
-  }
-
-  return (
-    <>
-      {lojasNovas.length === 0 ? (
-        <div style={{
-          backgroundColor: '#FFFFFF', border: '1px solid #E8E8E8', borderRadius: '10px',
-          padding: '40px 24px', textAlign: 'center',
-        }}>
-          <p style={{ fontSize: '13px', color: '#999999' }}>
-            Nenhuma loja dentro dos primeiros 30 dias de contrato no momento.
-          </p>
-        </div>
-      ) : (
-        <motion.div
-          variants={listVariants}
-          initial="initial"
-          animate="animate"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-          style={{ gap: '16px' }}
-        >
-          {lojasNovas.map(loja => (
-            <motion.div key={loja.id} variants={itemVariants}>
-              <LojaNovaCard
-                loja={loja}
-                gestorNome={gestorMap[loja.gestorId]?.nome}
-                checkpointsMap={checkpointsMap}
-                onFillCheckpoint={setFillModal}
-              />
-            </motion.div>
-          ))}
-        </motion.div>
-      )}
-
-      <CheckpointModal
-        item={fillModal}
-        onClose={() => setFillModal(null)}
-        onSave={handleSaveCheckpoint}
-      />
-    </>
-  )
-}
-
 export default function Onboard() {
   const toast = useToast()
   const { user, isAdmin, isSuperAdmin } = useAuth()
@@ -1099,8 +824,6 @@ export default function Onboard() {
   const [gestores, setGestores] = useState([])
   const [clientes, setClientes] = useState([])
   const [loading,  setLoading]  = useState(true)
-
-  const [aba, setAba] = useState('funil') // 'funil' | 'novas'
 
   const [preGestaoModal, setPreGestaoModal] = useState(null) // { loja, advanceStatus }
   const [agendarModal,   setAgendarModal]   = useState(null) // { loja, advanceStatus }
@@ -1299,34 +1022,7 @@ export default function Onboard() {
         <p className="page-subtitle">Acompanhe o fluxo de entrada de novas lojas</p>
       </div>
 
-      <div className="flex" style={{ gap: '4px', marginBottom: '20px', borderBottom: '1px solid #E8E8E8' }}>
-        {[
-          { key: 'funil', label: 'Funil' },
-          { key: 'novas', label: 'Lojas Novas' },
-        ].map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setAba(tab.key)}
-            style={{
-              padding: '10px 16px',
-              fontSize: '13px',
-              fontWeight: 600,
-              color: aba === tab.key ? '#FF4B2E' : '#666666',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: aba === tab.key ? '2px solid #FF4B2E' : '2px solid transparent',
-              cursor: 'pointer',
-              transition: 'color 150ms ease-out, border-color 150ms ease-out',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {aba === 'novas' ? (
-        <LojasNovasView lojas={lojas} gestorMap={gestorMap} toast={toast} />
-      ) : loading ? (
+      {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-3" style={{ gap: '16px' }}>
           <Skeleton.Table rows={4} cols={1} />
           <Skeleton.Table rows={4} cols={1} />

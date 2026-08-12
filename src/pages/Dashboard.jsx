@@ -20,6 +20,9 @@ import GestorPerformanceCard from '../components/UI/GestorPerformanceCard'
 import GestorSummaryCard from '../components/UI/GestorSummaryCard'
 import { LojaModal } from './ControleSemanal'
 import {
+  CHECKPOINTS_DIAS, JANELA_LOJA_NOVA_DIAS, diasDesde, checkpointDocId, CheckpointStatusModal,
+} from '../components/UI/CheckpointsLojaNova'
+import {
   getISOWeekStr, getLast8Weeks, weekLabel, MONTH_NAMES,
   getLast26WeekOptions, getDashboardWeekOptions, getLast12MonthOptions,
   getWeeksInMonth, getWeeksInRange, getPrevMonthStr, getPrevWeekStr, weekToMonth,
@@ -55,6 +58,17 @@ function formatVar(v) {
   return `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(1)}%`
 }
 
+// "Tempo na gestão" do ranking de Lojas Novas — dias vira "X dias" abaixo de
+// uma semana, senão arredonda pra semanas (mais legível pra loja com 3-4
+// semanas de gestão do que "24 dias").
+function formatTempoGestao(dias) {
+  if (dias == null || dias < 0) return '—'
+  if (dias === 0) return 'Hoje'
+  if (dias < 7) return `${dias} dia${dias !== 1 ? 's' : ''}`
+  const semanas = Math.floor(dias / 7)
+  return `${semanas} semana${semanas !== 1 ? 's' : ''}`
+}
+
 // Crescimento agregado (soma de faturamento no período atual vs período
 // anterior) — mais robusto que média de `variacao` individuais, já que nem
 // todo doc de resultado tem esse campo preenchido. Mesmo padrão usado em
@@ -83,6 +97,7 @@ function crescimentoAgregado(atualDocs, anteriorDocs) {
 function lojaAtiva(l) {
   return ['ativa', 'ativo'].includes(l.status?.toLowerCase())
 }
+
 
 // ─── Animation variants ───────────────────────────────────────────────────────
 
@@ -403,6 +418,51 @@ function RankingCard({ icon: Icon, title, periodLabel, items, loading = false, o
         </div>
       )}
     </motion.div>
+  )
+}
+
+// ─── Ranking de Lojas Novas ────────────────────────────────────────────────────
+// Mesma ideia do RankingRow (posição + nome + variação), mas com "tempo na
+// gestão" no lugar da plataforma — clicar abre os checkpoints da loja em vez
+// do card de performance.
+
+function LojaNovaRankingRow({ item, index, isLast, onSelectItem }) {
+  return (
+    <div
+      className="table-row-base"
+      style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '0 16px', height: '44px', borderBottom: isLast ? 'none' : undefined }}
+    >
+      <span className="font-mono" style={{ fontSize: '11px', fontWeight: 600, width: '20px', flexShrink: 0, color: index === 0 ? '#111111' : index === 1 ? '#666666' : '#999999', fontVariantNumeric: 'tabular-nums' }}>
+        {String(index + 1).padStart(2, '0')}
+      </span>
+      <button
+        type="button"
+        onClick={() => onSelectItem?.(item)}
+        className="font-sans"
+        style={{ flex: 1, minWidth: 0, fontSize: '13px', color: '#111111', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+        onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+      >
+        {item.nome}
+      </button>
+      <span style={{ fontSize: '11px', color: '#999999', flexShrink: 0, whiteSpace: 'nowrap' }}>{item.tempoGestaoLabel} na gestão</span>
+      <PerformanceBadge value={item.variacao} />
+    </div>
+  )
+}
+
+function LojasNovasRankingSection({ items, periodLabel, onSelectItem }) {
+  if (items.length === 0) return null
+  return (
+    <SectionCard title="Lojas Novas" subtitle={`Ranking de crescimento · ${periodLabel ?? ''}`} style={{ marginBottom: '16px' }}>
+      <div className="overflow-x-auto">
+        <motion.div variants={listVariants} initial="initial" animate="animate" style={{ minWidth: '460px' }}>
+          {items.map((item, i) => (
+            <LojaNovaRankingRow key={item.id} item={item} index={i} isLast={i === items.length - 1} onSelectItem={onSelectItem} />
+          ))}
+        </motion.div>
+      </div>
+    </SectionCard>
   )
 }
 
@@ -824,6 +884,7 @@ export default function Dashboard() {
   const [loading,                  setLoading]                  = useState(true)
   const [lojas,                    setLojas]                    = useState([])
   const [gestores,                 setGestores]                 = useState([])
+  const [checkpointsLojasNovas,    setCheckpointsLojasNovas]    = useState([]) // ids dos docs em CHECKPOINTS_LOJAS_NOVAS já preenchidos
   const [resultadosSemanaAnterior, setResultadosSemanaAnterior] = useState([])
   const [resultadosHistorico,      setResultadosHistorico]      = useState([])
   // 4 semanas anteriores às já cobertas por `resultadosHistorico` (que só vai
@@ -855,6 +916,7 @@ export default function Dashboard() {
 
   const [modalResultado, setModalResultado] = useState(null)
   const [modalRelatorio, setModalRelatorio] = useState(null)
+  const [lojaNovaSelecionada, setLojaNovaSelecionada] = useState(null) // loja no CheckpointStatusModal
 
   const weekOptions12 = useMemo(() => getDashboardWeekOptions(), [])
   const [selectedWeek, setSelectedWeek] = useState(() => weekOptions12[0]?.value ?? prevWeek)
@@ -963,6 +1025,12 @@ export default function Dashboard() {
             if (!cancelled) setResultadosPeriodoAnterior30(snap.docs.map(d => ({ id: d.id, ...d.data() })))
           })
           .catch(err => console.error('[Dashboard] histórico anterior (30 dias):', err?.code, err?.message))
+
+        getDocs(query(collection(db, COLLECTIONS.CHECKPOINTS_LOJAS_NOVAS), ...escopoOrg))
+          .then(snap => {
+            if (!cancelled) setCheckpointsLojasNovas(snap.docs.map(d => d.id))
+          })
+          .catch(err => console.error('[Dashboard] checkpoints lojas novas:', err?.code, err?.message))
 
         getDocs(query(collection(db, COLLECTIONS.USERS), ...escopoOrg, where('role', '==', 'gestor')))
           .then(snap => {
@@ -1234,6 +1302,48 @@ export default function Dashboard() {
       return diaOffset < todayOffset
     })
   }, [lojasAtivas, relEnviadoMap])
+
+  // Lojas nos primeiros 30 dias de contrato com checkpoint (dia 7/14/21/28)
+  // já disponível mas ainda não preenchido — mesma seção "Lojas Novas" que
+  // vive dentro do Relatório Semanal, só resumida aqui como alerta.
+  const lojasNovasPendentes = useMemo(() => {
+    const checkpointsSet = new Set(checkpointsLojasNovas)
+    return lojasAtivas.filter(l => {
+      if (!l.dataInicio) return false
+      const dias = diasDesde(l.dataInicio)
+      if (dias == null || dias < 0 || dias > JANELA_LOJA_NOVA_DIAS) return false
+      return CHECKPOINTS_DIAS.some(d => dias >= d && !checkpointsSet.has(checkpointDocId(l.id, d)))
+    })
+  }, [lojasAtivas, checkpointsLojasNovas])
+
+  // Ranking de Lojas Novas — até 10 lojas nos primeiros 30 dias de contrato
+  // (mesma janela do checkpoint), ordenadas pela variação da semana
+  // selecionada (mesma fonte do Ranking da Semana logo abaixo: dados do
+  // Controle Semanal). "Tempo na gestão" usa dataInicioGestao (quando o
+  // onboarding termina) com fallback pra dataInicio em lojas legadas sem
+  // esse campo — só um rótulo informativo, não afeta elegibilidade nem a
+  // disponibilidade dos checkpoints (essas continuam em dataInicio, mesma
+  // referência usada em CheckpointsLojaNova.jsx).
+  const lojasNovasRanking = useMemo(() => {
+    const resPorLoja = {}
+    resultadosSemanaSelecionada.forEach(r => { resPorLoja[r.lojaId] = r })
+
+    return lojasAtivas
+      .filter(l => l.dataInicio)
+      .map(l => ({ loja: l, dias: diasDesde(l.dataInicio) }))
+      .filter(({ dias }) => dias != null && dias >= 0 && dias <= JANELA_LOJA_NOVA_DIAS)
+      .map(({ loja }) => ({
+        id:               loja.id,
+        loja,
+        nome:             loja.nome,
+        plataforma:       loja.plataforma ?? '',
+        gestorNome:       gestoresMap[loja.gestorId]?.nome ?? '—',
+        tempoGestaoLabel: formatTempoGestao(diasDesde(loja.dataInicioGestao ?? loja.dataInicio)),
+        variacao:         resPorLoja[loja.id]?.variacao ?? null,
+      }))
+      .sort((a, b) => (b.variacao ?? -Infinity) - (a.variacao ?? -Infinity))
+      .slice(0, 10)
+  }, [lojasAtivas, resultadosSemanaSelecionada, gestoresMap])
 
   const checklistSemanaAnterior = useMemo(() => {
     if (isAmplo) return []
@@ -1712,6 +1822,21 @@ export default function Dashboard() {
     }
   }
 
+  // Após salvar um checkpoint pelo ranking de Lojas Novas, reflete o novo
+  // estado no alerta de pendência (card "X lojas novas com checkpoint
+  // pendente") sem precisar recarregar a página inteira.
+  async function handleCheckpointSaved() {
+    try {
+      const escopoOrg = modoTesteAtivo
+        ? [where('organizacaoId', 'in', organizacaoIdsPermitidos.slice(0, 10))]
+        : isSuperAdmin ? [] : [where('organizacaoId', '==', user.organizacaoId ?? null)]
+      const snap = await getDocs(query(collection(db, COLLECTIONS.CHECKPOINTS_LOJAS_NOVAS), ...escopoOrg))
+      setCheckpointsLojasNovas(snap.docs.map(d => d.id))
+    } catch (err) {
+      console.error('[Dashboard] checkpoint salvo, refetch:', err?.code, err?.message)
+    }
+  }
+
   function handleRelatorioSaved(lojaId, statusObj) {
     setResultadosSemanaAnterior(prev => {
       const jaTem = prev.some(r => r.lojaId === lojaId)
@@ -1777,7 +1902,7 @@ export default function Dashboard() {
 
       {/* Pendências — relatórios atrasados e lojas sem resultado, em um único card */}
       <AnimatePresence>
-        {(lojasAtrasadas.length > 0 || (isAmplo && lojasSemRelatorio.length > 0)) && (
+        {(lojasAtrasadas.length > 0 || (isAmplo && lojasSemRelatorio.length > 0) || lojasNovasPendentes.length > 0) && (
           <motion.div
             variants={listVariants}
             initial="initial"
@@ -1799,7 +1924,7 @@ export default function Dashboard() {
                   display: 'flex', alignItems: 'center', gap: '11px',
                   padding: '11px 16px 11px 14px',
                   borderLeft: '3px solid #DC2626',
-                  borderBottom: isAmplo && lojasSemRelatorio.length > 0 ? '1px solid #F3F3F3' : 'none',
+                  borderBottom: (isAmplo && lojasSemRelatorio.length > 0) || lojasNovasPendentes.length > 0 ? '1px solid #F3F3F3' : 'none',
                 }}
               >
                 <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#DC2626' }}>
@@ -1830,7 +1955,11 @@ export default function Dashboard() {
             {isAmplo && lojasSemRelatorio.length > 0 && (
               <motion.div
                 variants={itemVariants}
-                style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '11px 16px 11px 14px', borderLeft: '3px solid #CA8A04' }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '11px', padding: '11px 16px 11px 14px',
+                  borderLeft: '3px solid #CA8A04',
+                  borderBottom: lojasNovasPendentes.length > 0 ? '1px solid #F3F3F3' : 'none',
+                }}
               >
                 <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#CA8A04' }}>
                   <AlertCircle size={13} color="#FFFFFF" strokeWidth={2.25} />
@@ -1844,6 +1973,36 @@ export default function Dashboard() {
                   className="font-sans"
                   style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 500, color: '#999999', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'color 150ms' }}
                   onMouseEnter={e => e.currentTarget.style.color = '#CA8A04'}
+                  onMouseLeave={e => e.currentTarget.style.color = '#999999'}
+                >
+                  Ver detalhes
+                  <ArrowRight size={12} strokeWidth={2} />
+                </button>
+              </motion.div>
+            )}
+
+            {lojasNovasPendentes.length > 0 && (
+              <motion.div
+                variants={itemVariants}
+                style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '11px 16px 11px 14px', borderLeft: '3px solid #2563EB' }}
+              >
+                <span style={{ flexShrink: 0, width: '26px', height: '26px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2563EB' }}>
+                  <Store size={13} color="#FFFFFF" strokeWidth={2.25} />
+                </span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p className="font-sans" style={{ fontSize: '13px', fontWeight: 400, color: '#111111', lineHeight: 1.35 }}>
+                    <span style={{ fontWeight: 700 }}>{lojasNovasPendentes.length}</span>
+                    {' '}{lojasNovasPendentes.length === 1 ? 'loja nova com checkpoint pendente' : 'lojas novas com checkpoint pendente'}
+                  </p>
+                  <p className="font-sans" style={{ fontSize: '11.5px', fontWeight: 400, color: '#999999', lineHeight: 1.4, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {lojasNovasPendentes.map(l => l.nome).join(', ')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => navigate('/controle')}
+                  className="font-sans"
+                  style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 500, color: '#999999', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0, transition: 'color 150ms' }}
+                  onMouseEnter={e => e.currentTarget.style.color = '#2563EB'}
                   onMouseLeave={e => e.currentTarget.style.color = '#999999'}
                 >
                   Ver detalhes
@@ -1876,6 +2035,12 @@ export default function Dashboard() {
           progress={relatoriosEmDia.pct}
         />
       </div>
+
+      <LojasNovasRankingSection
+        items={lojasNovasRanking}
+        periodLabel={selectedWeekMeta?.fullLabel}
+        onSelectItem={item => setLojaNovaSelecionada(item.loja)}
+      />
 
       {/* Ranking + painel direito */}
       <div className={`grid grid-cols-1 gap-4 mb-4 ${!isAmplo ? 'sm:grid-cols-[2fr_3fr]' : ''}`}>
@@ -2192,6 +2357,12 @@ export default function Dashboard() {
           onSaved={handleRelatorioSaved}
         />
       )}
+
+      <CheckpointStatusModal
+        loja={lojaNovaSelecionada}
+        onClose={() => setLojaNovaSelecionada(null)}
+        onSaved={handleCheckpointSaved}
+      />
 
       <Modal isOpen={!!performanceCliente} onClose={fecharPerformanceCard} title="Performance da loja" width="max-w-3xl">
         {loadingPerformance || !performanceData ? (

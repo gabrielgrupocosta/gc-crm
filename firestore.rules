@@ -191,9 +191,11 @@ service cloud.firestore {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin()
         || (isAdminOrg() && mesmaOrg(request.resource.data))
+        || (isSupervisor() && mesmaOrg(request.resource.data))
         || (isGestor() && mesmaOrg(request.resource.data) && request.resource.data.gestorId == request.auth.uid);
       allow update: if isSuperAdmin()
         || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (isSupervisor() && escritaSeguraOrg(resource.data, request.resource.data))
         || (isGestor() && escritaSeguraOrg(resource.data, request.resource.data)
             && resource.data.gestorId == request.auth.uid
             && request.resource.data.gestorId == request.auth.uid);
@@ -203,14 +205,19 @@ service cloud.firestore {
     // Checkpoints de lojas novas (acompanhamento dos primeiros 30 dias/4
     // semanas de gestão, independente de resultados/dashboard) — mesma regra
     // de escopo de Resultados: gestor só cria/edita checkpoint de loja onde é
-    // o gestorId responsável.
+    // o gestorId responsável. Supervisor entra igual admin_org (visão da org
+    // inteira, sem gestorId pessoal) — sem isso, a seção "Lojas Novas" dentro
+    // do Relatório Semanal (visível pra supervisor) travava com
+    // permission-denied ao tentar salvar um checkpoint.
     match /checkpoints_lojas_novas/{docId} {
       allow read: if isSuperAdmin() || mesmaOrg(resource.data);
       allow create: if isSuperAdmin()
         || (isAdminOrg() && mesmaOrg(request.resource.data))
+        || (isSupervisor() && mesmaOrg(request.resource.data))
         || (isGestor() && mesmaOrg(request.resource.data) && request.resource.data.gestorId == request.auth.uid);
       allow update: if isSuperAdmin()
         || (isAdminOrg() && escritaSeguraOrg(resource.data, request.resource.data))
+        || (isSupervisor() && escritaSeguraOrg(resource.data, request.resource.data))
         || (isGestor() && escritaSeguraOrg(resource.data, request.resource.data)
             && resource.data.gestorId == request.auth.uid
             && request.resource.data.gestorId == request.auth.uid);
