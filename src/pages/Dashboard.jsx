@@ -27,6 +27,7 @@ import {
   getLast26WeekOptions, getDashboardWeekOptions, getLast12MonthOptions,
   getWeeksInMonth, getWeeksInRange, getPrevMonthStr, getPrevWeekStr, weekToMonth,
   formatWeekPeriod, formatWeekPeriodFull, fetchByWeeksBatched, getPeriodoComparativo,
+  lojaAntesDaSemanaAtual,
 } from '../utils/semanas'
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
@@ -1207,6 +1208,7 @@ export default function Dashboard() {
 
     const elegiveis = lojasAtivas.filter(l => {
       if (!l.diaRelatorio) return false
+      if (!lojaAntesDaSemanaAtual(l.dataInicio)) return false
       const off = DIA_OFFSET[l.diaRelatorio]
       if (off == null) return false
       return off <= todayOffset
@@ -1288,7 +1290,7 @@ export default function Dashboard() {
 
   const lojasSemRelatorio = useMemo(() => {
     const comResultado = new Set(resultadosSemanaAnteriorFiltrados.map(r => r.lojaId))
-    return lojasAtivas.filter(l => !comResultado.has(l.id))
+    return lojasAtivas.filter(l => !comResultado.has(l.id) && lojaAntesDaSemanaAtual(l.dataInicio))
   }, [lojasAtivas, resultadosSemanaAnteriorFiltrados])
 
   const lojasAtrasadas = useMemo(() => {
@@ -1297,6 +1299,7 @@ export default function Dashboard() {
     return lojasAtivas.filter(l => {
       if (relEnviadoMap[l.id]?.enviado) return false
       if (!l.diaRelatorio) return false
+      if (!lojaAntesDaSemanaAtual(l.dataInicio)) return false
       const diaOffset = DIA_OFFSET[l.diaRelatorio]
       if (diaOffset == null) return false
       return diaOffset < todayOffset
@@ -1360,6 +1363,7 @@ export default function Dashboard() {
     return lojasAtivas
       .filter(l => {
         if (!l.diaRelatorio) return false
+        if (!lojaAntesDaSemanaAtual(l.dataInicio)) return false
         const diaOffset = DIA_OFFSET[l.diaRelatorio]
         if (diaOffset == null) return false
         return diaOffset <= todayOffset // hoje (pendente) ou já passou (atrasado)
@@ -1689,6 +1693,8 @@ export default function Dashboard() {
           let relStatus
           if (st.enviado) {
             relStatus = 'enviado'
+          } else if (!lojaAntesDaSemanaAtual(l.dataInicio)) {
+            relStatus = 'no_prazo'
           } else if (!l.diaRelatorio) {
             relStatus = 'pendente'
           } else {

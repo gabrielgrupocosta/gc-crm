@@ -29,6 +29,26 @@ export function weekLabel(str) {
   return `Sem ${parseInt(str.split('-W')[1])}`
 }
 
+// Segunda-feira (00h, horário local) da semana ISO atual — fronteira usada
+// pra decidir se uma loja é "nova nesta semana".
+export function getMondayAtual() {
+  const hoje   = new Date()
+  const dia    = hoje.getDay() || 7
+  const monday = new Date(hoje)
+  monday.setHours(0, 0, 0, 0)
+  monday.setDate(monday.getDate() - dia + 1)
+  return monday
+}
+
+// Verdadeiro se a loja já existia antes do início da semana ISO atual — uma
+// loja cadastrada durante a semana em andamento não deve entrar no ciclo de
+// cobrança de relatório dessa semana, só a partir da semana seguinte.
+export function lojaAntesDaSemanaAtual(dataInicio) {
+  if (!dataInicio) return true
+  const inicio = dataInicio.toDate ? dataInicio.toDate() : new Date(dataInicio)
+  return inicio.getTime() < getMondayAtual().getTime()
+}
+
 export const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
 
 export function getLast26WeekOptions() {

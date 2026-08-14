@@ -122,6 +122,15 @@ function plataformasDeLoja(loja) {
   return loja.plataformas?.length ? loja.plataformas : (loja.plataforma ? [loja.plataforma] : [])
 }
 
+// Verdadeiro se a loja já existia antes da segunda-feira (`monday`) informada —
+// uma loja cadastrada durante a semana em andamento não deve ser cobrada de
+// relatório nessa semana, só a partir da semana seguinte.
+function lojaAntesDaSemana(dataInicio, monday) {
+  if (!dataInicio) return true
+  const inicio = dataInicio.toDate ? dataInicio.toDate() : new Date(dataInicio)
+  return inicio.getTime() < monday.getTime()
+}
+
 // Status agregado para lojas com múltiplas plataformas: cada plataforma tem
 // seu próprio resultado por semana; só fica "completo"/"enviado" quando
 // TODAS as plataformas têm lançamento — senão fica "parcial".
@@ -1551,13 +1560,19 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
     const plataformas    = plataformasDeLoja(loja)
     const resPorPlataforma = statusMaps.resultados[loja.id] ?? {}
 
+    let status
     if (plataformas.length > 1) {
-      return computeLojaStatusMultiplataforma(diaOffset, todayOffset, plataformas, resPorPlataforma)
+      status = computeLojaStatusMultiplataforma(diaOffset, todayOffset, plataformas, resPorPlataforma)
+    } else {
+      const key     = loja.plataforma || '_default'
+      const resInfo = resPorPlataforma[key] ?? resPorPlataforma['_default']
+      status = computeLojaStatus(diaOffset, todayOffset, !!resInfo, !!resInfo?.enviado, !!statusMaps.relatorios[loja.id])
     }
 
-    const key     = loja.plataforma || '_default'
-    const resInfo = resPorPlataforma[key] ?? resPorPlataforma['_default']
-    return computeLojaStatus(diaOffset, todayOffset, !!resInfo, !!resInfo?.enviado, !!statusMaps.relatorios[loja.id])
+    if (status.type === 'pendente' && !lojaAntesDaSemana(loja.dataInicio, monday)) {
+      return { ...status, type: 'no_prazo' }
+    }
+    return status
   }
 
   // Monta os itens (cards) de uma coluna/dia — compartilhado entre a visão
