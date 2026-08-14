@@ -11,6 +11,7 @@ import { Store } from 'lucide-react'
 import {
   db, COLLECTIONS, doc, getDoc, setDoc, serverTimestamp,
 } from '../../services/firebase'
+import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from './Toast'
 import Modal from './Modal'
 import Skeleton from './Skeleton'
@@ -294,6 +295,8 @@ export function LojasNovasButton({ lojas, gestorMap, toast }) {
         }))
       )
       setCheckpointsMap(Object.fromEntries(docs.filter(Boolean)))
+    } catch (err) {
+      console.error('[LojasNovasButton] erro ao carregar checkpoints:', err?.code, err?.message)
     } finally {
       setLoadingCheckpoints(false)
     }
@@ -413,6 +416,14 @@ const STATUS_CHECKPOINT = {
 
 export function CheckpointStatusModal({ loja, onClose, onSaved }) {
   const toast = useToast()
+  const { user, isGestor } = useAuth()
+  // Ranking.jsx mostra o ranking de lojas novas da organização inteira (não só
+  // as do gestor logado, ao contrário do Dashboard) — sem essa checagem, um
+  // gestor conseguia abrir o checkpoint de uma loja de outro gestor e o save
+  // caía num permission-denied silencioso nas regras do Firestore (exigem
+  // gestorId == auth.uid pra role gestor), aparecendo só como "Erro ao
+  // salvar checkpoint" genérico, sem explicação.
+  const podeEditar = !isGestor || loja?.gestorId === user?.uid
   const [checkpointsMap, setCheckpointsMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [fillModal, setFillModal] = useState(null)
@@ -426,6 +437,8 @@ export function CheckpointStatusModal({ loja, onClose, onSaved }) {
         return snap.exists() ? [dias, snap.data()] : null
       }))
       setCheckpointsMap(Object.fromEntries(docs.filter(Boolean)))
+    } catch (err) {
+      console.error('[CheckpointStatusModal] erro ao carregar checkpoints:', err?.code, err?.message)
     } finally {
       setLoading(false)
     }
@@ -465,19 +478,20 @@ export function CheckpointStatusModal({ loja, onClose, onSaved }) {
               const checkpoint  = checkpointsMap[d]
               const preenchido  = !!checkpoint
               const disponivel  = diasDesdeInicio != null && diasDesdeInicio >= d
+              const clicavel    = disponivel && podeEditar
               const statusKey   = preenchido ? 'preenchido' : disponivel ? 'pendente' : 'aguardando'
               const st          = STATUS_CHECKPOINT[statusKey]
               return (
                 <button
                   key={d}
                   type="button"
-                  disabled={!disponivel}
-                  onClick={() => disponivel && setFillModal({ loja, dias: d, checkpoint: checkpoint ?? null })}
+                  disabled={!clicavel}
+                  onClick={() => clicavel && setFillModal({ loja, dias: d, checkpoint: checkpoint ?? null })}
                   className="flex items-center justify-between"
                   style={{
                     borderRadius: '6px', padding: '10px 12px',
                     backgroundColor: st.bg, border: `1px solid ${st.border}`,
-                    cursor: disponivel ? 'pointer' : 'default', textAlign: 'left',
+                    cursor: clicavel ? 'pointer' : 'default', textAlign: 'left',
                   }}
                 >
                   <span style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: 1 }}>
