@@ -27,12 +27,12 @@ export default function CoinSpinIntro({ size = 140 }) {
           animate={giroConcluido ? {
             scale: [1, 1.15, 1],
             filter: [
-              'drop-shadow(0 0 0px #FF4B2E)',
+              'drop-shadow(0 0 10px #FF4B2E)',
               'drop-shadow(0 0 34px #FF4B2E)',
-              'drop-shadow(0 0 0px #FF4B2E)',
+              'drop-shadow(0 0 10px #FF4B2E)',
             ],
           } : {}}
-          transition={{ duration: 0.9, ease: 'easeInOut', repeat: giroConcluido ? 2 : 0 }}
+          transition={{ duration: 1.15, ease: 'easeInOut', repeat: giroConcluido ? 2 : 0 }}
         >
           <LogoMark size={size} />
         </motion.div>
