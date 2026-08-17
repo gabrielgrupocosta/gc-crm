@@ -61,6 +61,24 @@ export function formatCurrencyDisplay(value) {
   return `R$ ${Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+// Mesmo padrão da máscara de moeda, mas com 1 casa decimal (variação sempre
+// no formato -12.5 / 8.3 — ver regra de negócio). Mantém sinal de negativo
+// solto ("-") enquanto o usuário ainda não digitou nenhum dígito, senão o
+// input "trava" e não deixa começar um número negativo.
+export function maskPercentInput(rawText) {
+  const temNegativo = (rawText ?? '').includes('-')
+  const digits = (rawText ?? '').replace(/\D/g, '')
+  if (!digits) return temNegativo ? '-' : ''
+  const abs = (parseInt(digits, 10) / 10).toFixed(1)
+  return temNegativo ? `-${abs}` : abs
+}
+
+export function formatPercentDisplay(value) {
+  if (value === '-') return '-'
+  if (value === '' || value == null || isNaN(Number(value))) return ''
+  return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+
 // ─── Campos de formulário compartilhados ───────────────────────────────────────
 
 export const INPUT_STYLE = {
@@ -84,13 +102,15 @@ export function PercentInput({ value, onChange, borderColor, placeholder }) {
   // `width: 100%` herdado do INPUT_STYLE — sem isso, um pai flex-column com
   // align-items padrão (stretch) estica essa caixa pra ocupar a coluna
   // inteira do grid, deixando um vão vazio depois do "%".
-  const textoExibido = (value !== '' && value != null) ? String(value) : String(placeholder ?? '')
+  const exibido = formatPercentDisplay(value)
+  const textoExibido = exibido !== '' ? exibido : String(placeholder ?? '')
   return (
     <div style={{ ...INPUT_STYLE, width: 'fit-content', display: 'flex', alignItems: 'center', gap: '4px', borderColor }}>
       <input
         style={{ border: 'none', outline: 'none', background: 'transparent', flex: '0 1 auto', width: `${Math.max(textoExibido.length, 1) + 1}ch`, minWidth: 0, fontSize: '13px', color: '#111111', fontFamily: "'Segoe UI', system-ui, sans-serif", padding: 0, height: '100%' }}
-        value={value}
-        onChange={onChange}
+        value={exibido}
+        onChange={e => onChange(maskPercentInput(e.target.value))}
+        inputMode="numeric"
         placeholder={placeholder}
         onFocus={e => { e.target.parentElement.style.borderColor = '#E5322D' }}
         onBlur={e => { e.target.parentElement.style.borderColor = borderColor }}
@@ -180,8 +200,8 @@ export function CheckpointModal({ item, onClose, onSave }) {
           <Field label="Variação % vs semana anterior">
             <PercentInput
               value={variacao}
-              onChange={e => setVariacao(e.target.value)}
-              placeholder="-12.5 ou 8.3"
+              onChange={setVariacao}
+              placeholder="-12,5 ou 8,3"
               borderColor="#E8E8E8"
             />
           </Field>

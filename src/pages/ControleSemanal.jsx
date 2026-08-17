@@ -804,7 +804,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
   // funciona nesse formulário porque o clique já abre o seletor de arquivos
   // (rouba o foco da página pro diálogo do SO); um listener no window resolve
   // sem precisar mudar esse comportamento de clique. Preenche o primeiro
-  // campo ainda vazio, na ordem Desempenho → Financeiro → Operação.
+  // campo ainda vazio, na ordem Desempenho → Operação → Financeiro.
   useEffect(() => {
     function onPasteGlobal(e) {
       const item = [...(e.clipboardData?.items ?? [])].find(i => i.type.startsWith('image/'))
@@ -812,8 +812,8 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
       e.preventDefault()
       const file = item.getAsFile()
       if (!printDesempenho) { handlePrintFile(setPrintDesempenho, file); toast('Print colado em "Desempenho"', 'success') }
-      else if (!printFinanceiro) { handlePrintFile(setPrintFinanceiro, file); toast('Print colado em "Financeiro"', 'success') }
       else if (!printOperacao) { handlePrintFile(setPrintOperacao, file); toast('Print colado em "Operação"', 'success') }
+      else if (!printFinanceiro) { handlePrintFile(setPrintFinanceiro, file); toast('Print colado em "Financeiro"', 'success') }
       else toast('Os 3 campos de print já estão preenchidos', 'warning')
     }
     window.addEventListener('paste', onPasteGlobal)
@@ -1184,8 +1184,8 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                       <Field label="Variação % vs Semana Anterior">
                         <PercentInput
                           value={variacao}
-                          onChange={e => { setVariacao(e.target.value); setCamposAuto(c => c.variacao ? { ...c, variacao: false } : c) }}
-                          placeholder="-12.5 ou 8.3"
+                          onChange={val => { setVariacao(val); setCamposAuto(c => c.variacao ? { ...c, variacao: false } : c) }}
+                          placeholder="-12,5 ou 8,3"
                           borderColor={camposAuto.variacao ? '#16A34A' : '#E8E8E8'}
                         />
                       </Field>
@@ -1259,19 +1259,19 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                     />
                   </div>
                   <div>
-                    <PrintLabelComStatus label={PRINT_LABELS.financeiro} />
+                    <PrintLabelComStatus label={PRINT_LABELS.operacao} />
                     <ImageUpload
-                      value={printFinanceiro?.file ?? printFinanceiro?.dataUrl ?? null}
-                      onChange={f => f ? handlePrintFile(setPrintFinanceiro, f) : setPrintFinanceiro(null)}
+                      value={printOperacao?.file ?? printOperacao?.dataUrl ?? null}
+                      onChange={f => f ? handlePrintFile(setPrintOperacao, f) : setPrintOperacao(null)}
                       onError={msg => toast(msg, 'error')}
                       onPreviewClick={setLightboxSrc}
                     />
                   </div>
                   <div>
-                    <PrintLabelComStatus label={PRINT_LABELS.operacao} />
+                    <PrintLabelComStatus label={PRINT_LABELS.financeiro} />
                     <ImageUpload
-                      value={printOperacao?.file ?? printOperacao?.dataUrl ?? null}
-                      onChange={f => f ? handlePrintFile(setPrintOperacao, f) : setPrintOperacao(null)}
+                      value={printFinanceiro?.file ?? printFinanceiro?.dataUrl ?? null}
+                      onChange={f => f ? handlePrintFile(setPrintFinanceiro, f) : setPrintFinanceiro(null)}
                       onError={msg => toast(msg, 'error')}
                       onPreviewClick={setLightboxSrc}
                     />
