@@ -28,6 +28,7 @@ import {
   KeyRound,
   Menu,
   X,
+  Search,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSidebar } from '../../contexts/SidebarContext'
@@ -88,6 +89,12 @@ const NAV_PLATAFORMA = [
 
 const NAV_SUPORTE = [
   { to: '/feedback', label: 'Feedback', icon: MessageSquare },
+]
+
+// Acesso pontual de uma única pessoa (não é papel/permissão de menuPermissions)
+const EMAIL_CONSULTA_CONHECIMENTO = 'luiz@ihubfood.com.br'
+const NAV_CONSULTA = [
+  { to: '/consulta-conhecimento', label: 'Consulta ao Conhecimento', icon: Search },
 ]
 
 // ─── Seções colapsáveis — estado persistido em localStorage ───────────────────
@@ -369,7 +376,8 @@ function NavSection({ sectionKey, label, collapsedSections, onToggle, sidebarCol
 }
 
 export default function Sidebar() {
-  const { user, isAdmin, isSuperAdmin, isAdminOrg, isGestor, isSupervisor, podeVerMenu, logout } = useAuth()
+  const { user, firebaseUser, isAdmin, isSuperAdmin, isAdminOrg, isGestor, isSupervisor, podeVerMenu, logout } = useAuth()
+  const podeVerConsulta = firebaseUser?.email === EMAIL_CONSULTA_CONHECIMENTO
   // Supervisor enxerga a org inteira igual admin — mesmo critério usado no
   // Controle Semanal e no Dashboard (ver isAmplo lá).
   const isAmplo = isAdmin || isSupervisor
@@ -425,6 +433,7 @@ export default function Sidebar() {
       perfil:    NAV_PERFIL.filter(i => podeVerMenu(i.menuKey)),
       plataforma: isSuperAdmin ? NAV_PLATAFORMA : [],
       suporte:   NAV_SUPORTE,
+      consulta:  podeVerConsulta ? NAV_CONSULTA : [],
     }
     const activeKey = Object.entries(sectionItemsMap).find(([, items]) => items.some(i => i.to === location.pathname))?.[0]
     if (!activeKey) return
@@ -434,7 +443,7 @@ export default function Sidebar() {
       saveCollapsedSections(next)
       return next
     })
-  }, [location.pathname, isAdmin, isSuperAdmin, podeVerMenu])
+  }, [location.pathname, isAdmin, isSuperAdmin, podeVerMenu, podeVerConsulta])
 
   // ── Onboard: lojas aguardando preenchimento de dados (master: todas / admin_org:
   // só da própria org / gestor: só as suas) — sem o filtro de organizacaoId pra
@@ -836,6 +845,21 @@ export default function Sidebar() {
             <NavItem key={to} to={to} label={label} Icon={Icon} highlight={HIGHLIGHTS[to]} collapsed={effectiveCollapsed} />
           ))}
         </NavSection>
+
+        {podeVerConsulta && (
+          <NavSection
+            sectionKey="consulta"
+            label="Ferramentas"
+            pendingDots={pendingDotsFor(NAV_CONSULTA)}
+            collapsedSections={collapsedSections}
+            onToggle={toggleSection}
+            sidebarCollapsed={effectiveCollapsed}
+          >
+            {NAV_CONSULTA.map(({ to, label, icon: Icon }) => (
+              <NavItem key={to} to={to} label={label} Icon={Icon} highlight={HIGHLIGHTS[to]} collapsed={effectiveCollapsed} />
+            ))}
+          </NavSection>
+        )}
       </nav>
 
       {/* Footer */}

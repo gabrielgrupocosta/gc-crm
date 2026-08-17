@@ -40,6 +40,7 @@ const Feedback = lazy(() => import('./pages/Feedback'))
 const Carteira = lazy(() => import('./pages/Carteira'))
 const Atividades = lazy(() => import('./pages/Atividades'))
 const Onboard = lazy(() => import('./pages/Onboard'))
+const ConsultaConhecimento = lazy(() => import('./pages/ConsultaConhecimento'))
 
 function LoadingScreen() {
   return (
@@ -86,6 +87,16 @@ function SuperAdminRoute() {
   if (loading) return <LoadingScreen />
   if (!user) return <Navigate to="/login" replace />
   if (!isSuperAdmin) return <Navigate to="/dashboard" replace />
+  return <Outlet />
+}
+
+// Bloqueia rotas restritas a um único email exato (não é papel/permissão,
+// é um acesso pontual de uma única pessoa — ex: consulta ao wiki pessoal)
+function EmailRoute({ email }) {
+  const { firebaseUser, loading } = useAuth()
+  if (loading) return <LoadingScreen />
+  if (!firebaseUser) return <Navigate to="/login" replace />
+  if (firebaseUser.email !== email) return <Navigate to="/dashboard" replace />
   return <Outlet />
 }
 
@@ -408,6 +419,10 @@ function AppRoutes() {
 
           <Route element={<SuperAdminRoute />}>
             <Route path="/organizacoes" element={<Organizacoes />} />
+          </Route>
+
+          <Route element={<EmailRoute email="luiz@ihubfood.com.br" />}>
+            <Route path="/consulta-conhecimento" element={<ConsultaConhecimento />} />
           </Route>
         </Route>
       </Route>

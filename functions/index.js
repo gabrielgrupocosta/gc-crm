@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https')
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https')
 const { onDocumentWritten } = require('firebase-functions/v2/firestore')
 const { onSchedule } = require('firebase-functions/v2/scheduler')
 const { defineSecret } = require('firebase-functions/params')
@@ -1282,4 +1282,139 @@ exports.notificarCobrancaVencida = onDocumentWritten('cobrancas/{cobrancaId}', a
 
   const todasNotificadas = [...jaNotificadas, ...parcelasVencidas.map(p => p.id)]
   await event.data.after.ref.update({ parcelasNotificadas: todasNotificadas })
+})
+
+// ─── Consulta ao wiki pessoal (Conhecimento) ───────────────────────────────────
+// Endpoint HTTP simples (sem Firebase Auth — chamador é uma ferramenta externa,
+// não um usuário logado) protegido por segredo compartilhado. Extrai
+// palavras-chave da pergunta, pontua cada página de wiki_snapshot (sincronizada
+// por F:\ideia-capture-tool\export-wiki-snapshot.js a partir do wiki local) por
+// ocorrência dessas palavras, e pede pro Claude sintetizar uma resposta a
+// partir só das páginas mais relevantes.
+
+const STOPWORDS_QUERY_WIKI = new Set([
+  'a', 'o', 'as', 'os', 'de', 'da', 'do', 'das', 'dos', 'e', 'ou', 'que',
+  'com', 'sem', 'pra', 'para', 'por', 'em', 'no', 'na', 'nos', 'nas', 'um',
+  'uma', 'uns', 'umas', 'eu', 'ja', 'foi', 'ser', 'sao', 'tem', 'ha', 'se',
+  'me', 'meu', 'minha', 'sobre', 'como', 'qual', 'quais', 'quando', 'onde',
+  'porque', 'isso', 'isto', 'essa', 'esse', 'esta', 'este', 'ao', 'aos',
+])
+
+function palavrasChaveConsulta(pergunta) {
+  return [...new Set(
+    normalizarTexto(pergunta)
+      .split(/[^a-z0-9]+/)
+      .filter(p => p.length > 2 && !STOPWORDS_QUERY_WIKI.has(p))
+  )]
+}
+
+// Frontmatter (tipo/resumo/tags/pessoas) pesa mais que o corpo — é mais
+// provável que capture do que a página trata do que uma ocorrência solta no
+// meio do conteúdo.
+function pontuarPaginaWiki(doc, palavrasChave) {
+  const textoFrontmatter = normalizarTexto(JSON.stringify(doc.frontmatter || {}))
+  const textoConteudo = normalizarTexto(doc.conteudo || '')
+  let pontuacao = 0
+  for (const palavra of palavrasChave) {
+    if (textoFrontmatter.includes(palavra)) pontuacao += 3
+    if (textoConteudo.includes(palavra)) pontuacao += 1
+  }
+  return pontuacao
+}
+
+// Restrito ao dono do site — essa function dá acesso de leitura ao wiki
+// pessoal do Luiz, então só a conta dele pode chamar.
+const EMAIL_AUTORIZADO_WIKI = 'luiz@ihubfood.com.br'
+
+exports.consultarWiki = onRequest({ secrets: [anthropicApiKey], timeoutSeconds: 60, memory: '256MiB' }, async (req, res) => {
+  // Acesso já é restrito por verificação de ID token (email exato) abaixo,
+  // não por origem — liberar CORS amplamente aqui não abre nada que o
+  // check de token já não proteja.
+  res.set('Access-Control-Allow-Origin', '*')
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS')
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('')
+    return
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ erro: 'Use POST.' })
+    return
+  }
+
+  const authHeader = (req.get('authorization') || '').toString()
+  const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : null
+  if (!idToken) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+
+  let decodedToken
+  try {
+    decodedToken = await auth.verifyIdToken(idToken)
+  } catch (err) {
+    res.status(401).json({ erro: 'Não autorizado.' })
+    return
+  }
+
+  if (decodedToken.email !== EMAIL_AUTORIZADO_WIKI) {
+    res.status(403).json({ erro: 'Acesso restrito' })
+    return
+  }
+
+  const pergunta = (req.body?.pergunta || '').toString().trim()
+  if (!pergunta) {
+    res.status(400).json({ erro: 'Campo "pergunta" é obrigatório.' })
+    return
+  }
+
+  const palavrasChave = palavrasChaveConsulta(pergunta)
+
+  const snap = await db.collection('wiki_snapshot').get()
+  const pontuadas = snap.docs
+    .map(d => ({ pagina: d.data(), pontuacao: pontuarPaginaWiki(d.data(), palavrasChave) }))
+    .filter(p => p.pontuacao > 0)
+    .sort((a, b) => b.pontuacao - a.pontuacao)
+    .slice(0, 8)
+
+  if (pontuadas.length === 0) {
+    res.json({ resposta: 'Não encontrei nada no wiki relacionado a essa pergunta.', paginasUsadas: [] })
+    return
+  }
+
+  const contexto = pontuadas.map(({ pagina }) => {
+    const fm = pagina.frontmatter || {}
+    return `### ${pagina.caminho}\n` +
+      `tipo: ${fm.tipo ?? 'não definido'}${fm.resumo ? ` | resumo: ${fm.resumo}` : ''}\n\n` +
+      `${(pagina.conteudo || '').slice(0, 4000)}`
+  }).join('\n\n---\n\n')
+
+  const anthropic = new Anthropic({ apiKey: anthropicApiKey.value() })
+
+  let response
+  try {
+    response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 1024,
+      system: 'Você responde perguntas sobre o conteúdo de um wiki pessoal, usando só os trechos de páginas fornecidos abaixo. ' +
+        'Se a resposta não estiver nos trechos, diga que não encontrou isso no wiki — nunca invente. ' +
+        'Cite o caminho da página (ex: "conforme [caminho]") quando usar uma informação dela. Responda em português, direto ao ponto.',
+      messages: [{
+        role: 'user',
+        content: `Pergunta: ${pergunta}\n\n--- Páginas do wiki ---\n\n${contexto}`,
+      }],
+    })
+  } catch (err) {
+    console.error('[consultarWiki] erro na API da Anthropic:', err)
+    res.status(500).json({ erro: 'Erro ao consultar o assistente. Tente novamente.' })
+    return
+  }
+
+  const textBlock = response.content.find(b => b.type === 'text')
+  res.json({
+    resposta: limparMarkdown(textBlock?.text ?? ''),
+    paginasUsadas: pontuadas.map(({ pagina, pontuacao }) => ({ caminho: pagina.caminho, pontuacao })),
+  })
 })
