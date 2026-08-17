@@ -1204,8 +1204,8 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <PercentInput
                           value={cancelamento}
-                          onChange={e => { setCancelamento(e.target.value); setCamposAuto(c => c.cancelamento ? { ...c, cancelamento: false } : c) }}
-                          placeholder="0.0"
+                          onChange={val => { setCancelamento(val); setCamposAuto(c => c.cancelamento ? { ...c, cancelamento: false } : c) }}
+                          placeholder="0,0"
                           borderColor={camposAuto.cancelamento ? '#16A34A' : '#E8E8E8'}
                         />
                         <WarnBadge val={cancelamento} threshold={1} />
@@ -1215,8 +1215,8 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <PercentInput
                           value={chamados}
-                          onChange={e => { setChamados(e.target.value); setCamposAuto(c => c.chamados ? { ...c, chamados: false } : c) }}
-                          placeholder="0.0"
+                          onChange={val => { setChamados(val); setCamposAuto(c => c.chamados ? { ...c, chamados: false } : c) }}
+                          placeholder="0,0"
                           borderColor={camposAuto.chamados ? '#16A34A' : '#E8E8E8'}
                         />
                         <WarnBadge val={chamados} threshold={2.5} />
@@ -1226,8 +1226,8 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <PercentInput
                           value={tempoAberto}
-                          onChange={e => { setTempoAberto(e.target.value); setCamposAuto(c => c.tempoAberto ? { ...c, tempoAberto: false } : c) }}
-                          placeholder="0.0"
+                          onChange={val => { setTempoAberto(val); setCamposAuto(c => c.tempoAberto ? { ...c, tempoAberto: false } : c) }}
+                          placeholder="0,0"
                           borderColor={camposAuto.tempoAberto ? '#16A34A' : '#E8E8E8'}
                         />
                         <WarnBadge val={tempoAberto} threshold={95} abaixo />
