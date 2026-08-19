@@ -582,10 +582,10 @@ export default function Comparativo() {
                       <Line
                         type="monotone"
                         dataKey="faturamento"
-                        stroke="#E5322D"
+                        stroke="#FF4B2E"
                         strokeWidth={1.5}
-                        dot={{ fill: '#E5322D', r: 2.5, strokeWidth: 0 }}
-                        activeDot={{ r: 3.5, fill: '#E5322D', strokeWidth: 0 }}
+                        dot={{ fill: '#FF4B2E', r: 2.5, strokeWidth: 0 }}
+                        activeDot={{ r: 3.5, fill: '#FF4B2E', strokeWidth: 0 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>

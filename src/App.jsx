@@ -117,7 +117,7 @@ function LembreteItem({ lembrete, onConcluir, onAdiar }) {
       textAlign: 'left', border: '1px solid #E8E8E8', borderRadius: '8px',
       padding: '12px 14px', backgroundColor: '#FAFAFA',
     }}>
-      <p style={{ fontSize: '12px', color: '#E5322D', fontWeight: 600, marginBottom: '2px' }}>
+      <p style={{ fontSize: '12px', color: '#FF4B2E', fontWeight: 600, marginBottom: '2px' }}>
         {lembrete.lojaNome || 'Loja'}
       </p>
       <p style={{ fontSize: '13px', color: '#111111', lineHeight: 1.45 }}>
@@ -158,7 +158,7 @@ function LembreteModal({ lembretes, onConcluir, onAdiar, onVerTodas, onFechar })
         style={{
           position: 'relative',
           backgroundColor: '#FFFFFF',
-          border: '2px solid #E5322D',
+          border: '2px solid #FF4B2E',
           borderRadius: '12px',
           padding: '28px',
           maxWidth: '400px',
@@ -188,7 +188,7 @@ function LembreteModal({ lembretes, onConcluir, onAdiar, onVerTodas, onFechar })
             backgroundColor: '#FFF0F0', alignItems: 'center', justifyContent: 'center', marginBottom: '14px',
           }}
         >
-          <Bell size={24} color="#E5322D" strokeWidth={2} />
+          <Bell size={24} color="#FF4B2E" strokeWidth={2} />
         </motion.div>
 
         <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#111111', marginBottom: '4px' }}>
@@ -291,7 +291,7 @@ function LojasSemGestorAlerta() {
           transition={{ duration: 0.15, ease: 'easeOut' }}
           className="fixed bottom-5 left-5 z-[100] flex items-start gap-3 max-w-sm"
           style={{
-            backgroundColor: '#E5322D',
+            backgroundColor: '#FF4B2E',
             borderRadius: '10px',
             padding: '16px',
             boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
@@ -308,7 +308,7 @@ function LojasSemGestorAlerta() {
             </p>
             <button
               onClick={handleVerLojas}
-              style={{ width: '100%', height: '28px', padding: '0 12px', fontSize: '12px', fontWeight: 500, color: '#E5322D', backgroundColor: '#FFFFFF', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'opacity 150ms' }}
+              style={{ width: '100%', height: '28px', padding: '0 12px', fontSize: '12px', fontWeight: 500, color: '#FF4B2E', backgroundColor: '#FFFFFF', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'opacity 150ms' }}
               onMouseEnter={e => e.currentTarget.style.opacity = '0.9'}
               onMouseLeave={e => e.currentTarget.style.opacity = '1'}
             >

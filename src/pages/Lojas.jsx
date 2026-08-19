@@ -469,7 +469,7 @@ function NovoClienteModal({ isOpen, onClose, onSave, gestores, lojas }) {
                   type="checkbox"
                   checked={subForm.entrarOnboard}
                   onChange={e => setSub('entrarOnboard', e.target.checked)}
-                  style={{ accentColor: '#E5322D' }}
+                  style={{ accentColor: '#FF4B2E' }}
                 />
                 <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
               </label>
@@ -737,7 +737,7 @@ function LojaModal({ isOpen, onClose, onSave, loja, clientes, gestores, supervis
               type="checkbox"
               checked={form.entrarOnboard}
               onChange={e => set('entrarOnboard', e.target.checked)}
-              style={{ accentColor: '#E5322D' }}
+              style={{ accentColor: '#FF4B2E' }}
             />
             <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
           </label>
@@ -1198,6 +1198,9 @@ function EditableNomeCell({ loja, onSave }) {
   return (
     <div
       onClick={() => setEditing(true)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true) } }}
       style={CELL_HOVER_STYLE}
       onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F9F9F9'}
       onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -1238,6 +1241,9 @@ function EditableStatusCell({ loja, onSave }) {
   return (
     <div
       onClick={() => setEditing(true)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true) } }}
       style={CELL_HOVER_STYLE}
       onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F9F9F9'}
       onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -1280,6 +1286,9 @@ function EditableDiaRelatorioCell({ loja, onSave }) {
   return (
     <div
       onClick={() => setEditing(true)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true) } }}
       style={{ ...CELL_HOVER_STYLE, fontSize: '12px', color: loja.diaRelatorio ? '#666666' : '#999999' }}
       onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F9F9F9'}
       onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -1333,6 +1342,9 @@ function EditableDataInicioCell({ loja, onSave }) {
   return (
     <div
       onClick={() => setEditing(true)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setEditing(true) } }}
       style={{ ...CELL_HOVER_STYLE, fontFamily: "'Segoe UI', system-ui, sans-serif", fontSize: '12px', color: '#666666', whiteSpace: 'nowrap' }}
       onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F9F9F9'}
       onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -1384,6 +1396,9 @@ function EditablePlataformasCell({ loja, onSave }) {
       <div
         ref={buttonRef}
         onClick={handleOpen}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleOpen() } }}
         style={{ ...CELL_HOVER_STYLE, display: 'inline-flex', gap: '4px', flexWrap: 'wrap' }}
         onMouseEnter={e => e.currentTarget.style.backgroundColor = '#F9F9F9'}
         onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}

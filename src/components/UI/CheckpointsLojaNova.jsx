@@ -112,7 +112,7 @@ export function PercentInput({ value, onChange, borderColor, placeholder }) {
         onChange={e => onChange(maskPercentInput(e.target.value))}
         inputMode="numeric"
         placeholder={placeholder}
-        onFocus={e => { e.target.parentElement.style.borderColor = '#E5322D' }}
+        onFocus={e => { e.target.parentElement.style.borderColor = '#FF4B2E' }}
         onBlur={e => { e.target.parentElement.style.borderColor = borderColor }}
       />
       <span style={{ fontSize: '13px', color: '#999999', flexShrink: 0 }}>%</span>
@@ -193,7 +193,7 @@ export function CheckpointModal({ item, onClose, onSave }) {
               onChange={e => setFaturamento(maskCurrencyInput(e.target.value))}
               inputMode="numeric"
               placeholder="R$ 0,00"
-              onFocus={e => e.target.style.borderColor = '#E5322D'}
+              onFocus={e => e.target.style.borderColor = '#FF4B2E'}
               onBlur={e => e.target.style.borderColor = '#E8E8E8'}
             />
           </Field>
@@ -376,7 +376,9 @@ export function LojasNovasButton({ lojas, gestorMap, toast }) {
         {!loadingCheckpoints && totalPendencias > 0 && (
           <span className="font-mono flex items-center justify-center" style={{
             minWidth: '17px', height: '17px', borderRadius: '9px', padding: '0 5px', flexShrink: 0,
-            backgroundColor: '#CA8A04', color: '#FFFFFF', fontSize: '10.5px', fontWeight: 700,
+            // Texto branco sobre #CA8A04 sólido dava ~2.9:1 (abaixo do AA).
+            // #B45309 é o mesmo token `warning-text` já usado em alertas.
+            backgroundColor: '#B45309', color: '#FFFFFF', fontSize: '10.5px', fontWeight: 700,
           }}>
             {totalPendencias}
           </span>

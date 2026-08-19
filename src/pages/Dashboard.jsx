@@ -753,7 +753,7 @@ function GestorStatusCard({ title, periodoLabel, items, onClickPending, hideComp
                 {item.nome}
               </span>
               {!item.done && (
-                <span style={{ fontSize: '10px', color: '#E5322D', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+                <span style={{ fontSize: '10px', color: '#FF4B2E', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
                   lançar
                 </span>
               )}
@@ -2177,8 +2177,8 @@ export default function Dashboard() {
                     fontSize: '12px',
                     borderRadius: '5px',
                     transition: 'all 150ms',
-                    border: cMode === m ? '1px solid #E5322D' : '1px solid #E8E8E8',
-                    color: cMode === m ? '#E5322D' : '#666666',
+                    border: cMode === m ? '1px solid #FF4B2E' : '1px solid #E8E8E8',
+                    color: cMode === m ? '#FF4B2E' : '#666666',
                     backgroundColor: cMode === m ? 'rgba(229,50,45,0.05)' : 'transparent',
                     cursor: 'pointer',
                   }}
@@ -2245,9 +2245,9 @@ export default function Dashboard() {
                   <YAxis tick={{ fill: '#BBBBBB', fontSize: 11, fontFamily: "'Segoe UI', system-ui, sans-serif" }} axisLine={false} tickLine={false}
                     tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={32} />
                   <Tooltip content={<ChartTooltip formatter={formatBRL} />} />
-                  <Line type="monotone" dataKey="faturamento" stroke="#E5322D" strokeWidth={1.5}
-                    dot={{ fill: '#E5322D', r: 2.5, strokeWidth: 0 }}
-                    activeDot={{ r: 3.5, fill: '#E5322D', strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="faturamento" stroke="#FF4B2E" strokeWidth={1.5}
+                    dot={{ fill: '#FF4B2E', r: 2.5, strokeWidth: 0 }}
+                    activeDot={{ r: 3.5, fill: '#FF4B2E', strokeWidth: 0 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -2282,9 +2282,9 @@ export default function Dashboard() {
                 <YAxis tick={{ fill: '#BBBBBB', fontSize: 11, fontFamily: "'Segoe UI', system-ui, sans-serif" }} axisLine={false} tickLine={false}
                   tickFormatter={v => `${(v / 1000).toFixed(0)}k`} width={32} />
                 <Tooltip content={<ChartTooltip formatter={formatBRL} />} />
-                <Line type="monotone" dataKey="faturamento" stroke="#E5322D" strokeWidth={1.5}
-                  dot={{ fill: '#E5322D', r: 2.5, strokeWidth: 0 }}
-                  activeDot={{ r: 3.5, fill: '#E5322D', strokeWidth: 0 }} />
+                <Line type="monotone" dataKey="faturamento" stroke="#FF4B2E" strokeWidth={1.5}
+                  dot={{ fill: '#FF4B2E', r: 2.5, strokeWidth: 0 }}
+                  activeDot={{ r: 3.5, fill: '#FF4B2E', strokeWidth: 0 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -2329,10 +2329,10 @@ export default function Dashboard() {
                     <Line
                       type="monotone"
                       dataKey="faturamento"
-                      stroke="#E5322D"
+                      stroke="#FF4B2E"
                       strokeWidth={1.5}
-                      dot={{ fill: '#E5322D', r: 2.5, strokeWidth: 0 }}
-                      activeDot={{ r: 3.5, fill: '#E5322D', strokeWidth: 0 }}
+                      dot={{ fill: '#FF4B2E', r: 2.5, strokeWidth: 0 }}
+                      activeDot={{ r: 3.5, fill: '#FF4B2E', strokeWidth: 0 }}
                     />
                   </LineChart>
                 </ResponsiveContainer>

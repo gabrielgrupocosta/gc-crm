@@ -38,7 +38,7 @@ function pinIcon(indiceNoGrupo = 0, totalNoGrupo = 1, chovendo = false, quedaMs 
   if (iconesPorPosicao.has(chave)) return iconesPorPosicao.get(chave)
 
   const svgHtml = `<svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
-      <path d="M13 0C5.8 0 0 5.8 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.8 20.2 0 13 0z" fill="#E5322D"/>
+      <path d="M13 0C5.8 0 0 5.8 0 13c0 9.75 13 21 13 21s13-11.25 13-21C26 5.8 20.2 0 13 0z" fill="#FF4B2E"/>
       <circle cx="13" cy="13" r="5.5" fill="#FFFFFF"/>
     </svg>`
   const html = chovendo
@@ -128,7 +128,7 @@ function ContornoEstados({ geoData, ufsAtendidas, zoomInicial }) {
     const atendida = uf && ufsAtendidas[uf] > 0
     return {
       className: 'estado-contorno',
-      color: atendida ? '#E5322D' : '#BBBBBB',
+      color: atendida ? '#FF4B2E' : '#BBBBBB',
       weight: atendida ? 2.5 : 1,
       opacity: atendida ? 0.9 : 0.35,
       fillColor: '#F97316',
@@ -438,7 +438,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
                 <div style={{ padding: '12px 20px 24px', display: 'flex', flexDirection: 'column', overflowY: 'auto', minWidth: '260px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <div style={{
-                      width: '26px', height: '26px', borderRadius: '7px', backgroundColor: '#E5322D',
+                      width: '26px', height: '26px', borderRadius: '7px', backgroundColor: '#FF4B2E',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                     }}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.5">
@@ -447,7 +447,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
                       </svg>
                     </div>
                     <p style={{ fontSize: '15px', fontWeight: 700, letterSpacing: '-0.02em', color: '#111111' }}>
-                      iHub<span style={{ color: '#E5322D' }}>Food</span>
+                      iHub<span style={{ color: '#FF4B2E' }}>Food</span>
                     </p>
                   </div>
                   <p style={{ fontSize: '11px', color: '#999999', marginBottom: '24px' }}>Presença nacional</p>
@@ -458,7 +458,7 @@ export default function MapaLojasModal({ isOpen, onClose, lojas, clienteMap, ges
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '22px' }}>
                     {regioesAtendidas.map(r => (
                       <span key={r} style={{
-                        fontSize: '11px', fontWeight: 500, color: '#E5322D', backgroundColor: '#FFF5F5',
+                        fontSize: '11px', fontWeight: 500, color: '#FF4B2E', backgroundColor: '#FFF5F5',
                         border: '1px solid #FECACA', borderRadius: '999px', padding: '3px 10px',
                       }}>
                         {r}

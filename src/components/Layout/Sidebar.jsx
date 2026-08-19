@@ -643,7 +643,12 @@ export default function Sidebar() {
   }
 
   const onboardHighlight = onboardPendentes > 0
-    ? { color: '#10B981', bg: 'rgba(16,185,129,0.16)', badge: <SquareCountBadge n={onboardPendentes} color="#10B981" />, dot: onboardPendentes, dotColor: '#10B981' }
+    // Preenchimento do badge usa uma cor mais escura que o resto do highlight
+    // (texto/dot ficam sobre o fundo escuro da sidebar, onde #10B981 já tem
+    // contraste alto) — texto branco em cima de #10B981 sólido dava só
+    // ~2.5:1, abaixo do mínimo AA. #007A5A é o mesmo verde escurecido já
+    // usado no token `positive` do design system.
+    ? { color: '#10B981', bg: 'rgba(16,185,129,0.16)', badge: <SquareCountBadge n={onboardPendentes} color="#007A5A" />, dot: onboardPendentes, dotColor: '#10B981' }
     : null
 
   const relatorioHighlight = relatorioStatus.atrasadas > 0
@@ -654,11 +659,17 @@ export default function Sidebar() {
       // "Lojas Novas" dentro do Relatório Semanal, mas menos urgente que um
       // relatório semanal atrasado, por isso só entra quando não há nenhum.
       : lojasNovasPendentes > 0
-        ? { color: '#CA8A04', bg: 'rgba(202,138,4,0.16)', badge: <SquareCountBadge n={lojasNovasPendentes} color="#CA8A04" />, dot: lojasNovasPendentes, dotColor: '#CA8A04' }
+        // Idem onboardHighlight acima: badge com texto branco em #CA8A04
+        // sólido dava ~2.9:1. #B45309 é o token `warning-text` já usado em
+        // alertas do design system, com contraste ~5:1.
+        ? { color: '#CA8A04', bg: 'rgba(202,138,4,0.16)', badge: <SquareCountBadge n={lojasNovasPendentes} color="#B45309" />, dot: lojasNovasPendentes, dotColor: '#CA8A04' }
         : null
 
   const atividadesHighlight = tarefasHoje > 0
-    ? { color: '#F59E0B', bg: 'rgba(245,158,11,0.16)', badge: <SquareCountBadge n={tarefasHoje} color="#F59E0B" />, dot: tarefasHoje, dotColor: '#F59E0B' }
+    // Idem — #F59E0B sólido com texto branco dava ~2.1:1. Usa um laranja
+    // queimado mais escuro (~7.3:1) em vez de reaproveitar o mesmo tom do
+    // badge de "Lojas Novas" acima, pra manter as duas seções distinguíveis.
+    ? { color: '#F59E0B', bg: 'rgba(245,158,11,0.16)', badge: <SquareCountBadge n={tarefasHoje} color="#9A3412" />, dot: tarefasHoje, dotColor: '#F59E0B' }
     : null
 
   const HIGHLIGHTS = {

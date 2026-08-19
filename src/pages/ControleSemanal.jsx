@@ -1177,7 +1177,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                           onChange={e => { setFaturamento(maskCurrencyInput(e.target.value)); setCamposAuto(c => c.faturamento ? { ...c, faturamento: false } : c) }}
                           inputMode="numeric"
                           placeholder="R$ 0,00"
-                          onFocus={e => e.target.style.borderColor = '#E5322D'}
+                          onFocus={e => e.target.style.borderColor = '#FF4B2E'}
                           onBlur={e => e.target.style.borderColor = camposAuto.faturamento ? '#16A34A' : '#E8E8E8'}
                         />
                       </Field>
@@ -1243,7 +1243,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                     placeholder="Observações sobre o desempenho da semana..."
                     rows={2}
                     style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
-                    onFocus={e => e.target.style.borderColor = '#E5322D'}
+                    onFocus={e => e.target.style.borderColor = '#FF4B2E'}
                     onBlur={e => e.target.style.borderColor = '#E8E8E8'}
                   />
                 </Field>
@@ -1325,7 +1325,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
                         placeholder="Texto gerado aparecerá aqui. Pode ser editado antes de salvar."
                         rows={6}
                         style={{ width: '100%', background: 'transparent', border: '1px solid #E8E8E8', borderRadius: '5px', padding: '10px 12px', fontSize: '13px', color: '#111111', resize: 'vertical', outline: 'none', boxSizing: 'border-box', lineHeight: 1.6, fontFamily: 'Inter,sans-serif' }}
-                        onFocus={e => e.target.style.borderColor = '#E5322D'}
+                        onFocus={e => e.target.style.borderColor = '#FF4B2E'}
                         onBlur={e => e.target.style.borderColor = '#E8E8E8'}
                       />
                       {resumoIA && (
@@ -1401,7 +1401,7 @@ export function LojaModal({ loja, onClose, onSaved, onMarcarEnvio, onDefinirDia 
             <button
               onClick={handleEnviarDados}
               disabled={loadingEnviar}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 18px', fontSize: '13px', fontWeight: 500, color: '#fff', background: loadingEnviar ? '#C42B26' : '#E5322D', border: 'none', borderRadius: '5px', cursor: loadingEnviar ? 'not-allowed' : 'pointer', transition: 'filter 100ms' }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', height: '34px', padding: '0 18px', fontSize: '13px', fontWeight: 500, color: '#fff', background: loadingEnviar ? '#C42B26' : '#FF4B2E', border: 'none', borderRadius: '5px', cursor: loadingEnviar ? 'not-allowed' : 'pointer', transition: 'filter 100ms' }}
               onMouseEnter={e => { if (!loadingEnviar) e.currentTarget.style.filter = 'brightness(1.1)' }}
               onMouseLeave={e => { e.currentTarget.style.filter = 'brightness(1)' }}
             >
@@ -1685,7 +1685,7 @@ function CalendarGrid({ lojas, statusMaps, onClickLoja, onDropLoja, onDefinirDia
             // fazendo a largura oscilar durante o drag.
             <div key={dia.key} style={{ minWidth: 0 }}>
               <div style={{ padding: '8px 10px 7px', borderRadius: '5px 5px 0 0', border: isToday ? '1px solid rgba(229,50,45,0.4)' : '1px solid #E8E8E8', borderBottom: 'none', backgroundColor: isToday ? 'rgba(229,50,45,0.04)' : '#FFFFFF' }}>
-                <p style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: isToday ? '#E5322D' : '#666666', margin: 0 }}>{dia.label}</p>
+                <p style={{ fontSize: '11px', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: isToday ? '#FF4B2E' : '#666666', margin: 0 }}>{dia.label}</p>
                 <p style={{ fontSize: '11px', fontFamily: "'Segoe UI', system-ui, sans-serif", color: isToday ? 'rgba(229,50,45,0.7)' : '#999999', marginTop: '1px', marginBottom: 0 }}>{dayStr}</p>
               </div>
               <Droppable droppableId={dia.key}>
@@ -2027,7 +2027,7 @@ export default function ControleSemanal() {
             {gestorGroups.map(group => (
               <div key={group.gestorId}>
                 {group.semGestor ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', backgroundColor: '#FFF5F5', border: '1px solid #FECACA', borderLeft: '3px solid #E5322D', borderRadius: '6px', padding: '8px 12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', backgroundColor: '#FFF5F5', border: '1px solid #FECACA', borderLeft: '3px solid #FF4B2E', borderRadius: '6px', padding: '8px 12px' }}>
                     <AlertTriangle size={13} strokeWidth={1.5} color="#DC2626" />
                     <p style={{ fontSize: '12px', fontWeight: 500, color: '#DC2626', margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                       Sem gestor — {group.lojas.length} loja{group.lojas.length !== 1 ? 's' : ''}

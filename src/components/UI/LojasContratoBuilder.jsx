@@ -12,7 +12,7 @@ export const PLATAFORMA_COLORS = {
 }
 
 export const EMPTY_LOJA_CONTRATO_ITEM = {
-  nome: '', gestorId: '', plataformas: [], status: 'Ativa', valor: '', entrarOnboard: true,
+  nome: '', gestorId: '', plataformas: [], status: 'Ativa', valor: '', entrarOnboard: true, dataInicio: '',
 }
 
 // ─── PlataformaPills ──────────────────────────────────────────────────────────
@@ -67,9 +67,10 @@ export function somaValorLojas(itens) {
 // ─── Builder principal ────────────────────────────────────────────────────────
 
 // Lista de "lojas do contrato" — cada uma com nome, valor próprio, gestor,
-// plataformas e status. Usado tanto na criação de contrato (Contratos.jsx)
-// quanto no cadastro de cliente (Clientes.jsx), sempre criando lojas NOVAS
-// vinculadas ao cliente do contrato — nunca edita lojas já existentes.
+// plataformas, status e data de início. Usado na criação de contrato
+// (Contratos.jsx e Clientes.jsx) e também na edição de contrato existente
+// (Contratos.jsx > EditarContratoModal), onde os itens já vêm pré-carregados
+// com dados de lojas reais.
 export default function LojasContratoBuilder({ itens, onChange, gestores }) {
   function updateItem(idx, key, value) {
     onChange(itens.map((it, i) => i === idx ? { ...it, [key]: value } : it))
@@ -132,7 +133,17 @@ export default function LojasContratoBuilder({ itens, onChange, gestores }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <label className="field-label">Início da loja</label>
+              <input
+                type="date"
+                value={item.dataInicio ?? ''}
+                onChange={e => updateItem(idx, 'dataInicio', e.target.value)}
+                className="input"
+                style={{ height: '34px', fontSize: '13px' }}
+              />
+            </div>
             <div className="flex flex-col gap-1.5">
               <label className="field-label">Gestor responsável</label>
               <select
@@ -168,7 +179,7 @@ export default function LojasContratoBuilder({ itens, onChange, gestores }) {
               type="checkbox"
               checked={item.entrarOnboard ?? true}
               onChange={e => updateItem(idx, 'entrarOnboard', e.target.checked)}
-              style={{ accentColor: '#E5322D' }}
+              style={{ accentColor: '#FF4B2E' }}
             />
             <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
           </label>

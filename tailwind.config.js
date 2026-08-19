@@ -14,13 +14,21 @@ export default {
         'border-hover':   '#DDDDDD',
         'text-primary':   '#111111',
         'text-muted':     '#666666',
-        'text-subtle':    '#999999',
-        'text-faint':     '#BBBBBB',
+        // text-subtle e text-faint foram escurecidas em relação ao valor
+        // original (#999999 / #BBBBBB) — o par não passava nem no mínimo de
+        // contraste AA (3:1) sobre #FFFFFF/#F7F7F8. text-subtle agora atinge
+        // ~4.5:1 (AA texto normal); text-faint fica um degrau mais clara,
+        // ~3.4:1, aceitável por ser reservada a uppercase/tracking largo e
+        // placeholder, nunca corpo de texto.
+        'text-subtle':    '#767676',
+        'text-faint':     '#8A8A8A',
         accent:           '#FF4B2E',
         'accent-hover':   '#E63E1F',
         'accent-soft':    '#FFF1ED',
         'accent-soft-alt':'#FFEDE8',
-        positive:         '#00C896',
+        // Escurecido de #00C896 (contraste ~2.2:1 sobre branco, insuficiente)
+        // para atingir AA (~5.3:1) mantendo o matiz verde original.
+        positive:         '#007A5A',
         negative:         '#DC2626',
         warning:          '#CA8A04',
         'warning-soft':   '#FFFBEB',
@@ -39,7 +47,7 @@ export default {
         'brand-dark':       '#0E1116',
         'brand-dark-hover': '#1C2128',
         'brand-accent':     '#FF4B2E',
-        'brand-green':      '#00C896',
+        'brand-green':      '#007A5A',
         'brand-blue':       '#2563EB',
       },
       fontFamily: {

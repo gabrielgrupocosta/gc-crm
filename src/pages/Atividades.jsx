@@ -61,7 +61,7 @@ const PRIORIDADE_COLOR = {
 }
 
 const PLATAFORMA_BADGE = {
-  iFood:    { color: '#E5322D', backgroundColor: '#FFF0F0', border: '1px solid #FECACA' },
+  iFood:    { color: '#FF4B2E', backgroundColor: '#FFF0F0', border: '1px solid #FECACA' },
   '99Food': { color: '#B45309', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A' },
   Keeta:    { color: '#1D4ED8', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' },
 }
@@ -77,7 +77,7 @@ function AgendarSwitch({ id, checked, onChange }) {
       style={{
         width: '34px', height: '20px', borderRadius: '10px', flexShrink: 0,
         border: 'none', cursor: 'pointer', position: 'relative',
-        backgroundColor: checked ? '#E5322D' : '#E8E8E8',
+        backgroundColor: checked ? '#FF4B2E' : '#E8E8E8',
         transition: 'background-color 150ms',
       }}
     >

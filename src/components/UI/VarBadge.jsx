@@ -12,9 +12,9 @@ export default function VarBadge({ value }) {
       fontSize: '11px', fontWeight: 500,
       padding: '2px 7px', borderRadius: '4px',
       fontFamily: "'Segoe UI', system-ui, sans-serif",
-      color: pos ? '#16A34A' : '#DC2626',
-      backgroundColor: pos ? 'rgba(22,163,74,0.08)' : 'rgba(220,38,38,0.08)',
-      border: `1px solid ${pos ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`,
+      color: pos ? '#007A5A' : '#DC2626',
+      backgroundColor: pos ? 'rgba(0,122,90,0.08)' : 'rgba(220,38,38,0.08)',
+      border: `1px solid ${pos ? 'rgba(0,122,90,0.2)' : 'rgba(220,38,38,0.2)'}`,
     }}>
       {formatVar(value)}
     </span>

@@ -9,6 +9,17 @@
   "storage": {
     "rules": "storage.rules"
   },
+  "emulators": {
+    "functions": {
+      "port": 5001
+    },
+    "auth": {
+      "port": 9099
+    },
+    "ui": {
+      "enabled": true
+    }
+  },
   "hosting": {
     "public": "dist",
     "ignore": [

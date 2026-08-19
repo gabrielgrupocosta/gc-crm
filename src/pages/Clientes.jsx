@@ -604,7 +604,7 @@ function ClienteModal({ isOpen, onClose, onSave, cliente, gestores, lojas, lojas
                   type="checkbox"
                   checked={subForm.entrarOnboard}
                   onChange={e => setSub('entrarOnboard', e.target.checked)}
-                  style={{ accentColor: '#E5322D' }}
+                  style={{ accentColor: '#FF4B2E' }}
                 />
                 <span style={{ fontSize: '13px', color: '#111111' }}>Adicionar essa loja ao fluxo de Onboard</span>
               </label>
@@ -771,9 +771,12 @@ export default function Clientes() {
 
     // Cada linha de "lojas do contrato" vira uma loja nova vinculada a este
     // cliente — o valor de cada uma vai pro item do contrato, e a soma é o
-    // valorTotal (não existe mais um valor único pro contrato inteiro).
+    // valorTotal (não existe mais um valor único pro contrato inteiro). Cada
+    // loja usa sua própria data de início (definida no builder); só cai pra
+    // data do contrato se o campo da loja ficar em branco.
     const itensLojas = []
     for (const item of form.lojasContrato) {
+      const dataInicioLoja = item.dataInicio ? parseLocalDate(item.dataInicio) : dataInicioDate
       const lojaRef = await criarComRateLimit(COLLECTIONS.LOJAS, {
         nome:          item.nome.trim(),
         organizacaoId: orgId,
@@ -782,7 +785,7 @@ export default function Clientes() {
         plataformas:   item.plataformas,
         plataforma:    item.plataformas[0] ?? '',
         status:        item.status,
-        dataInicio:    Timestamp.fromDate(dataInicioDate),
+        dataInicio:    Timestamp.fromDate(dataInicioLoja),
         observacoes:   '',
         ...(item.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
@@ -857,6 +860,7 @@ export default function Clientes() {
         nome:          l.nome.trim(),
         organizacaoId: payload.organizacaoId,
         clienteId,
+        clienteNome:   payload.nome,
         gestorId:    l.gestorId || null,
         plataforma:  l.plataformas[0] ?? '',
         plataformas: l.plataformas,
@@ -869,12 +873,23 @@ export default function Clientes() {
     })
     // Desvincula lojas removidas
     removidasIds.forEach(id => {
-      ops.push(updateDoc(doc(db, COLLECTIONS.LOJAS, id), { clienteId: null }))
+      ops.push(updateDoc(doc(db, COLLECTIONS.LOJAS, id), { clienteId: null, clienteNome: null }))
     })
     // Vincula lojas existentes selecionadas
     vinculadas.forEach(l => {
-      ops.push(updateDoc(doc(db, COLLECTIONS.LOJAS, l.id), { clienteId }))
+      ops.push(updateDoc(doc(db, COLLECTIONS.LOJAS, l.id), { clienteId, clienteNome: payload.nome }))
     })
+    // Cliente renomeado: refaz o cache de clienteNome nas lojas já vinculadas
+    // que não foram tocadas acima (senão ficam com o nome antigo até alguém
+    // reabrir e resalvar aquela loja especificamente).
+    if (original && original.nome !== payload.nome) {
+      const idsJaTratados = new Set([...vinculadas.map(l => l.id), ...removidasIds])
+      lojas
+        .filter(l => l.clienteId === clienteId && !idsJaTratados.has(l.id))
+        .forEach(l => {
+          ops.push(updateDoc(doc(db, COLLECTIONS.LOJAS, l.id), { clienteNome: payload.nome }))
+        })
+    }
     if (ops.length) await Promise.all(ops)
 
     await loadAll()
@@ -882,6 +897,13 @@ export default function Clientes() {
 
   async function handleDeleteCliente() {
     if (!deletingCliente) return
+    const temContratos = contratos.some(c => c.clienteId === deletingCliente.id)
+    const temLojas = lojas.some(l => l.clienteId === deletingCliente.id)
+    if (temContratos || temLojas) {
+      toast('Esse cliente tem contratos ou lojas vinculados — desvincule ou exclua-os antes de excluir o cliente.', 'error')
+      setDeletingCliente(null)
+      return
+    }
     try {
       await deleteDoc(doc(db, COLLECTIONS.CLIENTES, deletingCliente.id))
       setClientes(prev => prev.filter(c => c.id !== deletingCliente.id))

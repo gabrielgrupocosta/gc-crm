@@ -348,6 +348,8 @@ function EditarContratoModal({ isOpen, onClose, onSave, onPedirExclusao, contrat
           plataformas: loja.plataformas ?? (loja.plataforma ? [loja.plataforma] : []),
           status:      loja.status ?? 'Ativa',
           valor:       item.valor ?? '',
+          // Data real da loja — não a data do contrato, cada loja tem a sua.
+          dataInicio:  loja.dataInicio?.toDate ? loja.dataInicio.toDate().toISOString().split('T')[0] : hojeDateInput(),
         }
       }))
       if (cancelled) return
@@ -610,14 +612,16 @@ export default function Contratos() {
 
   async function handleCriarContrato(form) {
     let clienteId = form.clienteId
+    let clienteNome
     let orgId
 
     if (form.modoCliente === 'novo') {
       // Cliente nasce direto no fluxo de contrato — evita ter que ir cadastrar
       // em Clientes primeiro pra depois voltar aqui e criar o contrato.
       orgId = isSuperAdmin ? form.novoClienteOrganizacaoId : (user?.organizacaoId ?? null)
+      clienteNome = form.novoClienteNome.trim()
       const ref = await criarComRateLimit(COLLECTIONS.CLIENTES, {
-        nome:        form.novoClienteNome.trim(),
+        nome:        clienteNome,
         organizacaoId: orgId,
         telefone:    form.novoClienteTelefone.trim(),
         email:       form.novoClienteEmail.trim().toLowerCase(),
@@ -631,6 +635,7 @@ export default function Contratos() {
       const cliente = clienteMap[form.clienteId]
       if (!cliente) return
       orgId = cliente.organizacaoId ?? (isSuperAdmin ? null : user?.organizacaoId ?? null)
+      clienteNome = cliente.nome
     }
 
     const dataInicioDate = form.dataInicio ? parseLocalDate(form.dataInicio) : new Date()
@@ -639,20 +644,23 @@ export default function Contratos() {
 
     // Cada linha de "lojas do contrato" vira uma loja nova vinculada ao
     // cliente — o valor de cada uma vai pro item do contrato, e a soma é o
-    // valorTotal (não existe mais um valor único pro contrato inteiro). A
-    // loja nasce com a mesma dataInicio do contrato — sem isso, o "Tempo de
-    // contrato atual" da Carteira fica sem dado nenhum pra calcular.
+    // valorTotal (não existe mais um valor único pro contrato inteiro). Cada
+    // loja usa sua própria data de início (definida no builder); só cai pra
+    // data do contrato se o campo da loja ficar em branco — sem alguma data,
+    // o "Tempo de contrato atual" da Carteira fica sem dado pra calcular.
     const itensLojas = []
     for (const item of form.lojasContrato) {
+      const dataInicioLoja = item.dataInicio ? parseLocalDate(item.dataInicio) : dataInicioDate
       const lojaRef = await criarComRateLimit(COLLECTIONS.LOJAS, {
         nome:          item.nome.trim(),
         organizacaoId: orgId,
         clienteId,
+        clienteNome,
         gestorId:      item.gestorId || null,
         plataformas:   item.plataformas,
         plataforma:    item.plataformas[0] ?? '',
         status:        item.status,
-        dataInicio:    Timestamp.fromDate(dataInicioDate),
+        dataInicio:    Timestamp.fromDate(dataInicioLoja),
         observacoes:   '',
         ...(item.entrarOnboard ? { onboardStatus: 'dados_pendentes' } : {}),
         criadoEm:      serverTimestamp(),
@@ -694,23 +702,24 @@ export default function Contratos() {
 
   async function handleEditarContrato(contrato, form) {
     const orgId = contrato.organizacaoId ?? user?.organizacaoId ?? null
+    const clienteNome = clienteMap[contrato.clienteId]?.nome ?? null
     const idsOriginais = new Set((contrato.itensLojas ?? []).map(i => i.lojaId))
     const idsMantidos  = new Set()
-    const dataInicioContrato = form.dataInicio ? Timestamp.fromDate(parseLocalDate(form.dataInicio)) : null
 
     const itensLojas = []
     for (const item of form.lojasContrato) {
       const valorLoja = parseFloat(String(item.valor).replace(',', '.'))
       const dadosLoja = {
         nome:        item.nome.trim(),
+        clienteNome,
         gestorId:    item.gestorId || null,
         plataformas: item.plataformas,
         plataforma:  item.plataformas[0] ?? '',
         status:      item.status,
-        // Mantém a loja sincronizada com a dataInicio do contrato — sem isso,
-        // lojas já existentes nunca recebiam essa data ao editar o contrato
-        // (só lojas novas criadas na própria edição ganhavam o campo).
-        ...(dataInicioContrato ? { dataInicio: dataInicioContrato } : {}),
+        // Data própria da loja — vem do campo do item (pré-carregado com a
+        // data real de cada loja, ver EditarContratoModal), não da data do
+        // contrato. Assim editar o contrato não re-carimba lojas já existentes.
+        ...(item.dataInicio ? { dataInicio: Timestamp.fromDate(parseLocalDate(item.dataInicio)) } : {}),
       }
 
       if (item.lojaId) {
@@ -718,8 +727,14 @@ export default function Contratos() {
         await updateDoc(doc(db, COLLECTIONS.LOJAS, item.lojaId), dadosLoja)
         itensLojas.push({ lojaId: item.lojaId, lojaNome: dadosLoja.nome, valor: isNaN(valorLoja) ? 0 : valorLoja })
       } else {
+        // Loja nova adicionada durante a edição: sem data própria informada,
+        // usa hoje — nunca a data do contrato (que pode ser de meses atrás).
+        const dataInicioNova = item.dataInicio
+          ? Timestamp.fromDate(parseLocalDate(item.dataInicio))
+          : Timestamp.fromDate(parseLocalDate(hojeDateInput()))
         const lojaRef = await criarComRateLimit(COLLECTIONS.LOJAS, {
           ...dadosLoja,
+          dataInicio: dataInicioNova,
           organizacaoId: orgId,
           clienteId: contrato.clienteId,
           observacoes: '',
@@ -868,7 +883,7 @@ export default function Contratos() {
                     onClick={() => setEditingContrato(c)}
                   >
                     <td className="px-4 h-12 text-[14px] text-text-primary font-medium max-w-[200px]">
-                      <span className="block truncate">{clienteMap[c.clienteId]?.nome ?? '—'}</span>
+                      <span className="block truncate">{clienteMap[c.clienteId]?.nome ?? 'Cliente excluído'}</span>
                     </td>
                     {isSuperAdmin && (
                       <td className="px-4 h-12 text-[13px] text-text-muted max-w-[180px]">
@@ -909,7 +924,7 @@ export default function Contratos() {
                 className="p-4 border-b border-border-subtle last:border-0 flex flex-col gap-2 cursor-pointer"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[14px] text-text-primary font-medium truncate">{clienteMap[c.clienteId]?.nome ?? '—'}</span>
+                  <span className="text-[14px] text-text-primary font-medium truncate">{clienteMap[c.clienteId]?.nome ?? 'Cliente excluído'}</span>
                   <StatusContratoBadge status={c.status} />
                 </div>
                 {isSuperAdmin && (
@@ -955,7 +970,7 @@ export default function Contratos() {
         onSave={handleEditarContrato}
         onPedirExclusao={contrato => { setEditingContrato(null); setContratoParaExcluir(contrato) }}
         contrato={editingContrato}
-        clienteNome={editingContrato ? clienteMap[editingContrato.clienteId]?.nome : ''}
+        clienteNome={editingContrato ? (clienteMap[editingContrato.clienteId]?.nome ?? 'Cliente excluído') : ''}
         gestores={gestores}
       />
 

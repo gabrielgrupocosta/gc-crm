@@ -512,7 +512,7 @@ export default function Organizacoes() {
                           title={org.flagTeste ? 'Desativar modo teste desta organização' : 'Ativar modo teste — restringe todas as telas a organizações com a flag ativa'}
                           className="inline-flex items-center gap-1.5 text-[12px] px-2 py-1 rounded border transition-colors duration-150"
                           style={org.flagTeste
-                            ? { background: '#FFF5F5', borderColor: '#FECACA', color: '#E5322D' }
+                            ? { background: '#FFF5F5', borderColor: '#FECACA', color: '#FF4B2E' }
                             : { background: '#FFFFFF', borderColor: '#E8E8E8', color: '#999999' }
                           }
                         >

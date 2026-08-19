@@ -37,7 +37,7 @@ export default function PedirPermissaoNotificacao({ permissao, onPedirPermissao 
             className="shrink-0 flex items-center justify-center"
             style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: '#FFF5F5' }}
           >
-            <Bell size={16} strokeWidth={1.75} color="#E5322D" />
+            <Bell size={16} strokeWidth={1.75} color="#FF4B2E" />
           </div>
           <div className="flex-1 min-w-0">
             <p style={{ fontSize: '13px', fontWeight: 500, color: '#111111', marginBottom: '3px' }}>
