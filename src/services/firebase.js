@@ -211,4 +211,5 @@ export const COLLECTIONS = {
   CONTRATOS:     'contratos',
   COBRANCAS:     'cobrancas',
   CHECKPOINTS_LOJAS_NOVAS: 'checkpoints_lojas_novas',
+  CONVERSAS_WHATSAPP: 'conversas_whatsapp',
 }

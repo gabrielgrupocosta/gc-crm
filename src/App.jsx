@@ -30,6 +30,7 @@ const Financeiro = lazy(() => import('./pages/Financeiro'))
 const AssistenteDelivery = lazy(() => import('./pages/AssistenteDelivery'))
 const Gestores = lazy(() => import('./pages/Gestores'))
 const Organizacoes = lazy(() => import('./pages/Organizacoes'))
+const WhatsappPanel = lazy(() => import('./pages/WhatsappPanel'))
 const CRM = lazy(() => import('./pages/CRM'))
 const ControleSemanal = lazy(() => import('./pages/ControleSemanal'))
 const Ranking = lazy(() => import('./pages/Ranking'))
@@ -419,6 +420,7 @@ function AppRoutes() {
 
           <Route element={<SuperAdminRoute />}>
             <Route path="/organizacoes" element={<Organizacoes />} />
+            <Route path="/whatsapp" element={<WhatsappPanel />} />
           </Route>
 
           <Route element={<EmailRoute email="luiz@ihubfood.com.br" />}>

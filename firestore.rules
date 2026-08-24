@@ -268,6 +268,12 @@ service cloud.firestore {
 
     // CRM de prospecção: admin_org vê/gerencia todos os leads da própria
     // organização; gestor só os leads onde é o responsável.
+    // Conversas de WhatsApp: painel de atendimento, acesso restrito a master
+    // (mesma exclusividade das demais telas de plataforma).
+    match /conversas_whatsapp/{docId} {
+      allow read, write: if isSuperAdmin();
+    }
+
     match /crm_leads/{leadId} {
       allow read: if isSuperAdmin()
         || (mesmaOrg(resource.data) && (isAdminOrg() || resource.data.responsavelId == request.auth.uid));

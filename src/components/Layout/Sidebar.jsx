@@ -85,6 +85,7 @@ const NAV_PERFIL = [
 // Visível só para master (gestão da plataforma como um todo, entre organizações)
 const NAV_PLATAFORMA = [
   { to: '/organizacoes', label: 'Organizações', icon: Building2 },
+  { to: '/whatsapp', label: 'WhatsApp', icon: MessageSquare },
 ]
 
 const NAV_SUPORTE = [
