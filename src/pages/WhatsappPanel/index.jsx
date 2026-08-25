@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Search } from 'lucide-react'
+import { ArrowUpDown, ChevronDown, ChevronUp, Search, SlidersHorizontal } from 'lucide-react'
 import ConversaCard, { COLUNAS, STATUS_LABELS } from './ConversaCard'
 import ConversaDetalhe from './ConversaDetalhe'
 import { useConversas } from './useConversas'
@@ -10,6 +10,26 @@ const FILTROS = [
   ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label })),
 ]
 
+const ORDEM_STORAGE_KEY = 'whatsapp_ordem_categorias'
+
+function lerOrdemSalva() {
+  try {
+    const bruto = localStorage.getItem(ORDEM_STORAGE_KEY)
+    const valores = bruto ? JSON.parse(bruto) : null
+    return Array.isArray(valores) ? valores : null
+  } catch {
+    return null
+  }
+}
+
+function ordenarColunas(valoresSalvos) {
+  if (!valoresSalvos) return COLUNAS
+  const porValue = new Map(COLUNAS.map(coluna => [coluna.value, coluna]))
+  const ordenadas = valoresSalvos.map(value => porValue.get(value)).filter(Boolean)
+  const faltando = COLUNAS.filter(coluna => !valoresSalvos.includes(coluna.value))
+  return [...ordenadas, ...faltando]
+}
+
 export default function WhatsappPanel() {
   const { conversas, loading, mudarColuna, mudarStatus, marcarLida, excluirMensagem } = useConversas()
   const [filtro, setFiltro] = useState('todas')
@@ -17,6 +37,31 @@ export default function WhatsappPanel() {
   const [categoriaAtiva, setCategoriaAtiva] = useState('todas')
   const [idSelecionado, setIdSelecionado] = useState(null)
   const [colunaEmHover, setColunaEmHover] = useState(null)
+  const [categoriasVisiveis, setCategoriasVisiveis] = useState(() => Object.fromEntries(COLUNAS.map(coluna => [coluna.value, true])))
+  const [filtroAberto, setFiltroAberto] = useState(false)
+  const [categoriaSobMouse, setCategoriaSobMouse] = useState(null)
+  const [ordemColunas, setOrdemColunas] = useState(() => ordenarColunas(lerOrdemSalva()))
+  const [modoReordenar, setModoReordenar] = useState(false)
+
+  function alternarCategoriaVisivel(value) {
+    setCategoriasVisiveis(atual => ({ ...atual, [value]: !atual[value] }))
+  }
+
+  function moverColuna(value, direcao) {
+    setOrdemColunas(atual => {
+      const index = atual.findIndex(coluna => coluna.value === value)
+      const novoIndex = index + direcao
+      if (index === -1 || novoIndex < 0 || novoIndex >= atual.length) return atual
+      const copia = [...atual]
+      ;[copia[index], copia[novoIndex]] = [copia[novoIndex], copia[index]]
+      try {
+        localStorage.setItem(ORDEM_STORAGE_KEY, JSON.stringify(copia.map(coluna => coluna.value)))
+      } catch {
+        // localStorage indisponível (modo privado, quota) — ordem só vale para esta sessão
+      }
+      return copia
+    })
+  }
 
   function soltarNaColuna(event, coluna) {
     event.preventDefault()
@@ -41,10 +86,14 @@ export default function WhatsappPanel() {
     COLUNAS.map(coluna => [coluna.value, filtradas.filter(conversa => conversa.coluna === coluna.value).length]),
   ), [filtradas])
 
-  const listadas = useMemo(
-    () => categoriaAtiva === 'todas' ? filtradas : filtradas.filter(conversa => conversa.coluna === categoriaAtiva),
-    [categoriaAtiva, filtradas],
+  const visiveisEmTodas = useMemo(
+    () => filtradas.filter(conversa => categoriasVisiveis[conversa.coluna] !== false),
+    [filtradas, categoriasVisiveis],
   )
+
+  const listadas = categoriaAtiva === 'todas'
+    ? visiveisEmTodas
+    : filtradas.filter(conversa => conversa.coluna === categoriaAtiva)
 
   const selecionada = conversas.find(conversa => conversa.id === idSelecionado) ?? null
 
@@ -63,58 +112,179 @@ export default function WhatsappPanel() {
     >
       <div className="page-header">
         <h1 className="page-title">WhatsApp</h1>
-        <p style={{ color: '#666666', fontSize: '13px', marginTop: 4 }}>Organize contatos e acompanhe cada conversa.</p>
+        <p style={{ color: '#6B7178', fontSize: '13px', marginTop: 4 }}>Organize contatos e acompanhe cada conversa.</p>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden" style={{ marginTop: 18 }}>
         {loading ? (
           <div className="flex h-full items-center justify-center rounded-lg border border-border bg-white">
-            <p style={{ color: '#999999', fontSize: '12px' }}>Carregando conversas...</p>
+            <p style={{ color: '#9A9DA4', fontSize: '12px' }}>Carregando conversas...</p>
           </div>
         ) : (
           <div className="flex h-full min-h-0 overflow-hidden rounded-lg border border-border bg-white">
-            <nav className="flex min-h-0 flex-shrink-0 flex-col overflow-y-auto" style={{ width: 152, padding: 10, borderRight: '1px solid #E8E8E8', backgroundColor: '#FAFAFA' }}>
-              <button
-                type="button"
-                onClick={() => setCategoriaAtiva('todas')}
-                className="flex w-full items-center justify-between rounded-md text-left"
-                style={{
-                  padding: '8px 10px', marginBottom: 2, fontSize: '12px', fontWeight: 600,
-                  color: categoriaAtiva === 'todas' ? '#FF4B2E' : '#111111',
-                  backgroundColor: categoriaAtiva === 'todas' ? 'rgba(255,75,46,0.1)' : 'transparent',
-                }}
-              >
-                <span>Todas</span>
-                <span style={{ color: '#999999', fontSize: '11px', fontWeight: 500 }}>{filtradas.length}</span>
-              </button>
-
-              {COLUNAS.map(coluna => (
+            <nav className="relative flex min-h-0 flex-shrink-0 flex-col overflow-y-auto" style={{ width: 156, padding: '10px 8px', borderRight: '1px solid #E4E5E9', backgroundColor: '#F0F1F4' }}>
+              <div className="flex items-center gap-1" style={{ marginBottom: 4, paddingLeft: 2 }}>
                 <button
-                  key={coluna.value}
                   type="button"
-                  onClick={() => setCategoriaAtiva(coluna.value)}
-                  onDragOver={event => { event.preventDefault(); if (colunaEmHover !== coluna.value) setColunaEmHover(coluna.value) }}
-                  onDragLeave={() => setColunaEmHover(atual => (atual === coluna.value ? null : atual))}
-                  onDrop={event => soltarNaColuna(event, coluna.value)}
-                  className="flex w-full items-center gap-2 rounded-md text-left"
+                  onClick={() => setCategoriaAtiva('todas')}
+                  className="flex min-w-0 flex-1 items-center justify-between rounded-md text-left"
                   style={{
-                    padding: '8px 10px', marginBottom: 2, fontSize: '12px', fontWeight: 500,
-                    color: categoriaAtiva === coluna.value || colunaEmHover === coluna.value ? coluna.cor : '#333333',
-                    backgroundColor: categoriaAtiva === coluna.value || colunaEmHover === coluna.value ? `${coluna.cor}14` : 'transparent',
-                    border: colunaEmHover === coluna.value ? `1px dashed ${coluna.cor}` : '1px solid transparent',
+                    padding: '8px 10px', fontSize: '12px', fontWeight: 700,
+                    color: categoriaAtiva === 'todas' ? '#E8503A' : '#1B1E24',
+                    backgroundColor: categoriaAtiva === 'todas' ? '#E8503A14' : 'transparent',
                   }}
                 >
-                  <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: coluna.cor }} />
-                  <span className="min-w-0 flex-1 truncate">{coluna.label}</span>
-                  <span style={{ flexShrink: 0, color: '#999999', fontSize: '11px', fontWeight: 500 }}>{contagemPorColuna[coluna.value] ?? 0}</span>
+                  <span>Todas</span>
+                  <span
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      minWidth: 20, height: 18, padding: '0 5px', borderRadius: 999,
+                      color: categoriaAtiva === 'todas' ? '#E8503A' : '#6B7178',
+                      backgroundColor: categoriaAtiva === 'todas' ? '#E8503A1F' : '#E4E5E9',
+                      fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                      boxShadow: categoriaAtiva === 'todas' ? 'inset 0 0 0 1px #E8503A33' : 'none',
+                    }}
+                  >
+                    {visiveisEmTodas.length}
+                  </span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setFiltroAberto(aberto => !aberto)}
+                  aria-label="Escolher categorias exibidas em Todas"
+                  aria-expanded={filtroAberto}
+                  className="flex flex-shrink-0 items-center justify-center rounded-md"
+                  style={{ width: 26, height: 26, color: filtroAberto ? '#E8503A' : '#9A9DA4', backgroundColor: filtroAberto ? '#E8503A14' : 'transparent' }}
+                >
+                  <SlidersHorizontal size={13} strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModoReordenar(atual => !atual)}
+                  aria-label="Reordenar categorias"
+                  aria-pressed={modoReordenar}
+                  className="flex flex-shrink-0 items-center justify-center rounded-md"
+                  style={{ width: 26, height: 26, color: modoReordenar ? '#E8503A' : '#9A9DA4', backgroundColor: modoReordenar ? '#E8503A14' : 'transparent' }}
+                >
+                  <ArrowUpDown size={13} strokeWidth={1.75} />
+                </button>
+              </div>
+
+              {modoReordenar && (
+                <p style={{ color: '#9A9DA4', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 2px', marginBottom: 6 }}>
+                  Ordem das categorias
+                </p>
+              )}
+
+              {filtroAberto && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Fechar filtro de categorias"
+                    onClick={() => setFiltroAberto(false)}
+                    style={{ position: 'fixed', inset: 0, zIndex: 20, cursor: 'default' }}
+                  />
+                  <div
+                    className="absolute"
+                    style={{
+                      top: 38, left: 10, zIndex: 21, width: 190, padding: 10, borderRadius: 10,
+                      border: '1px solid #E4E5E9', backgroundColor: '#FFFFFF', boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    <p style={{ color: '#9A9DA4', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                      Exibir em &quot;Todas&quot;
+                    </p>
+                    {ordemColunas.map(coluna => (
+                      <label key={coluna.value} className="flex cursor-pointer items-center gap-2" style={{ padding: '4px 2px' }}>
+                        <input
+                          type="checkbox"
+                          checked={categoriasVisiveis[coluna.value] !== false}
+                          onChange={() => alternarCategoriaVisivel(coluna.value)}
+                          style={{ accentColor: coluna.cor, width: 13, height: 13 }}
+                        />
+                        <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: coluna.cor }} />
+                        <span style={{ color: '#1B1E24', fontSize: '12px', fontWeight: 500 }}>{coluna.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {ordemColunas.map((coluna, index) => {
+                const destacado = !modoReordenar && (categoriaAtiva === coluna.value || categoriaSobMouse === coluna.value || colunaEmHover === coluna.value)
+                const recuo = modoReordenar ? 0 : 4 + (index % 3) * 5
+                const Wrapper = modoReordenar ? 'div' : 'button'
+                return (
+                  <Wrapper
+                    key={coluna.value}
+                    type={modoReordenar ? undefined : 'button'}
+                    onClick={modoReordenar ? undefined : () => setCategoriaAtiva(coluna.value)}
+                    onMouseEnter={modoReordenar ? undefined : () => setCategoriaSobMouse(coluna.value)}
+                    onMouseLeave={modoReordenar ? undefined : () => setCategoriaSobMouse(atual => (atual === coluna.value ? null : atual))}
+                    onDragOver={modoReordenar ? undefined : event => { event.preventDefault(); if (colunaEmHover !== coluna.value) setColunaEmHover(coluna.value) }}
+                    onDragLeave={modoReordenar ? undefined : () => setColunaEmHover(atual => (atual === coluna.value ? null : atual))}
+                    onDrop={modoReordenar ? undefined : event => soltarNaColuna(event, coluna.value)}
+                    className="flex w-full items-center gap-2 text-left"
+                    style={{
+                      padding: '8px 10px', marginBottom: 3, fontSize: '12px', fontWeight: 500,
+                      marginLeft: destacado ? 0 : recuo,
+                      width: destacado ? '100%' : `calc(100% - ${recuo}px)`,
+                      borderRadius: '0 8px 8px 0',
+                      color: destacado ? coluna.cor : '#1B1E24',
+                      backgroundColor: destacado ? `${coluna.cor}14` : 'transparent',
+                      border: !modoReordenar && colunaEmHover === coluna.value ? `1px dashed ${coluna.cor}` : '1px solid transparent',
+                      cursor: modoReordenar ? 'default' : 'pointer',
+                      transition: 'margin-left 0.15s ease-out, width 0.15s ease-out, background-color 0.15s ease-out, color 0.15s ease-out',
+                    }}
+                  >
+                    <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: coluna.cor }} />
+                    <span className="min-w-0 flex-1 truncate">{coluna.label}</span>
+                    {modoReordenar ? (
+                      <span className="flex flex-shrink-0 items-center" style={{ gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={() => moverColuna(coluna.value, -1)}
+                          disabled={index === 0}
+                          aria-label={`Mover ${coluna.label} para cima`}
+                          className="flex items-center justify-center rounded"
+                          style={{ width: 20, height: 20, color: index === 0 ? '#C7C9CE' : '#6B7178' }}
+                        >
+                          <ChevronUp size={13} strokeWidth={2} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moverColuna(coluna.value, 1)}
+                          disabled={index === ordemColunas.length - 1}
+                          aria-label={`Mover ${coluna.label} para baixo`}
+                          className="flex items-center justify-center rounded"
+                          style={{ width: 20, height: 20, color: index === ordemColunas.length - 1 ? '#C7C9CE' : '#6B7178' }}
+                        >
+                          <ChevronDown size={13} strokeWidth={2} />
+                        </button>
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 20, height: 18, padding: '0 5px', borderRadius: 999,
+                          color: destacado ? coluna.cor : '#6B7178',
+                          backgroundColor: destacado ? `${coluna.cor}1F` : '#E4E5E9',
+                          fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                          boxShadow: destacado ? `inset 0 0 0 1px ${coluna.cor}33` : 'none',
+                        }}
+                      >
+                        {contagemPorColuna[coluna.value] ?? 0}
+                      </span>
+                    )}
+                  </Wrapper>
+                )
+              })}
             </nav>
 
-            <div className="flex min-h-0 flex-shrink-0 flex-col" style={{ width: 320, borderRight: '1px solid #E8E8E8' }}>
-              <div className="flex flex-col gap-2" style={{ padding: 12, borderBottom: '1px solid #E8E8E8' }}>
+            <div className="flex min-h-0 flex-shrink-0 flex-col" style={{ width: 320, borderRight: '1px solid #E4E5E9' }}>
+              <div className="flex flex-col gap-2" style={{ padding: 12, borderBottom: '1px solid #E4E5E9' }}>
                 <div className="relative">
-                  <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" color="#999999" />
+                  <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" color="#9A9DA4" />
                   <input value={busca} onChange={event => setBusca(event.target.value)} className="input w-full font-sans" style={{ height: 36, paddingLeft: 32 }} placeholder="Buscar conversa" aria-label="Buscar conversas" />
                 </div>
                 <select value={filtro} onChange={event => setFiltro(event.target.value)} className="select w-full font-sans" aria-label="Filtrar por status" style={{ height: 34 }}>
@@ -129,7 +299,7 @@ export default function WhatsappPanel() {
                   </div>
                 ))}
                 {listadas.length === 0 && (
-                  <p className="text-center" style={{ color: '#AAAAAA', fontSize: '11px', padding: '22px 8px' }}>Nenhuma conversa</p>
+                  <p className="text-center" style={{ color: '#9A9DA4', fontSize: '11px', padding: '22px 8px' }}>Nenhuma conversa</p>
                 )}
               </div>
             </div>

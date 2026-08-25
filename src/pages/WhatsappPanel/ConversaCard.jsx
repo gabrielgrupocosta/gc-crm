@@ -3,13 +3,13 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 
 export const COLUNAS = [
-  { value: 'grupos', label: 'Grupos', cor: '#7C3AED' },
-  { value: 'gestores', label: 'Gestores', cor: '#2563EB' },
-  { value: 'clientes', label: 'Clientes', cor: '#00A67E' },
-  { value: 'leads', label: 'Leads', cor: '#F59E0B' },
-  { value: 'importantes', label: 'Importantes', cor: '#FF4B2E' },
-  { value: 'alerta', label: 'Alerta', cor: '#DC2626' },
-  { value: 'arquivado', label: 'Arquivado', cor: '#737373' },
+  { value: 'grupos', label: 'Grupos', cor: '#6E5AA3' },
+  { value: 'gestores', label: 'Gestores', cor: '#3E6FA6' },
+  { value: 'clientes', label: 'Clientes', cor: '#3F8F68' },
+  { value: 'leads', label: 'Leads', cor: '#C4881F' },
+  { value: 'importantes', label: 'Importantes', cor: '#E8503A' },
+  { value: 'alerta', label: 'Alerta', cor: '#BE3B30' },
+  { value: 'arquivado', label: 'Arquivado', cor: '#8A8D93' },
 ]
 
 export const COLUNA_CORES = Object.fromEntries(COLUNAS.map(coluna => [coluna.value, coluna.cor]))
@@ -41,9 +41,21 @@ export function tempoRelativo(valor, agora = new Date()) {
   return `há ${Math.floor(horas / 24)}d`
 }
 
+function iniciais(texto) {
+  const limpo = (texto || '').trim()
+  if (!limpo) return '#'
+  const partes = limpo.split(/\s+/)
+  const primeira = partes[0]?.[0] ?? ''
+  const segunda = partes.length > 1 ? partes[partes.length - 1][0] : ''
+  return (primeira + segunda).toUpperCase()
+}
+
 export default function ConversaCard({ conversa, selecionada, onSelect }) {
   const cor = COLUNA_CORES[conversa.coluna] ?? COLUNA_CORES.arquivado
   const [arrastando, setArrastando] = useState(false)
+  const mensagens = conversa.mensagens ?? []
+  const remetenteGrupo = conversa.isGroup ? mensagens[mensagens.length - 1]?.remetente : null
+  const naoLida = conversa.lida === false
 
   return (
     <motion.button
@@ -58,29 +70,56 @@ export default function ConversaCard({ conversa, selecionada, onSelect }) {
         setArrastando(true)
       }}
       onDragEnd={() => setArrastando(false)}
-      className="w-full rounded-lg text-left font-sans"
+      className="flex w-full items-start rounded-lg text-left font-sans"
       style={{
-        display: 'block', padding: '13px 14px', border: `1px solid ${selecionada ? cor : '#E8E8E8'}`,
-        cursor: 'grab', backgroundColor: selecionada ? `${cor}0A` : '#FFFFFF',
+        gap: 10, padding: '11px 12px', border: `1px solid ${selecionada ? cor : '#E4E5E9'}`,
+        cursor: 'grab', backgroundColor: selecionada ? `${cor}0C` : '#FFFFFF',
         boxShadow: '0 1px 2px rgba(0,0,0,0.04)', opacity: arrastando ? 0.5 : 1,
       }}
     >
-      <div className="flex min-w-0 items-center gap-2">
-        <span style={{ flex: 1, minWidth: 0, color: '#111111', fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {conversa.nome || conversa.phone}
+      <span
+        aria-hidden="true"
+        className="flex flex-shrink-0 items-center justify-center"
+        style={{
+          width: 34, height: 34, borderRadius: conversa.isGroup ? 10 : '50%',
+          backgroundColor: `${cor}17`, color: cor, fontSize: '12px', fontWeight: 800,
+        }}
+      >
+        {conversa.isGroup ? '👥' : iniciais(conversa.nome || conversa.phone)}
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="flex min-w-0 items-center gap-2">
+          <span style={{ flex: 1, minWidth: 0, color: '#1B1E24', fontSize: '13px', fontWeight: conversa.isGroup || naoLida ? 700 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {conversa.nome || conversa.phone}
+          </span>
+          <span style={{ flexShrink: 0, color: '#9A9DA4', fontSize: '10px', fontVariantNumeric: 'tabular-nums' }}>{tempoRelativo(conversa.ultimaAtividade)}</span>
         </span>
-        {conversa.lida === false && <span aria-label="Não lida" style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: '#FF4B2E' }} />}
-      </div>
-      <p style={{ marginTop: 6, color: '#666666', fontSize: '12px', lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-        {conversa.ultimaMensagem || 'Sem mensagens'}
-      </p>
-      <div className="flex items-center justify-between gap-2" style={{ marginTop: 10 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 7px', borderRadius: 999, color: cor, backgroundColor: `${cor}14`, fontSize: '10px', fontWeight: 600 }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: cor }} />
-          {STATUS_LABELS[conversa.status] ?? conversa.status}
+
+        {remetenteGrupo && (
+          <span style={{ display: 'block', marginTop: 3, color: '#6B7178', fontSize: '11px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {remetenteGrupo}
+          </span>
+        )}
+        <span style={{ display: '-webkit-box', marginTop: remetenteGrupo ? 2 : 4, color: remetenteGrupo ? '#9A9DA4' : '#6B7178', fontSize: '12px', lineHeight: 1.45, WebkitLineClamp: remetenteGrupo ? 1 : 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          {conversa.ultimaMensagem || 'Sem mensagens'}
         </span>
-        <span style={{ flexShrink: 0, color: '#999999', fontSize: '10px' }}>{tempoRelativo(conversa.ultimaAtividade)}</span>
-      </div>
+
+        <span className="flex items-center justify-between gap-2" style={{ marginTop: 8 }}>
+          <span
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px 2px 6px', borderRadius: 999,
+              color: cor, backgroundColor: `${cor}12`, fontSize: '10px', fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.04em',
+              boxShadow: `inset 0 0 0 1px ${cor}33`,
+            }}
+          >
+            <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: cor }} />
+            {STATUS_LABELS[conversa.status] ?? conversa.status}
+          </span>
+          {naoLida && <span aria-label="Não lida" style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: '#E8503A' }} />}
+        </span>
+      </span>
     </motion.button>
   )
 }

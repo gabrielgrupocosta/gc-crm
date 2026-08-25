@@ -6,6 +6,23 @@ import { COLUNAS, COLUNA_CORES, STATUS_LABELS } from './ConversaCard'
 
 const ENDPOINT = 'https://whatsapp-api-production-4c64.up.railway.app/enviar'
 
+const CORES_REMETENTE = ['#3E6FA6', '#3F8F68', '#C4881F', '#6E5AA3', '#B25478', '#3F8F94']
+
+function corRemetente(nome) {
+  if (!nome) return CORES_REMETENTE[0]
+  const soma = [...nome].reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  return CORES_REMETENTE[soma % CORES_REMETENTE.length]
+}
+
+function iniciais(texto) {
+  const limpo = (texto || '').trim()
+  if (!limpo) return '#'
+  const partes = limpo.split(/\s+/)
+  const primeira = partes[0]?.[0] ?? ''
+  const segunda = partes.length > 1 ? partes[partes.length - 1][0] : ''
+  return (primeira + segunda).toUpperCase()
+}
+
 function formatarHorario(valor) {
   if (!valor) return ''
   const data = typeof valor.toDate === 'function' ? valor.toDate() : new Date(valor)
@@ -73,8 +90,8 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
   if (!conversa) {
     return (
       <div className="flex h-full min-h-0 flex-col items-center justify-center font-sans" style={{ backgroundColor: '#FAFAFA' }}>
-        <MessageSquare size={32} strokeWidth={1.5} color="#CCCCCC" />
-        <p style={{ color: '#999999', fontSize: '13px', marginTop: 10 }}>Selecione uma conversa para visualizar as mensagens.</p>
+        <MessageSquare size={32} strokeWidth={1.5} color="#C7C9CE" />
+        <p style={{ color: '#9A9DA4', fontSize: '13px', marginTop: 10 }}>Selecione uma conversa para visualizar as mensagens.</p>
       </div>
     )
   }
@@ -87,18 +104,28 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
       animate={{ opacity: 1 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-2" style={{ minHeight: 76, padding: '12px 18px', borderBottom: '1px solid #E8E8E8' }}>
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2" style={{ minHeight: 76, padding: '12px 18px', borderBottom: '1px solid #E4E5E9' }}>
+        <span
+          aria-hidden="true"
+          className="flex flex-shrink-0 items-center justify-center"
+          style={{
+            width: 38, height: 38, borderRadius: conversa.isGroup ? 10 : '50%',
+            backgroundColor: `${corColuna}17`, color: corColuna, fontSize: '13px', fontWeight: 800,
+          }}
+        >
+          {conversa.isGroup ? '👥' : iniciais(conversa.nome || conversa.phone)}
+        </span>
         <div className="min-w-0 flex-1">
-          <h2 id="conversa-detalhe-titulo" style={{ color: '#111111', fontSize: '15px', fontWeight: 600 }}>{conversa.nome || conversa.phone}</h2>
-          <p style={{ color: '#999999', fontSize: '12px', marginTop: 2 }}>+{conversa.phone}</p>
+          <h2 id="conversa-detalhe-titulo" style={{ color: '#1B1E24', fontSize: '15px', fontWeight: 700 }}>{conversa.nome || conversa.phone}</h2>
+          <p style={{ color: '#9A9DA4', fontSize: '12px', marginTop: 2 }}>{conversa.isGroup ? '👥 Grupo' : `+${conversa.phone}`}</p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Fechar conversa" className="flex h-8 w-8 items-center justify-center rounded-md" style={{ color: '#666666', backgroundColor: '#F5F5F5' }}>
+        <button type="button" onClick={onClose} aria-label="Fechar conversa" className="flex h-8 w-8 items-center justify-center rounded-md" style={{ color: '#6B7178', backgroundColor: '#F0F1F4' }}>
           <X size={17} strokeWidth={1.75} />
         </button>
 
         <div className="grid w-full grid-cols-2 gap-2">
           <label>
-            <span style={{ display: 'block', color: '#999999', fontSize: '10px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Coluna</span>
+            <span style={{ display: 'block', color: '#9A9DA4', fontSize: '10px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Coluna</span>
             <select
               value={conversa.coluna}
               onChange={event => mudarColuna(conversa.id, event.target.value).catch(() => {})}
@@ -110,7 +137,7 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
             </select>
           </label>
           <label>
-            <span style={{ display: 'block', color: '#999999', fontSize: '10px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
+            <span style={{ display: 'block', color: '#9A9DA4', fontSize: '10px', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</span>
             <select
               value={conversa.status}
               onChange={event => mudarStatus(conversa.id, event.target.value).catch(() => {})}
@@ -126,16 +153,17 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
 
       <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: '20px 18px', backgroundColor: '#FAFAFA' }}>
         {(conversa.mensagens ?? []).length === 0 ? (
-          <p className="text-center" style={{ color: '#999999', fontSize: '12px', marginTop: 30 }}>Nenhuma mensagem nesta conversa.</p>
+          <p className="text-center" style={{ color: '#9A9DA4', fontSize: '12px', marginTop: 30 }}>Nenhuma mensagem nesta conversa.</p>
         ) : conversa.mensagens.map((mensagem, index) => {
           const recebida = mensagem.de === 'contato'
+          const mostrarRemetente = recebida && conversa.isGroup && mensagem.remetente
           return (
             <motion.div
               key={`${formatarHorario(mensagem.timestamp)}-${index}`}
               initial={{ opacity: 0, transform: reduzirMovimento ? 'translateY(0)' : 'translateY(4px)' }}
               animate={{ opacity: 1, transform: 'translateY(0)' }}
               transition={{ duration: 0.15, ease: 'easeOut' }}
-              className={`group flex items-center gap-1.5 ${recebida ? 'justify-start' : 'justify-end'}`}
+              className={`group flex items-end gap-1.5 ${recebida ? 'justify-start' : 'justify-end'}`}
               style={{ marginBottom: 10 }}
             >
               {!recebida && (
@@ -144,14 +172,21 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
                   onClick={() => setIndiceParaExcluir(index)}
                   aria-label="Excluir mensagem"
                   className="opacity-0 transition-opacity group-hover:opacity-100"
-                  style={{ color: '#999999', flexShrink: 0 }}
+                  style={{ color: '#9A9DA4', flexShrink: 0 }}
                 >
                   <Trash2 size={13} strokeWidth={1.75} />
                 </button>
               )}
-              <div style={{ maxWidth: '76%', padding: '9px 11px 6px', borderRadius: recebida ? '4px 12px 12px 12px' : '12px 4px 12px 12px', backgroundColor: recebida ? '#F0F0F0' : '#FFE4DD' }}>
-                <p style={{ color: '#111111', fontSize: '13px', lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{mensagem.texto}</p>
-                <p style={{ color: '#999999', fontSize: '9px', textAlign: 'right', marginTop: 3 }}>{formatarHorario(mensagem.timestamp)}</p>
+              <div style={{ maxWidth: '76%' }}>
+                {mostrarRemetente && (
+                  <p style={{ color: corRemetente(mensagem.remetente), fontSize: '11px', fontWeight: 700, marginBottom: 2, paddingLeft: 2 }}>
+                    {mensagem.remetente}
+                  </p>
+                )}
+                <div style={{ padding: '9px 11px 6px', borderRadius: recebida ? '4px 12px 12px 12px' : '12px 4px 12px 12px', backgroundColor: recebida ? '#EFF0F3' : '#FDECE8' }}>
+                  <p style={{ color: '#1B1E24', fontSize: '13px', lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{mensagem.texto}</p>
+                  <p style={{ color: '#9A9DA4', fontSize: '9px', textAlign: 'right', marginTop: 3 }}>{formatarHorario(mensagem.timestamp)}</p>
+                </div>
               </div>
               {recebida && (
                 <button
@@ -159,7 +194,7 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
                   onClick={() => setIndiceParaExcluir(index)}
                   aria-label="Excluir mensagem"
                   className="opacity-0 transition-opacity group-hover:opacity-100"
-                  style={{ color: '#999999', flexShrink: 0 }}
+                  style={{ color: '#9A9DA4', flexShrink: 0 }}
                 >
                   <Trash2 size={13} strokeWidth={1.75} />
                 </button>
@@ -170,8 +205,8 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
         <div ref={fimRef} />
       </div>
 
-      <footer style={{ padding: '12px 14px', borderTop: '1px solid #E8E8E8', backgroundColor: '#FFFFFF' }}>
-        {erro && <p role="alert" style={{ color: '#FF4B2E', fontSize: '11px', marginBottom: 7 }}>{erro}</p>}
+      <footer style={{ padding: '12px 14px', borderTop: '1px solid #E4E5E9', backgroundColor: '#FFFFFF' }}>
+        {erro && <p role="alert" style={{ color: '#BE3B30', fontSize: '11px', marginBottom: 7 }}>{erro}</p>}
         <div className="flex items-end gap-2">
           <textarea
             value={texto}
@@ -205,7 +240,7 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
           </>
         )}
       >
-        <p style={{ color: '#666666', fontSize: '13px' }}>Esta mensagem será removida permanentemente da conversa.</p>
+        <p style={{ color: '#6B7178', fontSize: '13px' }}>Esta mensagem será removida permanentemente da conversa.</p>
       </Modal>
     </motion.div>
   )
