@@ -11,6 +11,7 @@ export const COLUNAS = [
   { value: 'importantes', label: 'Importantes', cor: '#E8503A' },
   { value: 'alerta', label: 'Alerta', cor: '#BE3B30' },
   { value: 'arquivado', label: 'Arquivado', cor: '#8A8D93' },
+  { value: 'outros', label: 'Outros', cor: '#6B7178' },
 ]
 
 export const COLUNA_CORES = Object.fromEntries(COLUNAS.map(coluna => [coluna.value, coluna.cor]))
