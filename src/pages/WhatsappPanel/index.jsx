@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowUpDown, ChevronDown, ChevronUp, Search, SlidersHorizontal } from 'lucide-react'
+import { Search, SlidersHorizontal } from 'lucide-react'
 import ConversaCard, { COLUNAS, STATUS_LABELS } from './ConversaCard'
 import ConversaDetalhe from './ConversaDetalhe'
 import { useConversas } from './useConversas'
@@ -41,19 +41,22 @@ export default function WhatsappPanel() {
   const [filtroAberto, setFiltroAberto] = useState(false)
   const [categoriaSobMouse, setCategoriaSobMouse] = useState(null)
   const [ordemColunas, setOrdemColunas] = useState(() => ordenarColunas(lerOrdemSalva()))
-  const [modoReordenar, setModoReordenar] = useState(false)
+  const [categoriaArrastada, setCategoriaArrastada] = useState(null)
+  const [categoriaAlvoReordenar, setCategoriaAlvoReordenar] = useState(null)
 
   function alternarCategoriaVisivel(value) {
     setCategoriasVisiveis(atual => ({ ...atual, [value]: !atual[value] }))
   }
 
-  function moverColuna(value, direcao) {
+  function reordenarColuna(origemValue, destinoValue) {
+    if (origemValue === destinoValue) return
     setOrdemColunas(atual => {
-      const index = atual.findIndex(coluna => coluna.value === value)
-      const novoIndex = index + direcao
-      if (index === -1 || novoIndex < 0 || novoIndex >= atual.length) return atual
+      const indiceOrigem = atual.findIndex(coluna => coluna.value === origemValue)
+      const indiceDestino = atual.findIndex(coluna => coluna.value === destinoValue)
+      if (indiceOrigem === -1 || indiceDestino === -1) return atual
       const copia = [...atual]
-      ;[copia[index], copia[novoIndex]] = [copia[novoIndex], copia[index]]
+      const [movida] = copia.splice(indiceOrigem, 1)
+      copia.splice(indiceDestino, 0, movida)
       try {
         localStorage.setItem(ORDEM_STORAGE_KEY, JSON.stringify(copia.map(coluna => coluna.value)))
       } catch {
@@ -158,23 +161,7 @@ export default function WhatsappPanel() {
                 >
                   <SlidersHorizontal size={13} strokeWidth={1.75} />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setModoReordenar(atual => !atual)}
-                  aria-label="Reordenar categorias"
-                  aria-pressed={modoReordenar}
-                  className="flex flex-shrink-0 items-center justify-center rounded-md"
-                  style={{ width: 26, height: 26, color: modoReordenar ? '#E8503A' : '#9A9DA4', backgroundColor: modoReordenar ? '#E8503A14' : 'transparent' }}
-                >
-                  <ArrowUpDown size={13} strokeWidth={1.75} />
-                </button>
               </div>
-
-              {modoReordenar && (
-                <p style={{ color: '#9A9DA4', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 2px', marginBottom: 6 }}>
-                  Ordem das categorias
-                </p>
-              )}
 
               {filtroAberto && (
                 <>
@@ -211,19 +198,50 @@ export default function WhatsappPanel() {
               )}
 
               {ordemColunas.map((coluna, index) => {
-                const destacado = !modoReordenar && (categoriaAtiva === coluna.value || categoriaSobMouse === coluna.value || colunaEmHover === coluna.value)
-                const recuo = modoReordenar ? 0 : 4 + (index % 3) * 5
-                const Wrapper = modoReordenar ? 'div' : 'button'
+                const destacado = categoriaAtiva === coluna.value || categoriaSobMouse === coluna.value || colunaEmHover === coluna.value
+                const recuo = 4 + (index % 3) * 5
+                const arrastandoEsta = categoriaArrastada === coluna.value
+                const alvoDeReordenacao = categoriaAlvoReordenar === coluna.value && categoriaArrastada && categoriaArrastada !== coluna.value
                 return (
-                  <Wrapper
+                  <button
                     key={coluna.value}
-                    type={modoReordenar ? undefined : 'button'}
-                    onClick={modoReordenar ? undefined : () => setCategoriaAtiva(coluna.value)}
-                    onMouseEnter={modoReordenar ? undefined : () => setCategoriaSobMouse(coluna.value)}
-                    onMouseLeave={modoReordenar ? undefined : () => setCategoriaSobMouse(atual => (atual === coluna.value ? null : atual))}
-                    onDragOver={modoReordenar ? undefined : event => { event.preventDefault(); if (colunaEmHover !== coluna.value) setColunaEmHover(coluna.value) }}
-                    onDragLeave={modoReordenar ? undefined : () => setColunaEmHover(atual => (atual === coluna.value ? null : atual))}
-                    onDrop={modoReordenar ? undefined : event => soltarNaColuna(event, coluna.value)}
+                    type="button"
+                    draggable
+                    onClick={() => setCategoriaAtiva(coluna.value)}
+                    onMouseEnter={() => setCategoriaSobMouse(coluna.value)}
+                    onMouseLeave={() => setCategoriaSobMouse(atual => (atual === coluna.value ? null : atual))}
+                    onDragStart={event => {
+                      event.dataTransfer.setData('application/x-whatsapp-categoria', coluna.value)
+                      event.dataTransfer.effectAllowed = 'move'
+                      setCategoriaArrastada(coluna.value)
+                    }}
+                    onDragEnd={() => {
+                      setCategoriaArrastada(null)
+                      setCategoriaAlvoReordenar(null)
+                      setColunaEmHover(null)
+                    }}
+                    onDragOver={event => {
+                      event.preventDefault()
+                      if (event.dataTransfer.types.includes('application/x-whatsapp-categoria')) {
+                        if (categoriaAlvoReordenar !== coluna.value) setCategoriaAlvoReordenar(coluna.value)
+                      } else if (colunaEmHover !== coluna.value) {
+                        setColunaEmHover(coluna.value)
+                      }
+                    }}
+                    onDragLeave={() => {
+                      setCategoriaAlvoReordenar(atual => (atual === coluna.value ? null : atual))
+                      setColunaEmHover(atual => (atual === coluna.value ? null : atual))
+                    }}
+                    onDrop={event => {
+                      event.preventDefault()
+                      if (event.dataTransfer.types.includes('application/x-whatsapp-categoria')) {
+                        const origem = event.dataTransfer.getData('application/x-whatsapp-categoria')
+                        reordenarColuna(origem, coluna.value)
+                        setCategoriaAlvoReordenar(null)
+                      } else {
+                        soltarNaColuna(event, coluna.value)
+                      }
+                    }}
                     className="flex w-full items-center gap-2 text-left"
                     style={{
                       padding: '8px 10px', marginBottom: 3, fontSize: '12px', fontWeight: 500,
@@ -232,51 +250,28 @@ export default function WhatsappPanel() {
                       borderRadius: '0 8px 8px 0',
                       color: destacado ? coluna.cor : '#1B1E24',
                       backgroundColor: destacado ? `${coluna.cor}14` : 'transparent',
-                      border: !modoReordenar && colunaEmHover === coluna.value ? `1px dashed ${coluna.cor}` : '1px solid transparent',
-                      cursor: modoReordenar ? 'default' : 'pointer',
+                      border: colunaEmHover === coluna.value ? `1px dashed ${coluna.cor}` : '1px solid transparent',
+                      boxShadow: alvoDeReordenacao ? `inset 0 2px 0 0 ${coluna.cor}` : 'none',
+                      opacity: arrastandoEsta ? 0.4 : 1,
+                      cursor: 'grab',
                       transition: 'margin-left 0.15s ease-out, width 0.15s ease-out, background-color 0.15s ease-out, color 0.15s ease-out',
                     }}
                   >
                     <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: coluna.cor }} />
                     <span className="min-w-0 flex-1 truncate">{coluna.label}</span>
-                    {modoReordenar ? (
-                      <span className="flex flex-shrink-0 items-center" style={{ gap: 2 }}>
-                        <button
-                          type="button"
-                          onClick={() => moverColuna(coluna.value, -1)}
-                          disabled={index === 0}
-                          aria-label={`Mover ${coluna.label} para cima`}
-                          className="flex items-center justify-center rounded"
-                          style={{ width: 20, height: 20, color: index === 0 ? '#C7C9CE' : '#6B7178' }}
-                        >
-                          <ChevronUp size={13} strokeWidth={2} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moverColuna(coluna.value, 1)}
-                          disabled={index === ordemColunas.length - 1}
-                          aria-label={`Mover ${coluna.label} para baixo`}
-                          className="flex items-center justify-center rounded"
-                          style={{ width: 20, height: 20, color: index === ordemColunas.length - 1 ? '#C7C9CE' : '#6B7178' }}
-                        >
-                          <ChevronDown size={13} strokeWidth={2} />
-                        </button>
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 20, height: 18, padding: '0 5px', borderRadius: 999,
-                          color: destacado ? coluna.cor : '#6B7178',
-                          backgroundColor: destacado ? `${coluna.cor}1F` : '#E4E5E9',
-                          fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                          boxShadow: destacado ? `inset 0 0 0 1px ${coluna.cor}33` : 'none',
-                        }}
-                      >
-                        {contagemPorColuna[coluna.value] ?? 0}
-                      </span>
-                    )}
-                  </Wrapper>
+                    <span
+                      style={{
+                        flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 20, height: 18, padding: '0 5px', borderRadius: 999,
+                        color: destacado ? coluna.cor : '#6B7178',
+                        backgroundColor: destacado ? `${coluna.cor}1F` : '#E4E5E9',
+                        fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                        boxShadow: destacado ? `inset 0 0 0 1px ${coluna.cor}33` : 'none',
+                      }}
+                    >
+                      {contagemPorColuna[coluna.value] ?? 0}
+                    </span>
+                  </button>
                 )
               })}
             </nav>
