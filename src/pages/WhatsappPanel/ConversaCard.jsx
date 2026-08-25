@@ -1,6 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { Check } from 'lucide-react'
 
 export const COLUNAS = [
   { value: 'grupos', label: 'Grupos', cor: '#6E5AA3' },
@@ -50,17 +51,25 @@ function iniciais(texto) {
   return (primeira + segunda).toUpperCase()
 }
 
-export default function ConversaCard({ conversa, selecionada, onSelect }) {
+export default function ConversaCard({ conversa, selecionada, onSelect, onResolverAlerta }) {
   const cor = COLUNA_CORES[conversa.coluna] ?? COLUNA_CORES.arquivado
   const [arrastando, setArrastando] = useState(false)
   const mensagens = conversa.mensagens ?? []
   const remetenteGrupo = conversa.isGroup ? mensagens[mensagens.length - 1]?.remetente : null
   const naoLida = conversa.lida === false
+  const emAlerta = conversa.coluna === 'alerta'
 
   return (
-    <motion.button
-      type="button"
+    <motion.div
+      role="button"
+      tabIndex={0}
       onClick={onSelect}
+      onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect()
+        }
+      }}
       whileTap={{ scale: 0.99 }}
       transition={{ duration: 0.15, ease: 'easeOut' }}
       draggable
@@ -117,9 +126,30 @@ export default function ConversaCard({ conversa, selecionada, onSelect }) {
             <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: cor }} />
             {STATUS_LABELS[conversa.status] ?? conversa.status}
           </span>
-          {naoLida && <span aria-label="Não lida" style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: '#E8503A' }} />}
+          <span className="flex flex-shrink-0 items-center gap-2">
+            {emAlerta && onResolverAlerta && (
+              <button
+                type="button"
+                onClick={event => {
+                  event.stopPropagation()
+                  onResolverAlerta()
+                }}
+                aria-label="Marcar alerta como resolvido"
+                className="flex items-center gap-1"
+                style={{
+                  padding: '2px 8px', borderRadius: 999, fontSize: '10px', fontWeight: 700,
+                  textTransform: 'uppercase', letterSpacing: '0.04em',
+                  color: '#00C896', backgroundColor: '#00C89614', boxShadow: 'inset 0 0 0 1px #00C89633',
+                }}
+              >
+                <Check size={11} strokeWidth={2.5} />
+                OK
+              </button>
+            )}
+            {naoLida && <span aria-label="Não lida" style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: '#E8503A' }} />}
+          </span>
         </span>
       </span>
-    </motion.button>
+    </motion.div>
   )
 }

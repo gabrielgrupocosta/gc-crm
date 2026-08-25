@@ -30,11 +30,13 @@ function formatarHorario(valor) {
   return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(data)
 }
 
-export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarStatus, excluirMensagem }) {
+export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarStatus, excluirMensagem, excluirConversa }) {
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
   const [indiceParaExcluir, setIndiceParaExcluir] = useState(null)
+  const [confirmarExclusaoConversa, setConfirmarExclusaoConversa] = useState(false)
+  const [excluindoConversa, setExcluindoConversa] = useState(false)
   const fimRef = useRef(null)
   const reduzirMovimento = useReducedMotion()
 
@@ -42,6 +44,17 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
     if (indiceParaExcluir === null) return
     excluirMensagem(conversa.id, indiceParaExcluir).catch(() => {})
     setIndiceParaExcluir(null)
+  }
+
+  async function confirmarExclusaoDaConversa() {
+    setExcluindoConversa(true)
+    try {
+      await excluirConversa(conversa.id)
+      setConfirmarExclusaoConversa(false)
+      onClose()
+    } catch {
+      setExcluindoConversa(false)
+    }
   }
 
   useEffect(() => {
@@ -119,6 +132,9 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
           <h2 id="conversa-detalhe-titulo" style={{ color: '#1B1E24', fontSize: '15px', fontWeight: 700 }}>{conversa.nome || conversa.phone}</h2>
           <p style={{ color: '#9A9DA4', fontSize: '12px', marginTop: 2 }}>{conversa.isGroup ? '👥 Grupo' : `+${conversa.phone}`}</p>
         </div>
+        <button type="button" onClick={() => setConfirmarExclusaoConversa(true)} aria-label="Excluir conversa" className="flex h-8 w-8 items-center justify-center rounded-md" style={{ color: '#6B7178', backgroundColor: '#F0F1F4' }}>
+          <Trash2 size={16} strokeWidth={1.75} />
+        </button>
         <button type="button" onClick={onClose} aria-label="Fechar conversa" className="flex h-8 w-8 items-center justify-center rounded-md" style={{ color: '#6B7178', backgroundColor: '#F0F1F4' }}>
           <X size={17} strokeWidth={1.75} />
         </button>
@@ -241,6 +257,24 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
         )}
       >
         <p style={{ color: '#6B7178', fontSize: '13px' }}>Esta mensagem será removida permanentemente da conversa.</p>
+      </Modal>
+
+      <Modal
+        isOpen={confirmarExclusaoConversa}
+        onClose={() => setConfirmarExclusaoConversa(false)}
+        title="Excluir conversa"
+        footer={(
+          <>
+            <button type="button" onClick={() => setConfirmarExclusaoConversa(false)} className="btn-secondary" style={{ height: 36 }}>
+              Cancelar
+            </button>
+            <button type="button" onClick={confirmarExclusaoDaConversa} disabled={excluindoConversa} className="btn-primary" style={{ height: 36 }}>
+              {excluindoConversa ? 'Excluindo...' : 'Excluir'}
+            </button>
+          </>
+        )}
+      >
+        <p style={{ color: '#6B7178', fontSize: '13px' }}>Esta conversa será removida permanentemente, incluindo todas as mensagens.</p>
       </Modal>
     </motion.div>
   )
