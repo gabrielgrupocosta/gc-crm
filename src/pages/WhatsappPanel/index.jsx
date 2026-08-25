@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
+import { motion, Reorder } from 'framer-motion'
 import { Search, SlidersHorizontal } from 'lucide-react'
 import ConversaCard, { COLUNAS, STATUS_LABELS } from './ConversaCard'
 import ConversaDetalhe from './ConversaDetalhe'
@@ -31,7 +31,7 @@ function ordenarColunas(valoresSalvos) {
 }
 
 export default function WhatsappPanel() {
-  const { conversas, loading, mudarColuna, mudarStatus, marcarLida, excluirMensagem } = useConversas()
+  const { conversas, loading, mudarColuna, mudarStatus, marcarLida, excluirMensagem, excluirConversa } = useConversas()
   const [filtro, setFiltro] = useState('todas')
   const [busca, setBusca] = useState('')
   const [categoriaAtiva, setCategoriaAtiva] = useState('todas')
@@ -41,29 +41,22 @@ export default function WhatsappPanel() {
   const [filtroAberto, setFiltroAberto] = useState(false)
   const [categoriaSobMouse, setCategoriaSobMouse] = useState(null)
   const [ordemColunas, setOrdemColunas] = useState(() => ordenarColunas(lerOrdemSalva()))
-  const [categoriaArrastada, setCategoriaArrastada] = useState(null)
-  const [categoriaAlvoReordenar, setCategoriaAlvoReordenar] = useState(null)
 
   function alternarCategoriaVisivel(value) {
     setCategoriasVisiveis(atual => ({ ...atual, [value]: !atual[value] }))
   }
 
-  function reordenarColuna(origemValue, destinoValue) {
-    if (origemValue === destinoValue) return
-    setOrdemColunas(atual => {
-      const indiceOrigem = atual.findIndex(coluna => coluna.value === origemValue)
-      const indiceDestino = atual.findIndex(coluna => coluna.value === destinoValue)
-      if (indiceOrigem === -1 || indiceDestino === -1) return atual
-      const copia = [...atual]
-      const [movida] = copia.splice(indiceOrigem, 1)
-      copia.splice(indiceDestino, 0, movida)
-      try {
-        localStorage.setItem(ORDEM_STORAGE_KEY, JSON.stringify(copia.map(coluna => coluna.value)))
-      } catch {
-        // localStorage indisponível (modo privado, quota) — ordem só vale para esta sessão
-      }
-      return copia
-    })
+  function handleReorderColunas(novaOrdem) {
+    setOrdemColunas(novaOrdem)
+    try {
+      localStorage.setItem(ORDEM_STORAGE_KEY, JSON.stringify(novaOrdem.map(coluna => coluna.value)))
+    } catch {
+      // localStorage indisponível (modo privado, quota) — ordem só vale para esta sessão
+    }
+  }
+
+  function resolverAlerta(id) {
+    return mudarColuna(id, 'importantes')
   }
 
   function soltarNaColuna(event, coluna) {
@@ -197,83 +190,68 @@ export default function WhatsappPanel() {
                 </>
               )}
 
-              {ordemColunas.map((coluna, index) => {
-                const destacado = categoriaAtiva === coluna.value || categoriaSobMouse === coluna.value || colunaEmHover === coluna.value
-                const recuo = 4 + (index % 3) * 5
-                const arrastandoEsta = categoriaArrastada === coluna.value
-                const alvoDeReordenacao = categoriaAlvoReordenar === coluna.value && categoriaArrastada && categoriaArrastada !== coluna.value
-                return (
-                  <button
-                    key={coluna.value}
-                    type="button"
-                    draggable
-                    onClick={() => setCategoriaAtiva(coluna.value)}
-                    onMouseEnter={() => setCategoriaSobMouse(coluna.value)}
-                    onMouseLeave={() => setCategoriaSobMouse(atual => (atual === coluna.value ? null : atual))}
-                    onDragStart={event => {
-                      event.dataTransfer.setData('application/x-whatsapp-categoria', coluna.value)
-                      event.dataTransfer.effectAllowed = 'move'
-                      setCategoriaArrastada(coluna.value)
-                    }}
-                    onDragEnd={() => {
-                      setCategoriaArrastada(null)
-                      setCategoriaAlvoReordenar(null)
-                      setColunaEmHover(null)
-                    }}
-                    onDragOver={event => {
-                      event.preventDefault()
-                      if (event.dataTransfer.types.includes('application/x-whatsapp-categoria')) {
-                        if (categoriaAlvoReordenar !== coluna.value) setCategoriaAlvoReordenar(coluna.value)
-                      } else if (colunaEmHover !== coluna.value) {
-                        setColunaEmHover(coluna.value)
-                      }
-                    }}
-                    onDragLeave={() => {
-                      setCategoriaAlvoReordenar(atual => (atual === coluna.value ? null : atual))
-                      setColunaEmHover(atual => (atual === coluna.value ? null : atual))
-                    }}
-                    onDrop={event => {
-                      event.preventDefault()
-                      if (event.dataTransfer.types.includes('application/x-whatsapp-categoria')) {
-                        const origem = event.dataTransfer.getData('application/x-whatsapp-categoria')
-                        reordenarColuna(origem, coluna.value)
-                        setCategoriaAlvoReordenar(null)
-                      } else {
-                        soltarNaColuna(event, coluna.value)
-                      }
-                    }}
-                    className="flex w-full items-center gap-2 text-left"
-                    style={{
-                      padding: '8px 10px', marginBottom: 3, fontSize: '12px', fontWeight: 500,
-                      marginLeft: destacado ? 0 : recuo,
-                      width: destacado ? '100%' : `calc(100% - ${recuo}px)`,
-                      borderRadius: '0 8px 8px 0',
-                      color: destacado ? coluna.cor : '#1B1E24',
-                      backgroundColor: destacado ? `${coluna.cor}14` : 'transparent',
-                      border: colunaEmHover === coluna.value ? `1px dashed ${coluna.cor}` : '1px solid transparent',
-                      boxShadow: alvoDeReordenacao ? `inset 0 2px 0 0 ${coluna.cor}` : 'none',
-                      opacity: arrastandoEsta ? 0.4 : 1,
-                      cursor: 'grab',
-                      transition: 'margin-left 0.15s ease-out, width 0.15s ease-out, background-color 0.15s ease-out, color 0.15s ease-out',
-                    }}
-                  >
-                    <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: coluna.cor }} />
-                    <span className="min-w-0 flex-1 truncate">{coluna.label}</span>
-                    <span
-                      style={{
-                        flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 20, height: 18, padding: '0 5px', borderRadius: 999,
-                        color: destacado ? coluna.cor : '#6B7178',
-                        backgroundColor: destacado ? `${coluna.cor}1F` : '#E4E5E9',
-                        fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
-                        boxShadow: destacado ? `inset 0 0 0 1px ${coluna.cor}33` : 'none',
-                      }}
+              <Reorder.Group as="div" axis="y" values={ordemColunas} onReorder={handleReorderColunas}>
+                {ordemColunas.map((coluna, index) => {
+                  const destacado = categoriaAtiva === coluna.value || categoriaSobMouse === coluna.value || colunaEmHover === coluna.value
+                  const recuo = 4 + (index % 3) * 5
+                  return (
+                    <Reorder.Item
+                      key={coluna.value}
+                      value={coluna}
+                      as="div"
+                      whileDrag={{ scale: 1.03, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', zIndex: 1 }}
+                      transition={{ duration: 0.15, ease: 'easeOut' }}
+                      style={{ position: 'relative' }}
                     >
-                      {contagemPorColuna[coluna.value] ?? 0}
-                    </span>
-                  </button>
-                )
-              })}
+                      <button
+                        type="button"
+                        onClick={() => setCategoriaAtiva(coluna.value)}
+                        onMouseEnter={() => setCategoriaSobMouse(coluna.value)}
+                        onMouseLeave={() => setCategoriaSobMouse(atual => (atual === coluna.value ? null : atual))}
+                        onDragOver={event => {
+                          event.preventDefault()
+                          if (colunaEmHover !== coluna.value) setColunaEmHover(coluna.value)
+                        }}
+                        onDragLeave={() => {
+                          setColunaEmHover(atual => (atual === coluna.value ? null : atual))
+                        }}
+                        onDrop={event => {
+                          event.preventDefault()
+                          soltarNaColuna(event, coluna.value)
+                          setColunaEmHover(null)
+                        }}
+                        className="flex w-full items-center gap-2 text-left"
+                        style={{
+                          padding: '8px 10px', marginBottom: 3, fontSize: '12px', fontWeight: 500,
+                          marginLeft: destacado ? 0 : recuo,
+                          width: destacado ? '100%' : `calc(100% - ${recuo}px)`,
+                          borderRadius: '0 8px 8px 0',
+                          color: destacado ? coluna.cor : '#1B1E24',
+                          backgroundColor: destacado ? `${coluna.cor}14` : 'transparent',
+                          border: colunaEmHover === coluna.value ? `1px dashed ${coluna.cor}` : '1px solid transparent',
+                          cursor: 'grab',
+                          transition: 'margin-left 0.15s ease-out, width 0.15s ease-out, background-color 0.15s ease-out, color 0.15s ease-out',
+                        }}
+                      >
+                        <span style={{ width: 7, height: 7, flexShrink: 0, borderRadius: '50%', backgroundColor: coluna.cor }} />
+                        <span className="min-w-0 flex-1 truncate">{coluna.label}</span>
+                        <span
+                          style={{
+                            flexShrink: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            minWidth: 20, height: 18, padding: '0 5px', borderRadius: 999,
+                            color: destacado ? coluna.cor : '#6B7178',
+                            backgroundColor: destacado ? `${coluna.cor}1F` : '#E4E5E9',
+                            fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                            boxShadow: destacado ? `inset 0 0 0 1px ${coluna.cor}33` : 'none',
+                          }}
+                        >
+                          {contagemPorColuna[coluna.value] ?? 0}
+                        </span>
+                      </button>
+                    </Reorder.Item>
+                  )
+                })}
+              </Reorder.Group>
             </nav>
 
             <div className="flex min-h-0 flex-shrink-0 flex-col" style={{ width: 320, borderRight: '1px solid #E4E5E9' }}>
@@ -290,7 +268,7 @@ export default function WhatsappPanel() {
               <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: 8 }}>
                 {listadas.map(conversa => (
                   <div key={conversa.id} style={{ marginBottom: 6 }}>
-                    <ConversaCard conversa={conversa} selecionada={conversa.id === idSelecionado} onSelect={() => selecionar(conversa)} />
+                    <ConversaCard conversa={conversa} selecionada={conversa.id === idSelecionado} onSelect={() => selecionar(conversa)} onResolverAlerta={() => resolverAlerta(conversa.id)} />
                   </div>
                 ))}
                 {listadas.length === 0 && (
@@ -306,6 +284,7 @@ export default function WhatsappPanel() {
                 mudarColuna={mudarColuna}
                 mudarStatus={mudarStatus}
                 excluirMensagem={excluirMensagem}
+                excluirConversa={excluirConversa}
               />
             </div>
           </div>

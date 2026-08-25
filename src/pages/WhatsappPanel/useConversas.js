@@ -3,6 +3,7 @@ import {
   db,
   COLLECTIONS,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -71,5 +72,14 @@ export function useConversas() {
     }, 'excluirMensagem')
   }
 
-  return { conversas, loading, mudarColuna, mudarStatus, marcarLida, excluirMensagem }
+  async function excluirConversa(id) {
+    try {
+      await deleteDoc(doc(db, COLLECTIONS.CONVERSAS_WHATSAPP, id))
+    } catch (err) {
+      logError('excluirConversa', err)
+      throw err
+    }
+  }
+
+  return { conversas, loading, mudarColuna, mudarStatus, marcarLida, excluirMensagem, excluirConversa }
 }
