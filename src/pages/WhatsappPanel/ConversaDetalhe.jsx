@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
-import { MessageSquare, Send, Trash2, X } from 'lucide-react'
+import { ChevronLeft, MessageSquare, Send, Trash2, X } from 'lucide-react'
 import Modal from '../../components/UI/Modal'
 import { COLUNAS, COLUNA_CORES, STATUS_LABELS } from './ConversaCard'
 
@@ -118,6 +118,9 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
       transition={{ duration: 0.15, ease: 'easeOut' }}
     >
       <header className="flex flex-wrap items-center gap-x-3 gap-y-2" style={{ minHeight: 76, padding: '12px 18px', borderBottom: '1px solid #E4E5E9' }}>
+        <button type="button" onClick={onClose} aria-label="Voltar para a lista de conversas" className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md md:hidden" style={{ color: '#6B7178', backgroundColor: '#F0F1F4' }}>
+          <ChevronLeft size={18} strokeWidth={1.75} />
+        </button>
         <span
           aria-hidden="true"
           className="flex flex-shrink-0 items-center justify-center"
