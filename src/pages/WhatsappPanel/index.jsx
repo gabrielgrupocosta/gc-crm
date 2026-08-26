@@ -117,8 +117,68 @@ export default function WhatsappPanel() {
             <p style={{ color: '#9A9DA4', fontSize: '12px' }}>Carregando conversas...</p>
           </div>
         ) : (
-          <div className="flex h-full min-h-0 overflow-hidden rounded-lg border border-border bg-white">
-            <nav className="relative flex min-h-0 flex-shrink-0 flex-col overflow-y-auto" style={{ width: 156, padding: '10px 8px', borderRight: '1px solid #E4E5E9', backgroundColor: '#F0F1F4' }}>
+          <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-white md:flex-row">
+            {!idSelecionado && (
+              <div className="flex flex-shrink-0 items-center gap-2 overflow-x-auto md:hidden" style={{ padding: '10px 12px', borderBottom: '1px solid #E4E5E9', backgroundColor: '#F0F1F4' }}>
+                <button
+                  type="button"
+                  onClick={() => setCategoriaAtiva('todas')}
+                  className="flex flex-shrink-0 items-center gap-1.5 rounded-full"
+                  style={{
+                    padding: '6px 12px', fontSize: '12px', fontWeight: 700,
+                    color: categoriaAtiva === 'todas' ? '#FFFFFF' : '#1B1E24',
+                    backgroundColor: categoriaAtiva === 'todas' ? '#E8503A' : '#FFFFFF',
+                    border: `1px solid ${categoriaAtiva === 'todas' ? '#E8503A' : '#E4E5E9'}`,
+                  }}
+                >
+                  Todas
+                  <span
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                      minWidth: 18, height: 16, padding: '0 5px', borderRadius: 999,
+                      color: categoriaAtiva === 'todas' ? '#FFFFFF' : '#6B7178',
+                      backgroundColor: categoriaAtiva === 'todas' ? 'rgba(255,255,255,0.25)' : '#E4E5E9',
+                      fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {visiveisEmTodas.length}
+                  </span>
+                </button>
+                {ordemColunas.map(coluna => {
+                  const ativa = categoriaAtiva === coluna.value
+                  return (
+                    <button
+                      key={coluna.value}
+                      type="button"
+                      onClick={() => setCategoriaAtiva(coluna.value)}
+                      className="flex flex-shrink-0 items-center gap-1.5 rounded-full"
+                      style={{
+                        padding: '6px 12px', fontSize: '12px', fontWeight: 600,
+                        color: ativa ? '#FFFFFF' : '#1B1E24',
+                        backgroundColor: ativa ? coluna.cor : '#FFFFFF',
+                        border: `1px solid ${ativa ? coluna.cor : '#E4E5E9'}`,
+                      }}
+                    >
+                      <span style={{ width: 6, height: 6, flexShrink: 0, borderRadius: '50%', backgroundColor: ativa ? '#FFFFFF' : coluna.cor }} />
+                      {coluna.label}
+                      <span
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 18, height: 16, padding: '0 5px', borderRadius: 999,
+                          color: ativa ? '#FFFFFF' : '#6B7178',
+                          backgroundColor: ativa ? 'rgba(255,255,255,0.25)' : '#E4E5E9',
+                          fontSize: '10px', fontWeight: 700, fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        {contagemPorColuna[coluna.value] ?? 0}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <nav className="relative hidden min-h-0 flex-shrink-0 flex-col overflow-y-auto md:flex" style={{ width: 156, padding: '10px 8px', borderRight: '1px solid #E4E5E9', backgroundColor: '#F0F1F4' }}>
               <div className="flex items-center gap-1" style={{ marginBottom: 4, paddingLeft: 2 }}>
                 <button
                   type="button"
@@ -254,7 +314,10 @@ export default function WhatsappPanel() {
               </Reorder.Group>
             </nav>
 
-            <div className="flex min-h-0 flex-shrink-0 flex-col" style={{ width: 320, borderRight: '1px solid #E4E5E9' }}>
+            <div
+              className={`min-h-0 w-full flex-1 flex-col md:w-[320px] md:flex-none ${idSelecionado ? 'hidden md:flex' : 'flex'}`}
+              style={{ borderRight: '1px solid #E4E5E9' }}
+            >
               <div className="flex flex-col gap-2" style={{ padding: 12, borderBottom: '1px solid #E4E5E9' }}>
                 <div className="relative">
                   <Search size={14} strokeWidth={1.75} className="absolute left-3 top-1/2 -translate-y-1/2" color="#9A9DA4" />
@@ -277,7 +340,7 @@ export default function WhatsappPanel() {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1">
+            <div className={`min-h-0 w-full flex-1 ${idSelecionado ? '' : 'hidden md:block'}`}>
               <ConversaDetalhe
                 conversa={selecionada}
                 onClose={() => setIdSelecionado(null)}
