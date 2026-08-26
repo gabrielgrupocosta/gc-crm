@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { ChevronLeft, MessageSquare, Send, Trash2, X } from 'lucide-react'
 import Modal from '../../components/UI/Modal'
-import { COLUNAS, COLUNA_CORES, STATUS_LABELS } from './ConversaCard'
+import { COLUNAS, COLUNA_CORES, STATUS_CORES, STATUS_LABELS } from './ConversaCard'
 
 const ENDPOINT = 'https://whatsapp-api-production-4c64.up.railway.app/enviar'
 
@@ -99,6 +99,7 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
   }
 
   const corColuna = COLUNA_CORES[conversa?.coluna] ?? COLUNA_CORES.arquivado
+  const corStatus = STATUS_CORES[conversa?.status] ?? STATUS_CORES.aguardando
 
   if (!conversa) {
     return (
@@ -162,7 +163,7 @@ export default function ConversaDetalhe({ conversa, onClose, mudarColuna, mudarS
               onChange={event => mudarStatus(conversa.id, event.target.value).catch(() => {})}
               className="select w-full font-sans"
               aria-label="Status da conversa"
-              style={{ height: 34 }}
+              style={{ height: 34, color: corStatus, borderColor: corStatus }}
             >
               {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
