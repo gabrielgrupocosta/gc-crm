@@ -23,6 +23,12 @@ export const STATUS_LABELS = {
   respondido: 'Respondido',
 }
 
+export const STATUS_CORES = {
+  aguardando: '#CA8A04',
+  pendente: '#DC2626',
+  respondido: '#00C896',
+}
+
 function paraData(valor) {
   if (!valor) return null
   if (typeof valor.toDate === 'function') return valor.toDate()
@@ -54,6 +60,7 @@ function iniciais(texto) {
 
 export default function ConversaCard({ conversa, selecionada, onSelect, onResolverAlerta }) {
   const cor = COLUNA_CORES[conversa.coluna] ?? COLUNA_CORES.arquivado
+  const corStatus = STATUS_CORES[conversa.status] ?? STATUS_CORES.aguardando
   const [arrastando, setArrastando] = useState(false)
   const mensagens = conversa.mensagens ?? []
   const remetenteGrupo = conversa.isGroup ? mensagens[mensagens.length - 1]?.remetente : null
@@ -119,12 +126,12 @@ export default function ConversaCard({ conversa, selecionada, onSelect, onResolv
           <span
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px 2px 6px', borderRadius: 999,
-              color: cor, backgroundColor: `${cor}12`, fontSize: '10px', fontWeight: 700,
+              color: corStatus, backgroundColor: `${corStatus}12`, fontSize: '10px', fontWeight: 700,
               textTransform: 'uppercase', letterSpacing: '0.04em',
-              boxShadow: `inset 0 0 0 1px ${cor}33`,
+              boxShadow: `inset 0 0 0 1px ${corStatus}33`,
             }}
           >
-            <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: cor }} />
+            <span style={{ width: 5, height: 5, borderRadius: '50%', backgroundColor: corStatus }} />
             {STATUS_LABELS[conversa.status] ?? conversa.status}
           </span>
           <span className="flex flex-shrink-0 items-center gap-2">
