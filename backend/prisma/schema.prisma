@@ -1,0 +1,278 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  FINANCEIRO
+  GESTOR_PL
+  VENDEDOR
+  SDR_CLOSER
+  COLABORADOR
+}
+
+enum TipoVendedor {
+  GC
+  TERCEIRIZADO
+}
+
+enum StatusCliente {
+  ATIVO
+  INATIVO
+  PROSPECCAO
+  CANCELADO
+}
+
+enum FaseFunil {
+  LEAD
+  REUNIAO
+  PROPOSTA
+  FECHAMENTO
+}
+
+enum TipoLancamento {
+  MENSALIDADE
+  VENDA_AVULSA
+}
+
+enum StatusPagamento {
+  PAGO
+  PENDENTE
+  ATRASADO
+}
+
+enum CategoriaServico {
+  TRAFEGO
+  SOCIAL_MEDIA
+  SITES
+  SEO
+  BRANDING
+  OUTROS
+}
+
+enum TipoInteracao {
+  REUNIAO
+  CALL
+  WHATSAPP
+}
+
+model User {
+  id        String    @id @default(uuid())
+  nome      String
+  email     String    @unique
+  senha     String
+  role         Role          @default(COLABORADOR)
+  tipoVendedor TipoVendedor?
+  metas        Decimal?      @db.Decimal(10, 2)
+  gestorId     String?
+  unidadeId    String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  permissoes   Json?
+  
+  // Relações
+  unidadesGerenciadas Unidade[] @relation("UnidadeGestor")
+  interacoes          Interacao[]
+  
+  gestor              User?     @relation("GestorParaLiderado", fields: [gestorId], references: [id])
+  liderados           User[]    @relation("GestorParaLiderado")
+  unidade             Unidade?  @relation("UserParaUnidade", fields: [unidadeId], references: [id])
+
+  propostas           Proposta[]
+  avaliacoesRecebidas AvaliacaoDesempenho[] @relation("AvaliacaoColaborador")
+  avaliacoesFeitas    AvaliacaoDesempenho[] @relation("AvaliacaoGestor")
+  clientesVendedor    Cliente[]             @relation("ClienteVendedor")
+}
+
+model Unidade {
+  id           String   @id @default(uuid())
+  nome         String
+  cnpj         String?
+  endereco     String?
+  responsavelId String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  // Relações
+  responsavel  User      @relation("UnidadeGestor", fields: [responsavelId], references: [id])
+  colaboradores User[]   @relation("UserParaUnidade")
+  clientes     Cliente[]
+  snapshots    SnapshotUnidade[]
+}
+
+model Cliente {
+  id                     String        @id @default(uuid())
+  razaoSocial            String
+  nomeFantasia           String
+  cnpjCpf                String
+  email                  String?
+  telefone               String?
+  status                 StatusCliente @default(ATIVO)
+  faseFunil              FaseFunil?    // Apenas preenchido quando status for PROSPECCAO
+  dataEntrada            DateTime      @default(now())
+  dataVencimentoContrato DateTime?     // Usado para os alertas
+  unidadeId              String
+  vendedorId             String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+  deletedAt              DateTime?
+
+  // Relações
+  unidade          Unidade       @relation(fields: [unidadeId], references: [id])
+  financeiro       Financeiro[]
+  documentos       Documento[]
+  interacoes       Interacao[]
+  propostas        Proposta[]
+  analises         AnaliseCliente[]
+  cancelamentos    Cancelamento[]
+  vendedor         User?         @relation("ClienteVendedor", fields: [vendedorId], references: [id])
+}
+
+model Financeiro {
+  id                   String          @id @default(uuid())
+  tipo                 TipoLancamento
+  categoriaServico     CategoriaServico?
+  descricao            String?
+  valor                Decimal         @db.Decimal(10, 2)
+  dataCompetencia      DateTime        // Data da venda ou vencimento
+  statusPagamento      StatusPagamento @default(PENDENTE)
+  clienteId            String
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  deletedAt            DateTime?
+
+  // Relações
+  cliente              Cliente         @relation(fields: [clienteId], references: [id])
+}
+
+model Documento {
+  id           String   @id @default(uuid())
+  nomeArquivo  String
+  urlCaminho   String
+  tipoArquivo  String?
+  clienteId    String
+  propostaId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  deletedAt    DateTime?
+
+  // Relações
+  cliente      Cliente   @relation(fields: [clienteId], references: [id])
+  proposta     Proposta? @relation(fields: [propostaId], references: [id])
+}
+
+model Interacao {
+  id            String         @id @default(uuid())
+  tipo          TipoInteracao
+  dataInteracao DateTime       @default(now())
+  descricao     String
+  clienteId     String
+  responsavelId String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  deletedAt     DateTime?
+
+  // Relações
+  cliente       Cliente        @relation(fields: [clienteId], references: [id])
+  responsavel   User           @relation(fields: [responsavelId], references: [id])
+}
+
+enum StatusProposta {
+  RASCUNHO
+  ENVIADO
+  ASSINADO
+  ATIVO
+}
+
+model Proposta {
+  id              String         @id @default(uuid())
+  clienteId       String
+  vendedorId      String
+  status          StatusProposta @default(RASCUNHO)
+  valor           Decimal        @db.Decimal(10, 2)
+  descricao       String?
+  dataEnvio       DateTime?
+  dataAssinatura  DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  cliente         Cliente        @relation(fields: [clienteId], references: [id])
+  vendedor        User           @relation(fields: [vendedorId], references: [id])
+  documentos      Documento[]
+}
+
+model AvaliacaoDesempenho {
+  id              String         @id @default(uuid())
+  colaboradorId   String
+  avaliadorId     String
+  mesReferencia   DateTime
+  notas           Json?          // Múltiplos critérios de notas (legado)
+  feedback        String?        // legado
+  notaGeral       Int?
+  feedbackTexto   String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  colaborador     User           @relation("AvaliacaoColaborador", fields: [colaboradorId], references: [id])
+  avaliador       User           @relation("AvaliacaoGestor", fields: [avaliadorId], references: [id])
+}
+
+model SnapshotUnidade {
+  id              String         @id @default(uuid())
+  unidadeId       String
+  mesReferencia   DateTime
+  faturamento     Decimal        @db.Decimal(10, 2)
+  mrr             Decimal        @db.Decimal(10, 2)
+  churnRate       Decimal        @db.Decimal(5, 2)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  unidade         Unidade        @relation(fields: [unidadeId], references: [id])
+}
+
+enum ClassificacaoSaude {
+  SAUDAVEL
+  ATENCAO
+  CRITICO
+}
+
+model AnaliseCliente {
+  id              String         @id @default(uuid())
+  clienteId       String
+  mesReferencia   DateTime
+  notaCSAT        Int?
+  riscos          String?
+  planoAcao       String?
+  classificacao   ClassificacaoSaude
+  notaOperador    Int?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  cliente         Cliente        @relation(fields: [clienteId], references: [id])
+}
+
+model Cancelamento {
+  id                 String         @id @default(uuid())
+  clienteId          String
+  motivo             String
+  tentativasRetencao String?
+  receitaPerdida     Decimal        @db.Decimal(10, 2)
+  dataCancelamento   DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  deletedAt          DateTime?
+
+  cliente            Cliente        @relation(fields: [clienteId], references: [id])
+}

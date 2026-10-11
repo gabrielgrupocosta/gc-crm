@@ -22,12 +22,11 @@ export default {
         // placeholder, nunca corpo de texto.
         'text-subtle':    '#767676',
         'text-faint':     '#8A8A8A',
-        accent:           '#FF4B2E',
-        'accent-hover':   '#E63E1F',
-        'accent-soft':    '#FFF1ED',
-        'accent-soft-alt':'#FFEDE8',
-        // Escurecido de #00C896 (contraste ~2.2:1 sobre branco, insuficiente)
-        // para atingir AA (~5.3:1) mantendo o matiz verde original.
+        primary:          '#031E33',
+        'primary-hover':  '#021524',
+        secondary:        '#883123',
+        'secondary-hover':'#6a251b',
+        tertiary:         '#9F7E50',
         positive:         '#007A5A',
         negative:         '#DC2626',
         warning:          '#CA8A04',
@@ -40,15 +39,11 @@ export default {
         'blue-border':    '#BFDBFE',
         'red-soft':       '#FFF0F0',
         'red-border':     '#FECACA',
-        // Identidade iHubfood — usar em Sidebar/Header (dark) e como tokens
-        // nomeados de marca; accent/positive acima já apontam pros mesmos
-        // valores de brand-accent/brand-green pra não exigir troca em massa
-        // de classes existentes (bg-accent, text-positive etc já viram a marca).
         'brand-dark':       '#0E1116',
         'brand-dark-hover': '#1C2128',
-        'brand-accent':     '#FF4B2E',
-        'brand-green':      '#007A5A',
-        'brand-blue':       '#2563EB',
+        'brand-primary':    '#031E33',
+        'brand-secondary':  '#883123',
+        'brand-tertiary':   '#9F7E50',
       },
       fontFamily: {
         sans: ['Manrope', 'system-ui', '-apple-system', 'sans-serif'],

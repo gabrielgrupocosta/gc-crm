@@ -1,4 +1,27 @@
-# Logs
+# Dependencies & Build
+node_modules
+dist
+dist-ssr
+.next
+out
+
+# Environment files
+.env
+.env*.local
+.env.development
+.env.test
+.env.production
+backend/.env
+backend/.env*.local
+!*.env.example
+
+# Uploads & Test scripts
+backend/uploads/*
+!backend/uploads/.gitkeep
+test-user.js
+backend/test-user.js
+
+# Logs & Debug
 logs
 *.log
 npm-debug.log*
@@ -6,43 +29,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Credenciais do Admin SDK — nunca versionar
 serviceAccountKey.json
-
-# Cache local de deploy do Firebase CLI
 .firebase
-
-# Exports de dados reais de clientes usados em scripts de migração pontual —
-# não deve ir pro histórico do repositório (dado de negócio/PII)
 scripts/data
-
-# Config local do Claude Code — settings.local.json guarda histórico de
-# comandos permitidos que já incluiu senhas em texto puro usadas em scripts
-# pontuais; nunca deve ir pro repositório
-.claude/settings.local.json
-
-# Lock de sessão do Claude Code — estado transitório local, não é config do projeto
-.claude/scheduled_tasks.lock
-
-# graphify — cache local, não precisa versionar (graph.json/GRAPH_REPORT.md/graph.html ficam)
-graphify-out/cost.json
-graphify-out/cache/
-# caminho do Python é específico de cada máquina — commitar quebra em outro PC
-graphify-out/.graphify_python
-
-# Agent Skills genéricas do Firebase instaladas pelo `firebase init` — guias de
-# referência pro assistente, não fazem parte do código do app
-.agents/
-.claude/skills/firebase-*/
-.claude/skills/extension-to-functions-codebase/
-.claude/skills/xcode-project-setup/
-skills-lock.json
 
 # Editor directories and files
 .vscode/*
@@ -54,3 +43,4 @@ skills-lock.json
 *.njsproj
 *.sln
 *.sw?
+*.local
