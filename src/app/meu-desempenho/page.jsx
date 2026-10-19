@@ -105,7 +105,7 @@ export default function MeuDesempenhoPage() {
                 
                 <div className="bg-[#F9F9F9] p-4 rounded-lg border border-[#F3F3F3]">
                   <p className="text-sm text-text-primary whitespace-pre-wrap italic">
-                    "{f.feedbackTexto || f.feedback || 'Sem comentários adicionais.'}"
+                    &ldquo;{f.feedbackTexto || f.feedback || 'Sem comentários adicionais.'}&rdquo;
                   </p>
                 </div>
               </div>
