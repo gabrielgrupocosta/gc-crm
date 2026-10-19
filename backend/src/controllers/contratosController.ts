@@ -1,8 +1,7 @@
 import { Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
+import { getDocumentUrl, uploadFile } from '../lib/storage';
 
 export const listPropostas = async (req: AuthRequest, res: Response) => {
   try {
@@ -29,7 +28,13 @@ export const listPropostas = async (req: AuthRequest, res: Response) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    res.json(propostas);
+    res.json(await Promise.all(propostas.map(async (proposta) => ({
+      ...proposta,
+      documentos: await Promise.all(proposta.documentos.map(async (documento) => ({
+        ...documento,
+        urlCaminho: await getDocumentUrl(documento.urlCaminho),
+      }))),
+    }))));
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar propostas' });
   }
@@ -102,11 +107,13 @@ export const uploadContratoPDF = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     }
 
+    const storedPath = await uploadFile(req.file, `contratos/${proposta.id}`);
+
     // Marca como documento e atrela ao cliente e proposta
     const documento = await prisma.documento.create({
       data: {
         nomeArquivo: req.file.originalname,
-        urlCaminho: `/uploads/${req.file.filename}`,
+        urlCaminho: storedPath,
         tipoArquivo: req.file.mimetype,
         clienteId: proposta.clienteId,
         propostaId: proposta.id

@@ -25,7 +25,7 @@ export default function FunilPage() {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      const res = await axios.get('http://localhost:3333/clientes', { headers });
+      const res = await axios.get('/api/clientes', { headers });
       
       // Filtrar apenas prospectos
       const prospectos = res.data.filter(c => c.status === 'PROSPECCAO');
@@ -79,7 +79,7 @@ export default function FunilPage() {
       try {
         const token = Cookies.get('token');
         const headers = { Authorization: `Bearer ${token}` };
-        await axios.put(`http://localhost:3333/clientes/${removed.id}/fase`, {
+        await axios.put(`/api/clientes/${removed.id}/fase`, {
           faseFunil: destination.droppableId
         }, { headers });
       } catch (error) {

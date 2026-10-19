@@ -82,8 +82,8 @@ export default function UsuariosPage() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [resUsers, resUnits] = await Promise.all([
-        axios.get('http://localhost:3333/users', { headers }),
-        axios.get('http://localhost:3333/unidades', { headers })
+        axios.get('/api/users', { headers }),
+        axios.get('/api/unidades', { headers })
       ]);
       
       setUsuarios(resUsers.data);
@@ -102,9 +102,9 @@ export default function UsuariosPage() {
       const headers = { Authorization: `Bearer ${token}` };
       
       if (editingUserId) {
-        await axios.put(`http://localhost:3333/users/${editingUserId}`, data, { headers });
+        await axios.put(`/api/users/${editingUserId}`, data, { headers });
       } else {
-        await axios.post('http://localhost:3333/users', data, { headers });
+        await axios.post('/api/users', data, { headers });
       }
 
       setIsModalOpen(false);
@@ -174,7 +174,7 @@ export default function UsuariosPage() {
   const savePermissions = async () => {
     try {
       const token = Cookies.get('token');
-      await axios.put(`http://localhost:3333/users/${permissionsUser.id}/permissoes`, 
+      await axios.put(`/api/users/${permissionsUser.id}/permissoes`,
         { permissoes: permissionsState },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -190,7 +190,7 @@ export default function UsuariosPage() {
     if (!deletingUser) return;
     try {
       const token = Cookies.get('token');
-      await axios.delete(`http://localhost:3333/users/${deletingUser.id}`, {
+      await axios.delete(`/api/users/${deletingUser.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDeletingUser(null);

@@ -15,7 +15,7 @@ export default function Header() {
     try {
       const token = Cookies.get('token');
       if (!token) return;
-      const res = await axios.get('http://localhost:3333/alertas', {
+      const res = await axios.get('/api/alertas', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setAlertas(res.data);

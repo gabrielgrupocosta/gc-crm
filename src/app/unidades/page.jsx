@@ -51,10 +51,10 @@ export default function UnidadesPage() {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      const resUnidades = await axios.get('http://localhost:3333/unidades', { headers });
+      const resUnidades = await axios.get('/api/unidades', { headers });
       setUnidades(resUnidades.data);
 
-      const resUsers = await axios.get('http://localhost:3333/users', { headers });
+      const resUsers = await axios.get('/api/users', { headers });
       setUsuarios(resUsers.data);
     } catch (error) {
       console.error('Erro ao buscar unidades', error);
@@ -69,7 +69,7 @@ export default function UnidadesPage() {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      await axios.post('http://localhost:3333/unidades', data, { headers });
+      await axios.post('/api/unidades', data, { headers });
       setIsModalOpen(false);
       reset();
       fetchData();

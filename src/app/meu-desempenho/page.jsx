@@ -25,14 +25,14 @@ export default function MeuDesempenhoPage() {
       const headers = { Authorization: `Bearer ${token}` };
 
       const [resFeedbacks, resClientes] = await Promise.all([
-        axios.get('http://localhost:3333/avaliacoes/meus', { headers }),
-        axios.get('http://localhost:3333/clientes', { headers })
+        axios.get('/api/avaliacoes/meus', { headers }),
+        axios.get('/api/clientes', { headers })
       ]);
       setFeedbacks(resFeedbacks.data);
       // Filtra clientes vinculados a este vendedor que possuem notaOperador no mês atual
       // Como o endpoint /clientes só traz os dados do cliente, para a notaOperador precisaríamos
       // cruzar com as análises, mas podemos usar o endpoint /cs/analises.
-      const resAnalises = await axios.get('http://localhost:3333/cs/analises', { headers }).catch(() => ({ data: [] }));
+      const resAnalises = await axios.get('/api/cs/analises', { headers }).catch(() => ({ data: [] }));
       
       const meusClientes = resClientes.data.filter(c => c.vendedorId === user?.id);
       

@@ -63,10 +63,10 @@ export default function ClientesPage() {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      const resClientes = await axios.get('http://localhost:3333/clientes', { headers });
+      const resClientes = await axios.get('/api/clientes', { headers });
       setClientes(resClientes.data);
 
-      const resUnidades = await axios.get('http://localhost:3333/unidades', { headers });
+      const resUnidades = await axios.get('/api/unidades', { headers });
       setUnidades(resUnidades.data);
       
       if (user?.role !== 'ADMIN' && resUnidades.data.length > 0) {
@@ -90,9 +90,9 @@ export default function ClientesPage() {
       }
       
       if (editingClienteId) {
-        await axios.put(`http://localhost:3333/clientes/${editingClienteId}`, data, { headers });
+        await axios.put(`/api/clientes/${editingClienteId}`, data, { headers });
       } else {
-        await axios.post('http://localhost:3333/clientes', data, { headers });
+        await axios.post('/api/clientes', data, { headers });
       }
       
       setIsModalOpen(false);
@@ -127,7 +127,7 @@ export default function ClientesPage() {
     if (!deletingCliente) return;
     try {
       const token = Cookies.get('token');
-      await axios.delete(`http://localhost:3333/clientes/${deletingCliente.id}`, {
+      await axios.delete(`/api/clientes/${deletingCliente.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDeletingCliente(null);
@@ -149,7 +149,7 @@ export default function ClientesPage() {
     try {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
-      const res = await axios.get(`http://localhost:3333/interacoes/${clienteId}`, { headers });
+      const res = await axios.get(`/api/interacoes/${clienteId}`, { headers });
       setInteracoes(res.data);
     } catch (error) {
       console.error('Erro ao buscar interações', error);
@@ -167,7 +167,7 @@ export default function ClientesPage() {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      await axios.post('http://localhost:3333/interacoes', {
+      await axios.post('/api/interacoes', {
         clienteId: selectedCliente.id,
         tipo: tipoInteracao,
         descricao: descricaoInteracao

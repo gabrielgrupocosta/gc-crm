@@ -24,9 +24,9 @@ export default function CSSaudePage() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [resAnalises, resCancelamentos, resClientes] = await Promise.all([
-        axios.get('http://localhost:3333/cs/analises', { headers }),
-        axios.get('http://localhost:3333/cs/cancelamentos', { headers }),
-        axios.get('http://localhost:3333/clientes', { headers })
+        axios.get('/api/cs/analises', { headers }),
+        axios.get('/api/cs/cancelamentos', { headers }),
+        axios.get('/api/clientes', { headers })
       ]);
       setAnalises(resAnalises.data);
       setCancelamentos(resCancelamentos.data);
@@ -40,7 +40,7 @@ export default function CSSaudePage() {
     try {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
-      await axios.post(`http://localhost:3333/clientes/${clienteId}/pontuar-operador`, { notaOperador: nota }, { headers });
+      await axios.post(`/api/clientes/${clienteId}/pontuar-operador`, { notaOperador: nota }, { headers });
       alert('Nota atribuída com sucesso!');
     } catch (error) {
       alert('Erro ao pontuar: ' + (error.response?.data?.error || error.message));

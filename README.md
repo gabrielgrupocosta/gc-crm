@@ -1,16 +1,69 @@
-# React + Vite
+# GC CRM
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+CRM com frontend Next.js, API Express/TypeScript, Prisma e PostgreSQL.
 
-Currently, two official plugins are available:
+## Arquitetura de producao
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Frontend: Vercel
+- Backend: Render
+- Banco: Supabase Postgres
+- Anexos: bucket privado do Supabase Storage
 
-## React Compiler
+O frontend encaminha chamadas de `/api/*` para a API definida em `BACKEND_URL`. Nenhuma chave secreta do Supabase deve ser configurada na Vercel ou exposta com prefixo `NEXT_PUBLIC_`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Desenvolvimento local
 
-## Expanding the ESLint configuration
+Requisitos: Node.js 20 e PostgreSQL.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+1. Copie `.env.example` para `.env`.
+2. Copie `backend/.env.example` para `backend/.env` e preencha as variaveis.
+3. Instale as dependencias com `npm install` na raiz e em `backend`.
+4. No backend, execute `npm run prisma:deploy` e `npm run dev`.
+5. Na raiz, execute `npm run dev`.
+
+## Supabase
+
+Em **Project Settings > Database > Connect**, copie:
+
+- a URL do transaction pooler (porta 6543) para `DATABASE_URL`, com `pgbouncer=true&connection_limit=1`;
+- a URL da conexao direta ou session pooler (porta 5432) para `DIRECT_URL`.
+
+As duas URLs precisam conter a senha do banco. A chave secreta da API nao substitui essas URLs.
+
+Configure `SUPABASE_URL`, `SUPABASE_SECRET_KEY` e, opcionalmente, `SUPABASE_STORAGE_BUCKET`. Depois crie o bucket privado uma vez:
+
+```bash
+cd backend
+npm run supabase:setup
+```
+
+Crie as tabelas com:
+
+```bash
+cd backend
+npm run prisma:deploy
+```
+
+O seed apaga os dados existentes antes de inserir dados de demonstracao. Use `npm run prisma:seed` somente em um banco descartavel.
+
+## Render
+
+O arquivo `render.yaml` define o servico. No Render, configure:
+
+- `DATABASE_URL`
+- `DIRECT_URL`
+- `CORS_ORIGIN` com a URL da Vercel
+- `SUPABASE_URL`
+- `SUPABASE_SECRET_KEY`
+
+O `JWT_SECRET` e gerado pelo blueprint. O health check fica em `/health`.
+
+## Vercel
+
+Importe a raiz do repositorio como projeto Next.js e configure:
+
+```text
+BACKEND_URL=https://SEU-SERVICO.onrender.com
+```
+
+Depois de alterar `BACKEND_URL`, faca um novo deploy para atualizar os rewrites.

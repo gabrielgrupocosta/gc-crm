@@ -28,9 +28,9 @@ export default function Dashboard() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [resAlertas, resFin, resDash] = await Promise.all([
-        axios.get('http://localhost:3333/alertas', { headers }),
-        axios.get('http://localhost:3333/financeiro', { headers }),
-        axios.get('http://localhost:3333/dashboards', { headers })
+        axios.get('/api/alertas', { headers }),
+        axios.get('/api/financeiro', { headers }),
+        axios.get('/api/dashboards', { headers })
       ]);
       
       setAlertas(resAlertas.data);

@@ -27,8 +27,8 @@ export default function RHEquipePage() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [resAvaliacoes, resUsers] = await Promise.all([
-        axios.get('http://localhost:3333/avaliacoes', { headers }),
-        axios.get('http://localhost:3333/users', { headers })
+        axios.get('/api/avaliacoes', { headers }),
+        axios.get('/api/users', { headers })
       ]);
       setAvaliacoes(resAvaliacoes.data);
       setColaboradores(resUsers.data);
@@ -51,7 +51,7 @@ export default function RHEquipePage() {
         feedbackTexto: data.feedbackTexto
       };
 
-      await axios.post('http://localhost:3333/avaliacoes', payload, { headers });
+      await axios.post('/api/avaliacoes', payload, { headers });
       setIsModalOpen(false);
       reset();
       fetchData();

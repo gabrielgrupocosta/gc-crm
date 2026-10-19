@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, senha) => {
     try {
-      const response = await axios.post('http://localhost:3333/auth/login', { email, senha });
+      const response = await axios.post('/api/auth/login', { email, senha });
       const { token, user: userData } = response.data;
       
       Cookies.set('token', token, { expires: 1 });

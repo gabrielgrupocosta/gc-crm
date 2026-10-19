@@ -72,14 +72,14 @@ export default function FinanceiroPage() {
       const token = Cookies.get('token');
       const headers = { Authorization: `Bearer ${token}` };
       
-      const resFin = await axios.get('http://localhost:3333/financeiro', { headers });
+      const resFin = await axios.get('/api/financeiro', { headers });
       setLancamentos(resFin.data);
 
-      const resCli = await axios.get('http://localhost:3333/clientes', { headers });
+      const resCli = await axios.get('/api/clientes', { headers });
       setClientes(resCli.data);
 
       if (user?.role === 'ADMIN') {
-        const resUni = await axios.get('http://localhost:3333/unidades', { headers });
+        const resUni = await axios.get('/api/unidades', { headers });
         setUnidades(resUni.data);
       }
     } catch (error) {
@@ -102,9 +102,9 @@ export default function FinanceiroPage() {
       };
 
       if (editingLancamentoId) {
-        await axios.put(`http://localhost:3333/financeiro/${editingLancamentoId}`, payload, { headers });
+        await axios.put(`/api/financeiro/${editingLancamentoId}`, payload, { headers });
       } else {
-        await axios.post('http://localhost:3333/financeiro', payload, { headers });
+        await axios.post('/api/financeiro', payload, { headers });
       }
       setIsModalOpen(false);
       setEditingLancamentoId(null);
@@ -134,7 +134,7 @@ export default function FinanceiroPage() {
     if (!deletingLancamento) return;
     try {
       const token = Cookies.get('token');
-      await axios.delete(`http://localhost:3333/financeiro/${deletingLancamento.id}`, {
+      await axios.delete(`/api/financeiro/${deletingLancamento.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDeletingLancamento(null);

@@ -1,8 +1,7 @@
 import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { AuthRequest } from '../middlewares/auth';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
+import { deleteFile, getDocumentUrl, uploadFile } from '../lib/storage';
 
 export const uploadDocumento = async (req: AuthRequest, res: Response) => {
   try {
@@ -13,16 +12,20 @@ export const uploadDocumento = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Nenhum arquivo enviado.' });
     }
 
+    const storedPath = await uploadFile(file, `clientes/${clienteId}`);
     const documento = await prisma.documento.create({
       data: {
         nomeArquivo: file.originalname,
-        urlCaminho: `/uploads/${file.filename}`,
+        urlCaminho: storedPath,
         tipoArquivo: file.mimetype,
         clienteId,
       },
     });
 
-    res.status(201).json(documento);
+    res.status(201).json({
+      ...documento,
+      urlCaminho: await getDocumentUrl(documento.urlCaminho),
+    });
   } catch (error) {
     res.status(500).json({ error: 'Erro ao salvar documento.' });
   }
@@ -39,7 +42,10 @@ export const listDocumentos = async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    res.json(documentos);
+    res.json(await Promise.all(documentos.map(async (documento) => ({
+      ...documento,
+      urlCaminho: await getDocumentUrl(documento.urlCaminho),
+    }))));
   } catch (error) {
     res.status(500).json({ error: 'Erro ao buscar documentos.' });
   }
@@ -64,6 +70,8 @@ export const deleteDocumento = async (req: AuthRequest, res: Response) => {
       where: { id },
       data: { deletedAt: new Date() }
     });
+
+    await deleteFile(documento.urlCaminho);
 
     res.json({ message: 'Documento removido' });
   } catch (error) {

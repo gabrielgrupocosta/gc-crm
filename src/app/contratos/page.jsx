@@ -34,8 +34,8 @@ export default function ContratosPage() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [resPropostas, resClientes] = await Promise.all([
-        axios.get('http://localhost:3333/contratos', { headers }),
-        axios.get('http://localhost:3333/clientes', { headers })
+        axios.get('/api/contratos', { headers }),
+        axios.get('/api/clientes', { headers })
       ]);
       setPropostas(resPropostas.data);
       setClientes(resClientes.data);
@@ -54,7 +54,7 @@ export default function ContratosPage() {
       data.vendedorId = user.id; // Assign to self for now
       data.valor = parseFloat(data.valor);
       
-      await axios.post('http://localhost:3333/contratos', data, { headers });
+      await axios.post('/api/contratos', data, { headers });
       setIsModalOpen(false);
       reset();
       fetchData();
@@ -85,7 +85,7 @@ export default function ContratosPage() {
     setUploadingPropostaId(id);
     try {
       const token = Cookies.get('token');
-      await axios.post(`http://localhost:3333/contratos/${id}/upload`, formData, {
+      await axios.post(`/api/contratos/${id}/upload`, formData, {
         headers: { 
           Authorization: `Bearer ${token}`,
           'Content-Type': 'multipart/form-data'
@@ -103,7 +103,7 @@ export default function ContratosPage() {
   const handleStatusChange = async (id, newStatus) => {
     try {
       const token = Cookies.get('token');
-      await axios.patch(`http://localhost:3333/contratos/${id}/status`, { status: newStatus }, {
+      await axios.patch(`/api/contratos/${id}/status`, { status: newStatus }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchData();
@@ -113,7 +113,8 @@ export default function ContratosPage() {
   };
 
   const handleViewPDF = (url) => {
-    window.open(`http://localhost:3333${url}`, '_blank');
+    const documentUrl = /^https?:\/\//.test(url) ? url : `/api${url}`;
+    window.open(documentUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleEditDoc = (doc) => {
@@ -124,7 +125,7 @@ export default function ContratosPage() {
   const submitEditDoc = async () => {
     try {
       const token = Cookies.get('token');
-      await axios.put(`http://localhost:3333/documentos/${editingDoc.id}`, { nomeArquivo: newDocName }, {
+      await axios.put(`/api/documentos/${editingDoc.id}`, { nomeArquivo: newDocName }, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setEditingDoc(null);
@@ -137,7 +138,7 @@ export default function ContratosPage() {
   const confirmDeleteDoc = async () => {
     try {
       const token = Cookies.get('token');
-      await axios.delete(`http://localhost:3333/documentos/${deletingDoc.id}`, {
+      await axios.delete(`/api/documentos/${deletingDoc.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDeletingDoc(null);

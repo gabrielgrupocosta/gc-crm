@@ -1,7 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
 
 import authRoutes from './routes/authRoutes';
 import usersRoutes from './routes/usersRoutes';
@@ -16,17 +15,22 @@ import avaliacoesRoutes from './routes/avaliacoesRoutes';
 import csRoutes from './routes/csRoutes';
 import dashboardsRoutes from './routes/dashboardsRoutes';
 
-dotenv.config();
-
 const app = express();
 const PORT = process.env.PORT || 3333;
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors());
+app.disable('x-powered-by');
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origem nao permitida pelo CORS.'));
+  },
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Arquivos Estáticos (Uploads)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Rotas
 app.use('/auth', authRoutes);
@@ -45,6 +49,10 @@ app.use('/dashboards', dashboardsRoutes);
 // Rota de teste
 app.get('/', (req, res) => {
   res.json({ message: 'API CRM Agência de Marketing está rodando!' });
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
 });
 
 app.listen(PORT, () => {
