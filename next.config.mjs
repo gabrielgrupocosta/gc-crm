@@ -2,7 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
-    const backendUrl = (process.env.BACKEND_URL || 'http://localhost:3333').replace(/\/$/, '');
+    const defaultBackendUrl = process.env.NODE_ENV === 'production'
+      ? 'https://gc-crm.onrender.com'
+      : 'http://localhost:3333';
+    const backendUrl = (process.env.BACKEND_URL || defaultBackendUrl).replace(/\/$/, '');
 
     return [
       {
