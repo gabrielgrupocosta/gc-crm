@@ -12,43 +12,26 @@ import {
   Wallet,
   UserCog,
   LogOut,
-  ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
   X,
-  Kanban,
   FileText,
-  Star,
-  HeartPulse,
-  Award,
-  Code,
-  PenTool,
-  Briefcase,
-  Megaphone,
   TrendingUp,
-  HeartHandshake,
-  UserCircle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSidebar } from '../../contexts/SidebarContext';
 
+// CRM 1 — Comercial, Financeiro & Gestão de Unidades/Acessos
 const NAV_MAIN = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, modulo: 'dashboard' },
-  { to: '/meu-desempenho', label: 'Feedback Avaliativo', icon: Award, isVendedor: true },
 ];
 
-const NAV_OPERACOES = [
-  { to: '/operacoes/dev', label: 'DEV', icon: Code, modulo: 'dev' },
-  { to: '/operacoes/design', label: 'Design', icon: PenTool, modulo: 'design' },
-  { to: '/operacoes/administracao', label: 'Administração', icon: Briefcase, modulo: 'administracao' },
-  { to: '/financeiro', label: 'Financeiro', icon: Wallet, modulo: 'financeiro' },
-  { to: '/operacoes/marketing', label: 'Marketing', icon: Megaphone, modulo: 'marketing' },
+const NAV_COMERCIAL = [
   { to: '/funil', label: 'Funil de Vendas', icon: TrendingUp, modulo: 'vendas' },
   { to: '/contratos', label: 'Propostas', icon: FileText, modulo: 'vendas' },
   { to: '/clientes', label: 'Base de Clientes', icon: Users, modulo: 'vendas' },
-  { to: '/cs/saude', label: 'CS & Retenção', icon: HeartHandshake, modulo: 'cs' },
-  { to: '/rh/equipe', label: 'Recursos Humanos', icon: UserCircle, modulo: 'rh' },
+  { to: '/financeiro', label: 'Financeiro', icon: Wallet, modulo: 'financeiro' },
 ];
 
 const NAV_ADMIN = [
@@ -173,9 +156,6 @@ export default function Sidebar() {
   if (!user) return null;
 
   const hasPermission = (item) => {
-    if (item.isVendedor) {
-      return (user?.role === 'VENDEDOR' || user?.role === 'SDR_CLOSER' || user?.role === 'COLABORADOR');
-    }
     if (isAdmin) return true;
     if (item.adminOnly) return false;
     if (item.modulo && user?.permissoes?.[item.modulo]?.ler === true) return true;
@@ -183,7 +163,7 @@ export default function Sidebar() {
   };
 
   const filteredNavMain = NAV_MAIN.filter(hasPermission);
-  const filteredNavOperacoes = NAV_OPERACOES.filter(hasPermission);
+  const filteredNavComercial = NAV_COMERCIAL.filter(hasPermission);
   const filteredNavAdmin = NAV_ADMIN.filter(hasPermission);
 
   const sidebarInner = (
@@ -247,9 +227,9 @@ export default function Sidebar() {
           </NavSection>
         )}
 
-        {filteredNavOperacoes.length > 0 && (
-          <NavSection label="Operações" sidebarCollapsed={effectiveCollapsed}>
-            {filteredNavOperacoes.map(({ to, label, icon: Icon }) => (
+        {filteredNavComercial.length > 0 && (
+          <NavSection label="Comercial & Financeiro" sidebarCollapsed={effectiveCollapsed}>
+            {filteredNavComercial.map(({ to, label, icon: Icon }) => (
               <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
             ))}
           </NavSection>

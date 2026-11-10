@@ -21,16 +21,11 @@ const userSchema = z.object({
   unidadeId: z.string().uuid().optional().or(z.literal('')).transform(v => v === '' ? null : v)
 });
 
+// Módulos do CRM 1 (Comercial, Financeiro & Unidades)
 const MODULOS = [
   { id: 'dashboard', nome: 'Dashboard' },
-  { id: 'dev', nome: 'DEV' },
-  { id: 'design', nome: 'Design' },
-  { id: 'administracao', nome: 'Administração' },
+  { id: 'vendas', nome: 'Comercial (Funil, Propostas e Clientes)' },
   { id: 'financeiro', nome: 'Financeiro' },
-  { id: 'marketing', nome: 'Marketing' },
-  { id: 'vendas', nome: 'Vendas' },
-  { id: 'cs', nome: 'CS' },
-  { id: 'rh', nome: 'RH' },
   { id: 'unidades', nome: 'Unidades' }
 ];
 
@@ -125,8 +120,8 @@ export default function UsuariosPage() {
     setValue('role', u.role);
     setValue('tipoVendedor', u.tipoVendedor || '');
     setValue('metas', u.metas ? String(u.metas) : '');
-    setValue('gestorId', u.gestor?.id || '');
-    setValue('unidadeId', u.unidade?.id || '');
+    setValue('gestorId', u.gestorId || u.gestor?.id || '');
+    setValue('unidadeId', u.unidadeId || u.unidade?.id || '');
     // Senha opcional na edição
     setValue('senha', '********'); // dummy
     setIsModalOpen(true);
@@ -174,8 +169,12 @@ export default function UsuariosPage() {
   const savePermissions = async () => {
     try {
       const token = Cookies.get('token');
-      await axios.put(`/api/users/${permissionsUser.id}/permissoes`,
-        { permissoes: permissionsState },
+      const mergedPermissoes = {
+        ...(permissionsUser?.permissoes || {}),
+        ...permissionsState,
+      };
+      await axios.put(`/api/users/${permissionsUser.id}/permissions`,
+        { permissoes: mergedPermissoes },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setIsPermissionsModalOpen(false);
@@ -207,7 +206,7 @@ export default function UsuariosPage() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-extrabold text-text-primary tracking-tight">Gestão de Acessos</h1>
-          <p className="text-text-subtle text-sm">Controle quem pode acessar o CRM da Agência.</p>
+          <p className="text-text-subtle text-sm">Controle quem pode acessar o CRM Comercial & Financeiro.</p>
         </div>
         <button onClick={() => { setEditingUserId(null); reset({ nome: '', email: '', senha: '', role: 'COLABORADOR', tipoVendedor: '', metas: '', gestorId: '', unidadeId: '' }); setIsModalOpen(true); }} className="btn-primary flex items-center gap-2 px-4 py-2">
           <Plus size={16} /> Novo Usuário
@@ -377,7 +376,7 @@ export default function UsuariosPage() {
           <div className="bg-surface rounded-xl p-6 w-full max-w-2xl shadow-2xl border border-border">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h2 className="text-lg font-bold mb-1">Matriz de Permissões</h2>
+                <h2 className="text-lg font-bold mb-1">Matriz de Permissões (CRM 1)</h2>
                 <p className="text-sm text-text-muted">Parametrizar acessos para <strong>{permissionsUser?.nome}</strong></p>
               </div>
               <div className="flex gap-2">
@@ -413,7 +412,7 @@ export default function UsuariosPage() {
                               checked={permissionsState[m.id]?.[a.id] || false}
                               onChange={() => togglePermission(m.id, a.id)}
                             />
-                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                           </label>
                         </td>
                       ))}
