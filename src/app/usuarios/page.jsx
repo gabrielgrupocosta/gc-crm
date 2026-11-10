@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, ROLE_DEFAULT_PERMISSIONS } from '../../contexts/AuthContext';
 import { UserCog, Plus, ShieldAlert, Pencil, Trash2, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -122,35 +122,50 @@ export default function UsuariosPage() {
     setValue('metas', u.metas ? String(u.metas) : '');
     setValue('gestorId', u.gestorId || u.gestor?.id || '');
     setValue('unidadeId', u.unidadeId || u.unidade?.id || '');
-    // Senha opcional na edição
-    setValue('senha', '********'); // dummy
+    setValue('senha', '********');
     setIsModalOpen(true);
   };
 
   const handlePermissionsClick = (u) => {
     setPermissionsUser(u);
     const initialPerms = u.permissoes || {};
+    const roleDefaults = ROLE_DEFAULT_PERMISSIONS[u.role] || {};
     const formattedPerms = {};
     MODULOS.forEach(m => {
-      formattedPerms[m.id] = {
-        ler: initialPerms[m.id]?.ler || false,
-        criar: initialPerms[m.id]?.criar || false,
-        editar: initialPerms[m.id]?.editar || false,
-        excluir: initialPerms[m.id]?.excluir || false,
-      };
+      const saved = initialPerms[m.id];
+      const def = roleDefaults[m.id] || {};
+      const criar = saved ? Boolean(saved.criar) : Boolean(def.criar);
+      const editar = saved ? Boolean(saved.editar) : Boolean(def.editar);
+      const excluir = saved ? Boolean(saved.excluir) : Boolean(def.excluir);
+      const ler = (saved ? Boolean(saved.ler) : Boolean(def.ler)) || criar || editar || excluir;
+      formattedPerms[m.id] = { ler, criar, editar, excluir };
     });
     setPermissionsState(formattedPerms);
     setIsPermissionsModalOpen(true);
   };
 
   const togglePermission = (moduloId, acaoId) => {
-    setPermissionsState(prev => ({
-      ...prev,
-      [moduloId]: {
-        ...prev[moduloId],
-        [acaoId]: !prev[moduloId][acaoId]
+    setPermissionsState(prev => {
+      const currentMod = prev[moduloId] || { ler: false, criar: false, editar: false, excluir: false };
+      const nextVal = !currentMod[acaoId];
+      const updatedMod = { ...currentMod, [acaoId]: nextVal };
+
+      // Se ativar criar, editar ou excluir, ativa automaticamente o "Visualizar" (ler)
+      if (acaoId !== 'ler' && nextVal === true) {
+        updatedMod.ler = true;
       }
-    }));
+      // Se desativar o "Visualizar" (ler), desativa tambem criar, editar e excluir
+      if (acaoId === 'ler' && nextVal === false) {
+        updatedMod.criar = false;
+        updatedMod.editar = false;
+        updatedMod.excluir = false;
+      }
+
+      return {
+        ...prev,
+        [moduloId]: updatedMod,
+      };
+    });
   };
 
   const setAllPermissions = (value) => {
@@ -412,7 +427,7 @@ export default function UsuariosPage() {
                               checked={permissionsState[m.id]?.[a.id] || false}
                               onChange={() => togglePermission(m.id, a.id)}
                             />
-                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
+                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary"></div>
                           </label>
                         </td>
                       ))}

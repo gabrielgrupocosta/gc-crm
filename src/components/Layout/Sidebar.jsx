@@ -135,7 +135,7 @@ function NavSection({ label, sidebarCollapsed, children }) {
 }
 
 export default function Sidebar() {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isAdmin, can, logout } = useAuth();
   const router = useRouter();
   const { collapsed, toggle } = useSidebar();
   const isMobile = useIsMobile(768);
@@ -158,7 +158,7 @@ export default function Sidebar() {
   const hasPermission = (item) => {
     if (isAdmin) return true;
     if (item.adminOnly) return false;
-    if (item.modulo && user?.permissoes?.[item.modulo]?.ler === true) return true;
+    if (item.modulo) return can(item.modulo, 'ler');
     return false;
   };
 
@@ -219,39 +219,54 @@ export default function Sidebar() {
         className="flex-1 overflow-y-auto py-1 flex flex-col"
         onClick={e => { if (e.target.closest('a')) setMobileOpen(false) }}
       >
-        {filteredNavMain.length > 0 && (
-          <NavSection label="Principal" sidebarCollapsed={effectiveCollapsed}>
-            {filteredNavMain.map(({ to, label, icon: Icon }) => (
-              <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
-            ))}
-          </NavSection>
-        )}
+        <div className="space-y-0.5">
+          {filteredNavMain.map(({ to, label, icon: Icon }) => (
+            <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
+          ))}
+        </div>
 
         {filteredNavComercial.length > 0 && (
           <NavSection label="Comercial & Financeiro" sidebarCollapsed={effectiveCollapsed}>
-            {filteredNavComercial.map(({ to, label, icon: Icon }) => (
-              <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
-            ))}
+            <div className="space-y-0.5">
+              {filteredNavComercial.map(({ to, label, icon: Icon }) => (
+                <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
+              ))}
+            </div>
           </NavSection>
         )}
 
         {filteredNavAdmin.length > 0 && (
-          <NavSection label="Administração" sidebarCollapsed={effectiveCollapsed}>
-            {filteredNavAdmin.map(({ to, label, icon: Icon }) => (
-              <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
-            ))}
+          <NavSection label="Gestão & Acessos" sidebarCollapsed={effectiveCollapsed}>
+            <div className="space-y-0.5">
+              {filteredNavAdmin.map(({ to, label, icon: Icon }) => (
+                <NavItem key={to} to={to} label={label} Icon={Icon} collapsed={effectiveCollapsed} />
+              ))}
+            </div>
           </NavSection>
         )}
       </nav>
 
-      <div style={{ padding: '8px', borderTop: '1px solid #1C2128' }}>
+      <div className="shrink-0 flex flex-col gap-1" style={{ borderTop: '1px solid rgba(255,255,255,0.1)', padding: effectiveCollapsed ? '12px 0' : '12px' }}>
+        {!effectiveCollapsed && (
+          <div className="px-2 pb-2">
+            <div className="text-xs font-semibold text-white truncate">{user.nome}</div>
+            <div className="text-[10px] text-[#9AA3AF] uppercase">{user.role.replace('_', ' ')}</div>
+          </div>
+        )}
         <button
+          type="button"
           onClick={handleLogout}
-          className="w-full flex items-center gap-2"
-          style={{ height: '34px', padding: effectiveCollapsed ? '0' : '0 12px', justifyContent: effectiveCollapsed ? 'center' : 'flex-start', borderRadius: '6px', background: 'none', border: 'none', cursor: 'pointer', color: '#9AA3AF' }}
+          title={effectiveCollapsed ? 'Sair' : undefined}
+          className={`flex items-center font-sans ${effectiveCollapsed ? 'justify-center mx-2' : 'gap-2 px-3'}`}
+          style={{
+            height: '32px', borderRadius: '6px', background: 'none', border: 'none', cursor: 'pointer',
+            color: '#9AA3AF', fontSize: '12px', transition: 'color 100ms, background-color 100ms',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = '#FF4B2E'; e.currentTarget.style.backgroundColor = '#1C2128'; }}
+          onMouseLeave={e => { e.currentTarget.style.color = '#9AA3AF'; e.currentTarget.style.backgroundColor = 'transparent'; }}
         >
           <LogOut size={15} strokeWidth={1.75} />
-          {!effectiveCollapsed && <span style={{ fontSize: '13.5px', fontWeight: 500 }}>Sair do sistema</span>}
+          {!effectiveCollapsed && <span>Sair da Conta</span>}
         </button>
       </div>
     </>
@@ -259,39 +274,57 @@ export default function Sidebar() {
 
   return (
     <>
-      <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-primary flex items-center px-4 z-40 shadow-sm border-b border-primary-hover">
-        <button onClick={() => setMobileOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#FFFFFF', padding: '8px' }}>
-          <Menu size={24} />
+      {isMobile && !mobileOpen && (
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          style={{
+            position: 'fixed', top: '12px', left: '12px', zIndex: 40, width: '40px', height: '40px',
+            borderRadius: '8px', backgroundColor: '#111111', border: '1px solid #333333',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', cursor: 'pointer', color: '#FFFFFF',
+          }}
+        >
+          <Menu size={20} strokeWidth={1.75} />
         </button>
-        <div className="ml-2 flex flex-col justify-center items-start leading-tight">
-          <span className="select-none font-sans text-white" style={{ fontSize: '15px', letterSpacing: '-0.02em', fontWeight: 800 }}>
-            Grupo Costa
-          </span>
-          <span className="select-none font-sans text-tertiary" style={{ fontSize: '11px', letterSpacing: '0.1em', fontWeight: 600 }}>
-            CRM
-          </span>
-        </div>
-      </div>
+      )}
+
+      {!isMobile && (
+        <aside
+          className="fixed left-0 top-0 h-screen flex flex-col select-none z-30"
+          style={{
+            width: collapsed ? '64px' : '220px',
+            backgroundColor: '#031E33',
+            borderRight: '1px solid rgba(255,255,255,0.05)',
+            transition: 'width 200ms cubic-bezier(0.4,0,0.2,1)',
+          }}
+        >
+          {sidebarInner}
+        </aside>
+      )}
 
       <AnimatePresence>
         {isMobile && mobileOpen && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/50 z-50 md:hidden"
-            onClick={() => setMobileOpen(false)}
-          />
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setMobileOpen(false)}
+              style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 40 }}
+            />
+            <motion.aside
+              key="drawer"
+              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }}
+              transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              className="fixed left-0 top-0 h-screen flex flex-col select-none z-50"
+              style={{ width: '240px', backgroundColor: '#031E33', borderRight: '1px solid rgba(255,255,255,0.05)' }}
+            >
+              {sidebarInner}
+            </motion.aside>
+          </>
         )}
       </AnimatePresence>
-
-      <motion.aside
-        initial={false}
-        animate={{ width: effectiveCollapsed ? 52 : 220, x: isMobile && !mobileOpen ? -220 : 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="fixed top-0 left-0 bottom-0 z-50 bg-primary flex flex-col border-r border-primary-hover"
-        style={{ willChange: 'width, transform' }}
-      >
-        {sidebarInner}
-      </motion.aside>
     </>
   );
 }

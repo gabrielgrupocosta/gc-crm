@@ -1,5 +1,6 @@
 import { Hono } from 'npm:hono@4.10.7';
 import bcrypt from 'npm:bcryptjs@2.4.3';
+import { ROLE_DEFAULT_PERMISSIONS } from '../access.ts';
 import {
   asNumber,
   authMiddleware,
@@ -14,6 +15,21 @@ import { ROLES, type AppEnv } from '../types.ts';
 
 export const usersRoutes = new Hono<AppEnv>();
 usersRoutes.use('*', authMiddleware, requireRoles('ADMIN'));
+
+function normalizePermissoes(raw: Record<string, any> | null | undefined): Record<string, any> {
+  const result: Record<string, any> = {};
+  if (!raw || typeof raw !== 'object') return result;
+  for (const [mod, actions] of Object.entries(raw)) {
+    if (!actions || typeof actions !== 'object') continue;
+    const criar = Boolean(actions.criar);
+    const editar = Boolean(actions.editar);
+    const excluir = Boolean(actions.excluir);
+    // If any write action is enabled, 'ler' (view) must also be enabled
+    const ler = Boolean(actions.ler) || criar || editar || excluir;
+    result[mod] = { ler, criar, editar, excluir };
+  }
+  return result;
+}
 
 usersRoutes.get('/', async (c) => {
   const db = c.get('db');
@@ -83,6 +99,7 @@ usersRoutes.post('/', async (c) => {
 
   const now = nowIso();
   const senhaHash = await bcrypt.hash(senha, 10);
+  const defaultPermissoes = ROLE_DEFAULT_PERMISSIONS[role] || ROLE_DEFAULT_PERMISSIONS.COLABORADOR;
 
   // If the user was previously soft-deleted, reactivate and update both Auth and public.User
   if (existing && existing.deletedAt) {
@@ -125,6 +142,7 @@ usersRoutes.post('/', async (c) => {
         metas,
         gestorId,
         unidadeId,
+        permissoes: defaultPermissoes,
         deletedAt: null,
         updatedAt: now,
       })
@@ -161,6 +179,7 @@ usersRoutes.post('/', async (c) => {
     metas,
     gestorId,
     unidadeId,
+    permissoes: defaultPermissoes,
     createdAt: now,
     updatedAt: now,
     deletedAt: null,
@@ -285,17 +304,18 @@ usersRoutes.put('/:id', async (c) => {
   return c.json(data);
 });
 
-usersRoutes.put('/:id/permissions', async (c) => {
+const handleUpdatePermissions = async (c: any) => {
   const id = c.req.param('id');
   const body = await parseJson(c);
   if (!body || typeof body.permissoes !== 'object') {
     return c.json({ error: 'Permissoes invalidas.' }, 400);
   }
 
+  const normalized = normalizePermissoes(body.permissoes);
   const db = c.get('db');
   const { data, error } = await db
     .from('User')
-    .update({ permissoes: body.permissoes, ...updatedMeta() })
+    .update({ permissoes: normalized, ...updatedMeta() })
     .eq('id', id)
     .is('deletedAt', null)
     .select('id,nome,permissoes')
@@ -304,7 +324,10 @@ usersRoutes.put('/:id/permissions', async (c) => {
   if (error) return databaseError(c, error, 'Erro ao atualizar permissoes');
   if (!data) return c.json({ error: 'Usuario nao encontrado.' }, 404);
   return c.json(data);
-});
+};
+
+usersRoutes.put('/:id/permissions', handleUpdatePermissions);
+usersRoutes.put('/:id/permissoes', handleUpdatePermissions);
 
 usersRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');

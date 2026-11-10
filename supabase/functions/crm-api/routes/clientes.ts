@@ -42,7 +42,7 @@ clientesRoutes.get('/', async (c) => {
 clientesRoutes.post('/', async (c) => {
   const db = c.get('db');
   const profile = c.get('profile');
-  if (!hasPermission(profile, 'clientes', 'criar', ['GESTOR_PL'])) {
+  if (!hasPermission(profile, 'clientes', 'criar', ['GESTOR_PL', 'VENDEDOR', 'SDR_CLOSER'])) {
     return c.json({ error: 'Acesso negado.' }, 403);
   }
 
@@ -50,7 +50,7 @@ clientesRoutes.post('/', async (c) => {
   const razaoSocial = typeof body?.razaoSocial === 'string' ? body.razaoSocial.trim() : '';
   const nomeFantasia = typeof body?.nomeFantasia === 'string' ? body.nomeFantasia.trim() : '';
   const cnpjCpf = typeof body?.cnpjCpf === 'string' ? body.cnpjCpf.trim() : '';
-  const unidadeId = typeof body?.unidadeId === 'string' ? body.unidadeId : '';
+  const unidadeId = typeof body?.unidadeId === 'string' && body.unidadeId ? body.unidadeId : (profile.unidadeId || '');
   const status = body?.status ?? 'ATIVO';
   const faseFunil = body?.faseFunil ?? null;
   if (!razaoSocial || !nomeFantasia || cnpjCpf.length < 11 || !unidadeId
@@ -67,6 +67,10 @@ clientesRoutes.post('/', async (c) => {
     return c.json({ error: 'Data de vencimento invalida.' }, 400);
   }
 
+  const vendedorId = (profile.role === 'VENDEDOR' || profile.role === 'SDR_CLOSER')
+    ? profile.id
+    : (typeof body?.vendedorId === 'string' && body.vendedorId ? body.vendedorId : null);
+
   const { data, error } = await db
     .from('Cliente')
     .insert({
@@ -77,6 +81,7 @@ clientesRoutes.post('/', async (c) => {
       email: asOptionalString(body?.email),
       telefone: asOptionalString(body?.telefone),
       unidadeId,
+      vendedorId,
       status,
       faseFunil,
       dataEntrada: new Date().toISOString(),
@@ -96,7 +101,7 @@ clientesRoutes.put('/:id/fase', async (c) => {
   }
   const db = c.get('db');
   const profile = c.get('profile');
-  if (!hasPermission(profile, 'clientes', 'editar', ['GESTOR_PL'])) {
+  if (!hasPermission(profile, 'clientes', 'editar', ['GESTOR_PL', 'VENDEDOR', 'SDR_CLOSER'])) {
     return c.json({ error: 'Acesso negado.' }, 403);
   }
   const { client, allowed } = await loadClientInScope(db, profile, c.req.param('id'));
@@ -163,7 +168,7 @@ clientesRoutes.post('/:id/pontuar-operador', async (c) => {
 clientesRoutes.put('/:id', async (c) => {
   const db = c.get('db');
   const profile = c.get('profile');
-  if (!hasPermission(profile, 'clientes', 'editar', ['GESTOR_PL'])) {
+  if (!hasPermission(profile, 'clientes', 'editar', ['GESTOR_PL', 'VENDEDOR', 'SDR_CLOSER'])) {
     return c.json({ error: 'Acesso negado.' }, 403);
   }
   const { client, allowed } = await loadClientInScope(db, profile, c.req.param('id'));
@@ -172,7 +177,7 @@ clientesRoutes.put('/:id', async (c) => {
 
   const body = await parseJson(c);
   if (!body) return c.json({ error: 'Dados invalidos.' }, 400);
-  const unidadeId = typeof body.unidadeId === 'string' ? body.unidadeId : client.unidadeId;
+  const unidadeId = typeof body.unidadeId === 'string' && body.unidadeId ? body.unidadeId : client.unidadeId;
   if (unidadeId !== client.unidadeId && !await canAccessUnit(db, profile, unidadeId)) {
     return c.json({ error: 'Sem permissao para mover para esta unidade' }, 403);
   }
@@ -220,4 +225,3 @@ clientesRoutes.delete('/:id', async (c) => {
   if (error) return databaseError(c, error, 'Erro ao remover cliente');
   return c.json({ message: 'Cliente removido' });
 });
-

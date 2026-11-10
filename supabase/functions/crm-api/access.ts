@@ -9,6 +9,45 @@ const MODULE_ALIASES: Record<string, readonly string[]> = {
   alertas: ['alertas', 'dashboard', 'vendas', 'financeiro'],
 };
 
+export const ROLE_DEFAULT_PERMISSIONS: Record<string, Record<string, Record<Action, boolean>>> = {
+  ADMIN: {
+    dashboard: { ler: true, criar: true, editar: true, excluir: true },
+    vendas: { ler: true, criar: true, editar: true, excluir: true },
+    financeiro: { ler: true, criar: true, editar: true, excluir: true },
+    unidades: { ler: true, criar: true, editar: true, excluir: true },
+  },
+  FINANCEIRO: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: false, editar: true, excluir: false },
+    financeiro: { ler: true, criar: true, editar: true, excluir: true },
+    unidades: { ler: true, criar: false, editar: false, excluir: false },
+  },
+  GESTOR_PL: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: true, editar: true, excluir: true },
+    financeiro: { ler: true, criar: true, editar: true, excluir: true },
+    unidades: { ler: true, criar: false, editar: false, excluir: false },
+  },
+  VENDEDOR: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: true, editar: true, excluir: false },
+    financeiro: { ler: false, criar: false, editar: false, excluir: false },
+    unidades: { ler: false, criar: false, editar: false, excluir: false },
+  },
+  SDR_CLOSER: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: true, editar: true, excluir: false },
+    financeiro: { ler: false, criar: false, editar: false, excluir: false },
+    unidades: { ler: false, criar: false, editar: false, excluir: false },
+  },
+  COLABORADOR: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: false, criar: false, editar: false, excluir: false },
+    financeiro: { ler: false, criar: false, editar: false, excluir: false },
+    unidades: { ler: false, criar: false, editar: false, excluir: false },
+  },
+};
+
 export const hasPermission = (
   profile: Profile,
   module: string,
@@ -17,11 +56,27 @@ export const hasPermission = (
 ): boolean => {
   if (profile.role === 'ADMIN') return true;
   const candidates = MODULE_ALIASES[module] || [module];
+  let sawExplicitFalse = false;
+
   for (const key of candidates) {
-    const explicit = profile.permissoes?.[key]?.[action];
-    if (explicit === true) return true;
-    if (explicit === false && key === module) return false;
+    const modPerms = profile.permissoes?.[key];
+    if (!modPerms) continue;
+
+    // If checking 'ler' (view), having ANY action enabled (ler, criar, editar, excluir) grants view access
+    if (action === 'ler') {
+      if (modPerms.ler === true || modPerms.criar === true || modPerms.editar === true || modPerms.excluir === true) {
+        return true;
+      }
+      if (modPerms.ler === false) {
+        sawExplicitFalse = true;
+      }
+    } else {
+      if (modPerms[action] === true) return true;
+      if (modPerms[action] === false) sawExplicitFalse = true;
+    }
   }
+
+  if (sawExplicitFalse) return false;
   return defaultRoles.includes(profile.role);
 };
 
@@ -51,6 +106,9 @@ export const canAccessUnit = async (
 ): Promise<boolean> => {
   if (globalRoles.includes(profile.role)) return true;
   const ids = await getAccessibleUnitIds(db, profile);
+  if (ids.length === 0 && (profile.role === 'VENDEDOR' || profile.role === 'SDR_CLOSER')) {
+    return true;
+  }
   return ids.includes(unidadeId);
 };
 
@@ -72,11 +130,20 @@ export const loadClientInScope = async (
   let allowed: boolean;
   if (globalRoles.includes(profile.role)) {
     allowed = true;
-  } else if (profile.role === 'VENDEDOR') {
-    allowed = data.vendedorId === profile.id;
-  } else if (profile.role === 'SDR_CLOSER') {
-    allowed = data.status === 'PROSPECCAO'
-      && await canAccessUnit(db, profile, data.unidadeId, []);
+  } else if (profile.role === 'VENDEDOR' || profile.role === 'SDR_CLOSER') {
+    if (data.vendedorId === profile.id) {
+      allowed = true;
+    } else {
+      const { data: ownProposal } = await db
+        .from('Proposta')
+        .select('id')
+        .eq('clienteId', clienteId)
+        .eq('vendedorId', profile.id)
+        .is('deletedAt', null)
+        .limit(1)
+        .maybeSingle();
+      allowed = Boolean(ownProposal);
+    }
   } else {
     allowed = await canAccessUnit(db, profile, data.unidadeId, []);
   }
@@ -89,16 +156,28 @@ export const scopedClientIds = async (
   globalRoles: readonly string[] = ['ADMIN'],
 ): Promise<string[] | null> => {
   if (globalRoles.includes(profile.role)) return null;
-  let query = db.from('Cliente').select('id').is('deletedAt', null);
-  if (profile.role === 'VENDEDOR') {
-    query = query.eq('vendedorId', profile.id);
-  } else {
-    const unitIds = await getAccessibleUnitIds(db, profile);
-    if (unitIds.length === 0) return [];
-    query = query.in('unidadeId', unitIds);
-    if (profile.role === 'SDR_CLOSER') query = query.eq('status', 'PROSPECCAO');
+
+  // Sellers (VENDEDOR and SDR_CLOSER) must ONLY see their own clients/sales, never other sellers' clients
+  if (profile.role === 'VENDEDOR' || profile.role === 'SDR_CLOSER') {
+    const [{ data: ownClients, error: errCli }, { data: ownProposals, error: errProp }] = await Promise.all([
+      db.from('Cliente').select('id').eq('vendedorId', profile.id).is('deletedAt', null),
+      db.from('Proposta').select('clienteId').eq('vendedorId', profile.id).is('deletedAt', null),
+    ]);
+    if (errCli) throw errCli;
+    if (errProp) throw errProp;
+    const ids = new Set<string>();
+    for (const c of ownClients || []) if (c.id) ids.add(c.id);
+    for (const p of ownProposals || []) if (p.clienteId) ids.add(p.clienteId);
+    return [...ids];
   }
-  const { data, error } = await query;
+
+  const unitIds = await getAccessibleUnitIds(db, profile);
+  if (unitIds.length === 0) return [];
+  const { data, error } = await db
+    .from('Cliente')
+    .select('id')
+    .in('unidadeId', unitIds)
+    .is('deletedAt', null);
   if (error) throw error;
   return (data || []).map((item) => item.id);
 };

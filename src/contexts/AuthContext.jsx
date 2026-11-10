@@ -9,11 +9,48 @@ import { createClient as createSupabaseClient, getPublicConfig } from '../lib/su
 const AuthContext = createContext({});
 const { publishableKey } = getPublicConfig();
 
-// Edge Functions recebem a chave publica em `apikey` e o JWT do usuario em
-// `Authorization`. As paginas ainda usam o Axios global durante a migracao.
 if (publishableKey) {
   axios.defaults.headers.common.apikey = publishableKey;
 }
+
+export const ROLE_DEFAULT_PERMISSIONS = {
+  ADMIN: {
+    dashboard: { ler: true, criar: true, editar: true, excluir: true },
+    vendas: { ler: true, criar: true, editar: true, excluir: true },
+    financeiro: { ler: true, criar: true, editar: true, excluir: true },
+    unidades: { ler: true, criar: true, editar: true, excluir: true },
+  },
+  FINANCEIRO: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: false, editar: true, excluir: false },
+    financeiro: { ler: true, criar: true, editar: true, excluir: true },
+    unidades: { ler: true, criar: false, editar: false, excluir: false },
+  },
+  GESTOR_PL: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: true, editar: true, excluir: true },
+    financeiro: { ler: true, criar: true, editar: true, excluir: true },
+    unidades: { ler: true, criar: false, editar: false, excluir: false },
+  },
+  VENDEDOR: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: true, editar: true, excluir: false },
+    financeiro: { ler: false, criar: false, editar: false, excluir: false },
+    unidades: { ler: false, criar: false, editar: false, excluir: false },
+  },
+  SDR_CLOSER: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: true, criar: true, editar: true, excluir: false },
+    financeiro: { ler: false, criar: false, editar: false, excluir: false },
+    unidades: { ler: false, criar: false, editar: false, excluir: false },
+  },
+  COLABORADOR: {
+    dashboard: { ler: true, criar: false, editar: false, excluir: false },
+    vendas: { ler: false, criar: false, editar: false, excluir: false },
+    financeiro: { ler: false, criar: false, editar: false, excluir: false },
+    unidades: { ler: false, criar: false, editar: false, excluir: false },
+  },
+};
 
 export const useAuth = () => useContext(AuthContext);
 
@@ -128,7 +165,6 @@ export const AuthProvider = ({ children }) => {
             return;
           }
 
-          // Evita trabalho assincrono dentro do callback interno do Auth.
           window.setTimeout(() => {
             if (!active) return;
             void applySession(nextSession).catch(() => {});
@@ -192,7 +228,7 @@ export const AuthProvider = ({ children }) => {
         try {
           await supabase.auth.signOut();
         } catch {
-          // A limpeza local abaixo ainda impede o uso da sessao incompleta.
+          // ignore
         }
         syncLegacyToken(null);
         throw profileError;
@@ -233,9 +269,17 @@ export const AuthProvider = ({ children }) => {
   const isGestor = user?.role === 'GESTOR_PL';
   const isResponsavel = isGestor;
 
-  const can = (modulo, acao) => {
+  const can = (modulo, acao = 'ler') => {
     if (isAdmin) return true;
-    return user?.permissoes?.[modulo]?.[acao] === true;
+    const modPerms = user?.permissoes?.[modulo];
+    if (modPerms && typeof modPerms === 'object') {
+      if (acao === 'ler') {
+        return Boolean(modPerms.ler || modPerms.criar || modPerms.editar || modPerms.excluir);
+      }
+      return Boolean(modPerms[acao]);
+    }
+    const roleDefaults = ROLE_DEFAULT_PERMISSIONS[user?.role];
+    return Boolean(roleDefaults?.[modulo]?.[acao]);
   };
 
   return (

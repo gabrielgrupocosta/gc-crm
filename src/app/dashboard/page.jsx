@@ -5,15 +5,17 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import Link from 'next/link';
-import { AlertCircle, AlertTriangle, ChevronRight, Trophy, Medal, Crown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Trophy, Medal, Crown, TrendingUp } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const [alertas, setAlertas] = useState({ lancamentosAtrasados: [], contratosVencendo: [] });
   const [financeiro, setFinanceiro] = useState([]);
   const [dashExtra, setDashExtra] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const isSeller = user?.role === 'VENDEDOR' || user?.role === 'SDR_CLOSER';
 
   useEffect(() => {
     fetchData();
@@ -28,13 +30,15 @@ export default function Dashboard() {
       const headers = { Authorization: `Bearer ${token}` };
       
       const [resAlertas, resFin, resDash] = await Promise.all([
-        axios.get('/api/alertas', { headers }),
-        axios.get('/api/financeiro', { headers }),
-        axios.get('/api/dashboards', { headers })
+        axios.get('/api/alertas', { headers }).catch(() => ({ data: { lancamentosAtrasados: [], contratosVencendo: [] } })),
+        can('financeiro', 'ler')
+          ? axios.get('/api/financeiro', { headers }).catch(() => ({ data: [] }))
+          : Promise.resolve({ data: [] }),
+        axios.get('/api/dashboards', { headers }).catch(() => ({ data: null })),
       ]);
       
-      setAlertas(resAlertas.data);
-      setFinanceiro(resFin.data);
+      setAlertas(resAlertas.data || { lancamentosAtrasados: [], contratosVencendo: [] });
+      setFinanceiro(resFin.data || []);
       setDashExtra(resDash.data);
     } catch (error) {
       console.error('Erro ao buscar dados do dashboard', error);
@@ -59,22 +63,25 @@ export default function Dashboard() {
   const COLORS = ['#031E33', '#883123', '#9F7E50', '#007A5A', '#2563EB', '#666666'];
 
   const totalReceitaGlobal = financeiro.reduce((acc, curr) => acc + Number(curr.valor), 0);
-  const totalReceitaPaga = receitasPagas.reduce((acc, curr) => acc + Number(curr.valor), 0);
 
   return (
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-2xl font-extrabold text-text-primary tracking-tight">Dashboard</h1>
-        <p className="text-text-subtle text-sm">Visão geral e avisos importantes.</p>
+        <p className="text-text-subtle text-sm">
+          {isSeller ? 'Acompanhe suas vendas, metas e alertas da sua carteira.' : 'Visão geral e avisos importantes.'}
+        </p>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-surface border border-border p-6 rounded-xl shadow-sm">
-          <p className="text-text-subtle text-[11px] font-bold uppercase tracking-wider mb-2">Faturamento Total</p>
-          <h2 className="text-3xl font-extrabold text-text-primary">
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalReceitaGlobal)}
-          </h2>
-        </div>
+        {!isSeller && (
+          <div className="bg-surface border border-border p-6 rounded-xl shadow-sm">
+            <p className="text-text-subtle text-[11px] font-bold uppercase tracking-wider mb-2">Faturamento Total</p>
+            <h2 className="text-3xl font-extrabold text-text-primary">
+              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalReceitaGlobal)}
+            </h2>
+          </div>
+        )}
         
         {dashExtra?.tipo === 'GLOBAL' && (
           <>
@@ -118,7 +125,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {dashExtra?.rankingVendedores && dashExtra?.rankingUnidades && (
+      {!isSeller && dashExtra?.rankingVendedores && dashExtra?.rankingUnidades && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* WIDGET 1: PÓDIO DE VENDEDORES */}
           <div className="bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden">
@@ -201,41 +208,43 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* GRÁFICO DE RECEITA POR SERVIÇO */}
-        <div className="lg:col-span-2 bg-surface border border-border rounded-xl shadow-sm p-6 flex flex-col">
-          <h3 className="font-bold text-base mb-4 text-text-primary">Receita por Serviço (Pagos)</h3>
-          {dataChart.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center text-text-subtle text-sm">
-              Nenhum dado financeiro pago para exibir.
-            </div>
-          ) : (
-            <div className="flex-1 min-h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={dataChart}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={70}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {dataChart.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
-                  />
-                  <Legend verticalAlign="bottom" height={36}/>
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
+        {!isSeller && (
+          <div className="lg:col-span-2 bg-surface border border-border rounded-xl shadow-sm p-6 flex flex-col">
+            <h3 className="font-bold text-base mb-4 text-text-primary">Receita por Serviço (Pagos)</h3>
+            {dataChart.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-text-subtle text-sm">
+                Nenhum dado financeiro pago para exibir.
+              </div>
+            ) : (
+              <div className="flex-1 min-h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={dataChart}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={70}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {dataChart.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)}
+                    />
+                    <Legend verticalAlign="bottom" height={36}/>
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* REQUER ATENÇÃO */}
-        <div className="bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden">
+        <div className={`${isSeller ? 'lg:col-span-3' : ''} bg-surface border border-border rounded-xl shadow-sm flex flex-col overflow-hidden`}>
           <div className="p-4 border-b border-border bg-[#F9F9F9] flex items-center gap-2 border-l-4 border-l-negative">
             <AlertTriangle size={18} className="text-negative" />
             <h3 className="font-bold text-sm text-text-primary uppercase tracking-wider">Requer Atenção</h3>

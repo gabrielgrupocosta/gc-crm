@@ -15,6 +15,30 @@ dashboardsRoutes.get('/', async (c) => {
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const nextMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
+
+  // Sellers (VENDEDOR and SDR_CLOSER) must ONLY see their own sales, never other sellers' sales or rankings
+  if (profile.role === 'VENDEDOR' || profile.role === 'SDR_CLOSER') {
+    const { data: ownProposals, error: ownError } = await db
+      .from('Proposta')
+      .select('id,valor,vendedorId,clienteId')
+      .eq('vendedorId', profile.id)
+      .in('status', ['ATIVO', 'ASSINADO'])
+      .gte('createdAt', monthStart)
+      .lt('createdAt', nextMonth)
+      .is('deletedAt', null);
+    if (ownError) return databaseError(c, ownError, 'Erro ao gerar dashboard');
+
+    const sales = (ownProposals || []).reduce((sum, proposal) => sum + Number(proposal.valor || 0), 0);
+    const target = Number(profile.metas || 0);
+    return c.json({
+      tipo: 'VENDEDOR',
+      vendasMes: sales,
+      metasAtingidas: target > 0 ? `${((sales / target) * 100).toFixed(0)}%` : '0%',
+      rankingVendedores: [],
+      rankingUnidades: [],
+    });
+  }
+
   const scopedIds = await scopedClientIds(db, profile, ['ADMIN', 'FINANCEIRO']);
 
   let proposalQuery = db
@@ -140,20 +164,5 @@ dashboardsRoutes.get('/', async (c) => {
     });
   }
 
-  if (profile.role === 'VENDEDOR') {
-    const sales = (proposals || [])
-      .filter((proposal) => proposal.vendedorId === profile.id)
-      .reduce((sum, proposal) => sum + Number(proposal.valor || 0), 0);
-    const target = Number(profile.metas || 0);
-    return c.json({
-      tipo: 'VENDEDOR',
-      vendasMes: sales,
-      metasAtingidas: target > 0 ? `${((sales / target) * 100).toFixed(0)}%` : '0%',
-      rankingVendedores,
-      rankingUnidades,
-    });
-  }
-
   return c.json({ tipo: 'COMUM', message: 'Visao padrao' });
 });
-
