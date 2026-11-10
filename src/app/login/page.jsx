@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,8 +12,7 @@ const pageVariants = {
 };
 
 export default function Login() {
-  const { login } = useAuth();
-  const router = useRouter();
+  const { login, authError, clearAuthError } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,6 +25,7 @@ export default function Login() {
     if (loading) return;
     
     setError('');
+    clearAuthError();
     setLoading(true);
     
     const result = await login(email.trim(), password);
@@ -72,7 +71,11 @@ export default function Login() {
                 autoComplete="email"
                 autoFocus
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  setError('');
+                  clearAuthError();
+                }}
                 placeholder="voce@agencia.com"
                 required
                 className="input"
@@ -88,7 +91,11 @@ export default function Login() {
                   type={showPass ? 'text' : 'password'}
                   autoComplete="current-password"
                   value={password}
-                  onChange={e => setPassword(e.target.value)}
+                  onChange={e => {
+                    setPassword(e.target.value);
+                    setError('');
+                    clearAuthError();
+                  }}
                   placeholder="••••••••"
                   required
                   className="input pr-10"
@@ -108,8 +115,8 @@ export default function Login() {
             </div>
 
             {/* Erro */}
-            {error && (
-              <p className="text-[13px] text-negative leading-snug">{error}</p>
+            {(error || authError) && (
+              <p className="text-[13px] text-negative leading-snug">{error || authError}</p>
             )}
 
             {/* Submit */}

@@ -1,0 +1,8 @@
+project_id = "gc-crm"
+
+# crm-api will perform explicit user/secret validation because the project uses
+# the current publishable/secret key format. CORS headers remain the function's
+# responsibility and must be restricted to the production CRM origin.
+[functions.crm-api]
+verify_jwt = false
+

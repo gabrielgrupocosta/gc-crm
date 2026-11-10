@@ -2,15 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
-    const defaultBackendUrl = process.env.NODE_ENV === 'production'
-      ? 'https://gc-crm.onrender.com'
-      : 'http://localhost:3333';
-    const backendUrl = (process.env.BACKEND_URL || defaultBackendUrl).replace(/\/$/, '');
+    const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://iqpjpvwfqmykbebtqcpn.supabase.co').replace(/\/$/, '');
 
     return [
       {
         source: '/api/:path*',
-        destination: `${backendUrl}/:path*`,
+        destination: `${supabaseUrl}/functions/v1/crm-api/:path*`,
       },
     ];
   },

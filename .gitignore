@@ -4,6 +4,7 @@ dist
 dist-ssr
 .next
 out
+supabase/.temp
 
 # Environment files
 .env
