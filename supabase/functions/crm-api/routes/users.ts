@@ -17,14 +17,33 @@ usersRoutes.use('*', authMiddleware, requireRoles('ADMIN'));
 
 usersRoutes.get('/', async (c) => {
   const db = c.get('db');
-  const { data, error } = await db
-    .from('User')
-    .select('id,nome,email,role,tipoVendedor,metas,createdAt,permissoes,gestor:User!User_gestorId_fkey(nome),unidade:Unidade!User_unidadeId_fkey(nome)')
-    .is('deletedAt', null)
-    .order('nome');
+  const [{ data: users, error }, { data: units, error: unitsError }] = await Promise.all([
+    db
+      .from('User')
+      .select('id,nome,email,role,tipoVendedor,metas,createdAt,permissoes,gestorId,unidadeId')
+      .is('deletedAt', null)
+      .order('nome'),
+    db
+      .from('Unidade')
+      .select('id,nome')
+      .is('deletedAt', null),
+  ]);
 
   if (error) return databaseError(c, error, 'Erro ao buscar usuarios.');
-  return c.json(data || []);
+  if (unitsError) return databaseError(c, unitsError, 'Erro ao buscar unidades dos usuarios.');
+
+  const usersById = new Map((users || []).map((u) => [u.id, { nome: u.nome }]));
+  const unitsById = new Map((units || []).map((u) => [u.id, { nome: u.nome }]));
+
+  const payload = (users || []).map(({ gestorId, unidadeId, ...user }) => ({
+    ...user,
+    gestorId,
+    unidadeId,
+    gestor: gestorId ? usersById.get(gestorId) || null : null,
+    unidade: unidadeId ? unitsById.get(unidadeId) || null : null,
+  }));
+
+  return c.json(payload);
 });
 
 usersRoutes.post('/', async (c) => {
@@ -198,17 +217,17 @@ usersRoutes.put('/:id', async (c) => {
       unidadeId: existing.unidadeId,
       ...updatedMeta(),
     };
-    const { error: rollbackError } = await db.from('User').update(rollback).eq('id', id);
-    if (rollbackError) console.error('Falha ao compensar atualizacao de usuario', rollbackError);
-    return databaseError(c, authUpdateError, 'Erro ao sincronizar usuario no Auth.');
+    await db.from('User').update(rollback).eq('id', id).is('deletedAt', null);
+    return databaseError(c, authUpdateError, 'Erro ao sincronizar usuario no Auth.', 500);
   }
+
   return c.json(data);
 });
 
-usersRoutes.put('/:id/permissoes', async (c) => {
+usersRoutes.put('/:id/permissions', async (c) => {
   const id = c.req.param('id');
   const body = await parseJson(c);
-  if (!body || typeof body.permissoes !== 'object' || Array.isArray(body.permissoes)) {
+  if (!body || typeof body.permissoes !== 'object') {
     return c.json({ error: 'Permissoes invalidas.' }, 400);
   }
 
@@ -218,17 +237,20 @@ usersRoutes.put('/:id/permissoes', async (c) => {
     .update({ permissoes: body.permissoes, ...updatedMeta() })
     .eq('id', id)
     .is('deletedAt', null)
-    .select('id,nome,role,permissoes')
+    .select('id,nome,permissoes')
     .maybeSingle();
-  if (error) return databaseError(c, error, 'Erro ao atualizar permissoes do usuario');
-  if (!data) return c.json({ error: 'Usuario nao encontrado' }, 404);
+
+  if (error) return databaseError(c, error, 'Erro ao atualizar permissoes');
+  if (!data) return c.json({ error: 'Usuario nao encontrado.' }, 404);
   return c.json(data);
 });
 
 usersRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
-  const current = c.get('profile');
-  if (id === current.id) return c.json({ error: 'Nao e permitido remover o proprio usuario.' }, 400);
+  const profile = c.get('profile');
+  if (id === profile.id) {
+    return c.json({ error: 'Voce nao pode excluir seu proprio usuario.' }, 400);
+  }
 
   const db = c.get('db');
   const { data: existing, error: findError } = await db
@@ -237,18 +259,21 @@ usersRoutes.delete('/:id', async (c) => {
     .eq('id', id)
     .is('deletedAt', null)
     .maybeSingle();
-  if (findError) return databaseError(c, findError, 'Erro ao remover usuario');
-  if (!existing) return c.json({ error: 'Usuario nao encontrado' }, 404);
+  if (findError) return databaseError(c, findError, 'Erro ao excluir usuario');
+  if (!existing) return c.json({ error: 'Usuario nao encontrado.' }, 404);
 
-  const { error: profileError } = await db.from('User').update(softDeleteMeta()).eq('id', id);
-  if (profileError) return databaseError(c, profileError, 'Erro ao remover usuario');
-
-  const { error: authError } = await db.auth.admin.deleteUser(id, true);
-  if (authError) {
-    await db.from('User').update({ deletedAt: null, ...updatedMeta() }).eq('id', id);
-    return databaseError(c, authError, 'Erro ao remover usuario do Auth.');
+  const { error: authBanError } = await db.auth.admin.updateUserById(id, {
+    ban_duration: '876000h',
+  });
+  if (authBanError) {
+    return databaseError(c, authBanError, 'Erro ao revogar acesso do usuario no Auth.');
   }
 
-  return c.json({ message: 'Usuario removido' });
-});
+  const { error } = await db.from('User').update(softDeleteMeta()).eq('id', id).is('deletedAt', null);
+  if (error) {
+    await db.auth.admin.updateUserById(id, { ban_duration: 'none' }).catch(() => undefined);
+    return databaseError(c, error, 'Erro ao excluir usuario');
+  }
 
+  return c.body(null, 204);
+});

@@ -132,8 +132,146 @@ begin
       foreign key ("authUserId") references auth.users(id)
       on delete set null;
   end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'User_gestorId_fkey' and conrelid = 'public."User"'::regclass
+  ) then
+    alter table public."User"
+      add constraint "User_gestorId_fkey"
+      foreign key ("gestorId") references public."User"("id") on delete set null on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'User_unidadeId_fkey' and conrelid = 'public."User"'::regclass
+  ) then
+    alter table public."User"
+      add constraint "User_unidadeId_fkey"
+      foreign key ("unidadeId") references public."Unidade"("id") on delete set null on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Unidade_responsavelId_fkey' and conrelid = 'public."Unidade"'::regclass
+  ) then
+    alter table public."Unidade"
+      add constraint "Unidade_responsavelId_fkey"
+      foreign key ("responsavelId") references public."User"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Cliente_unidadeId_fkey' and conrelid = 'public."Cliente"'::regclass
+  ) then
+    alter table public."Cliente"
+      add constraint "Cliente_unidadeId_fkey"
+      foreign key ("unidadeId") references public."Unidade"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Cliente_vendedorId_fkey' and conrelid = 'public."Cliente"'::regclass
+  ) then
+    alter table public."Cliente"
+      add constraint "Cliente_vendedorId_fkey"
+      foreign key ("vendedorId") references public."User"("id") on delete set null on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Financeiro_clienteId_fkey' and conrelid = 'public."Financeiro"'::regclass
+  ) then
+    alter table public."Financeiro"
+      add constraint "Financeiro_clienteId_fkey"
+      foreign key ("clienteId") references public."Cliente"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Documento_clienteId_fkey' and conrelid = 'public."Documento"'::regclass
+  ) then
+    alter table public."Documento"
+      add constraint "Documento_clienteId_fkey"
+      foreign key ("clienteId") references public."Cliente"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Documento_propostaId_fkey' and conrelid = 'public."Documento"'::regclass
+  ) then
+    alter table public."Documento"
+      add constraint "Documento_propostaId_fkey"
+      foreign key ("propostaId") references public."Proposta"("id") on delete set null on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Interacao_clienteId_fkey' and conrelid = 'public."Interacao"'::regclass
+  ) then
+    alter table public."Interacao"
+      add constraint "Interacao_clienteId_fkey"
+      foreign key ("clienteId") references public."Cliente"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Interacao_responsavelId_fkey' and conrelid = 'public."Interacao"'::regclass
+  ) then
+    alter table public."Interacao"
+      add constraint "Interacao_responsavelId_fkey"
+      foreign key ("responsavelId") references public."User"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Proposta_clienteId_fkey' and conrelid = 'public."Proposta"'::regclass
+  ) then
+    alter table public."Proposta"
+      add constraint "Proposta_clienteId_fkey"
+      foreign key ("clienteId") references public."Cliente"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Proposta_vendedorId_fkey' and conrelid = 'public."Proposta"'::regclass
+  ) then
+    alter table public."Proposta"
+      add constraint "Proposta_vendedorId_fkey"
+      foreign key ("vendedorId") references public."User"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'AvaliacaoDesempenho_colaboradorId_fkey' and conrelid = 'public."AvaliacaoDesempenho"'::regclass
+  ) then
+    alter table public."AvaliacaoDesempenho"
+      add constraint "AvaliacaoDesempenho_colaboradorId_fkey"
+      foreign key ("colaboradorId") references public."User"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'AvaliacaoDesempenho_avaliadorId_fkey' and conrelid = 'public."AvaliacaoDesempenho"'::regclass
+  ) then
+    alter table public."AvaliacaoDesempenho"
+      add constraint "AvaliacaoDesempenho_avaliadorId_fkey"
+      foreign key ("avaliadorId") references public."User"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'SnapshotUnidade_unidadeId_fkey' and conrelid = 'public."SnapshotUnidade"'::regclass
+  ) then
+    alter table public."SnapshotUnidade"
+      add constraint "SnapshotUnidade_unidadeId_fkey"
+      foreign key ("unidadeId") references public."Unidade"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'AnaliseCliente_clienteId_fkey' and conrelid = 'public."AnaliseCliente"'::regclass
+  ) then
+    alter table public."AnaliseCliente"
+      add constraint "AnaliseCliente_clienteId_fkey"
+      foreign key ("clienteId") references public."Cliente"("id") on delete restrict on update cascade;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'Cancelamento_clienteId_fkey' and conrelid = 'public."Cancelamento"'::regclass
+  ) then
+    alter table public."Cancelamento"
+      add constraint "Cancelamento_clienteId_fkey"
+      foreign key ("clienteId") references public."Cliente"("id") on delete restrict on update cascade;
+  end if;
 end;
 $$;
+
+notify pgrst, 'reload schema';
 
 -- Conditional/idempotent backfill. Before the import this updates zero rows;
 -- after the import the administrative script performs the same linkage.
@@ -271,4 +409,3 @@ create index if not exists "Cancelamento_cliente_data_active_idx"
 create index if not exists "UserUnitAccess_unidade_active_idx"
   on public."UserUnitAccess" ("unidadeId", "nivel", "userId")
   where "deletedAt" is null;
-
