@@ -37,6 +37,7 @@ const createPrivilegedClient = (): DatabaseClient => {
 export const corsMiddleware = (): MiddlewareHandler<AppEnv> => {
   const defaultOrigins = [
     'https://gc-crm-navy.vercel.app',
+    'https://crm.grupocostabr.com.br',
     'https://crm.grupocostapr.com.br',
     'https://crm.grupocosta.com.br',
     'http://localhost:3000',
@@ -50,8 +51,7 @@ export const corsMiddleware = (): MiddlewareHandler<AppEnv> => {
   const isAllowedOrigin = (origin: string): boolean => {
     if (allowed.has('*') || allowed.has(origin)) return true;
     if (/^https:\/\/gc-crm[a-z0-9-]*\.vercel\.app$/i.test(origin)) return true;
-    if (/^https:\/\/([a-z0-9-]+\.)?grupocostapr\.com\.br$/i.test(origin)) return true;
-    if (/^https:\/\/([a-z0-9-]+\.)?grupocosta\.com\.br$/i.test(origin)) return true;
+    if (/^https:\/\/([a-z0-9-]+\.)?grupocosta(br|pr)?\.com\.br$/i.test(origin)) return true;
     return false;
   };
 
