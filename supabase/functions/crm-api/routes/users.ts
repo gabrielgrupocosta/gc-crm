@@ -71,8 +71,73 @@ usersRoutes.post('/', async (c) => {
   }
 
   const db = c.get('db');
-  const { data: existing } = await db.from('User').select('id').eq('email', email).maybeSingle();
-  if (existing) return c.json({ error: 'E-mail ja cadastrado.' }, 400);
+  const { data: existing } = await db
+    .from('User')
+    .select('id,deletedAt')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (existing && !existing.deletedAt) {
+    return c.json({ error: 'E-mail ja cadastrado.' }, 400);
+  }
+
+  const now = nowIso();
+  const senhaHash = await bcrypt.hash(senha, 10);
+
+  // If the user was previously soft-deleted, reactivate and update both Auth and public.User
+  if (existing && existing.deletedAt) {
+    const { data: authRecord } = await db.auth.admin.getUserById(existing.id);
+    if (authRecord?.user) {
+      const { error: authUpdateErr } = await db.auth.admin.updateUserById(existing.id, {
+        email,
+        password: senha,
+        email_confirm: true,
+        ban_duration: 'none',
+        user_metadata: { nome },
+        app_metadata: { role },
+      });
+      if (authUpdateErr) {
+        return databaseError(c, authUpdateErr, 'Erro ao reativar usuario no Auth.', 400);
+      }
+    } else {
+      const { error: authCreateErr } = await db.auth.admin.createUser({
+        id: existing.id,
+        email,
+        password: senha,
+        email_confirm: true,
+        user_metadata: { nome },
+        app_metadata: { role },
+      });
+      if (authCreateErr) {
+        return databaseError(c, authCreateErr, 'Erro ao recriar usuario no Auth.', 400);
+      }
+    }
+
+    const { data: reactivated, error: reactivateError } = await db
+      .from('User')
+      .update({
+        authUserId: existing.id,
+        nome,
+        email,
+        senha: senhaHash,
+        role,
+        tipoVendedor,
+        metas,
+        gestorId,
+        unidadeId,
+        deletedAt: null,
+        updatedAt: now,
+      })
+      .eq('id', existing.id)
+      .select('id,nome,email,role')
+      .single();
+
+    if (reactivateError) {
+      return databaseError(c, reactivateError, 'Erro ao reativar usuario.');
+    }
+
+    return c.json(reactivated, 201);
+  }
 
   const { data: authData, error: authError } = await db.auth.admin.createUser({
     email,
@@ -85,22 +150,20 @@ usersRoutes.post('/', async (c) => {
     return databaseError(c, authError, 'Erro ao criar usuario no Auth.', 400);
   }
 
-  const now = nowIso();
-  const senhaHash = await bcrypt.hash(senha, 10);
   const baseUserRow = {
-      id: authData.user.id,
-      authUserId: authData.user.id,
-      nome,
-      email,
-      senha: senhaHash,
-      role,
-      tipoVendedor,
-      metas,
-      gestorId,
-      unidadeId,
-      createdAt: now,
-      updatedAt: now,
-      deletedAt: null,
+    id: authData.user.id,
+    authUserId: authData.user.id,
+    nome,
+    email,
+    senha: senhaHash,
+    role,
+    tipoVendedor,
+    metas,
+    gestorId,
+    unidadeId,
+    createdAt: now,
+    updatedAt: now,
+    deletedAt: null,
   };
   let createResult = await db
     .from('User')
@@ -108,8 +171,6 @@ usersRoutes.post('/', async (c) => {
     .select('id,nome,email,role')
     .single();
 
-  // Allows a rolling deployment where the Edge Function reaches production
-  // shortly before the authUserId migration is visible in PostgREST.
   if (createResult.error
     && (createResult.error.code === 'PGRST204' || createResult.error.message?.includes('authUserId'))) {
     const { authUserId: _omitted, ...legacyRow } = baseUserRow;
