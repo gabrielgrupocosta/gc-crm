@@ -23,6 +23,11 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
   .filter(Boolean);
 
 app.disable('x-powered-by');
+// Suspend every endpoint, including authentication and health checks.
+app.use((_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(404).type('text/plain').send('404');
+});
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) return callback(null, true);

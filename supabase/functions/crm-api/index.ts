@@ -45,4 +45,11 @@ app.onError((error, c) => {
   return c.json({ error: 'Erro interno do servidor.' }, 500);
 });
 
-Deno.serve(app.fetch);
+// Suspend all requests before CORS, authentication or route handling.
+Deno.serve(() => new Response('404', {
+  status: 404,
+  headers: {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'Cache-Control': 'no-store',
+  },
+}));
